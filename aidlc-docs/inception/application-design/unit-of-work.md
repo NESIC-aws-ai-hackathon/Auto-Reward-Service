@@ -1,234 +1,250 @@
-# Unit of Work 定義 — オートリワードサービス
+# Unit of Work 定義 — オートリワードサービス（v2）
 
-**作成日**: 2026-05-08
+**改訂日**: 2026-05-15 / コンセプト変更後版
 
 ## 実装サイクル方針（確定）
 
 | 項目 | 決定内容 |
 |------|---------|
 | 実装粒度 | **機能スライス単位**（各 Unit の中の機能を小さく区切って実装） |
-| 共有パッケージ | **Unit 0 として最初のサイクルで実装** |
-| テスト | **コード生成と同じサイクル**（Unit テスト + 統合テストを含める） |
-| Docker Compose | **各 Unit の実装に並行**して、そのサービスのコンテナ定義を追加 |
+| 基盤 | **Unit 0 として最初のサイクルで実装**（SAMプロジェクト + DynamoDB + 共通Layer） |
+| テスト | **コード生成と同じサイクル**（ユニットテスト + LLM品質テストを含める） |
+| デプロイ | **AWS SAM**（`sam build && sam deploy`）で各Unitをデプロイ |
 
 ---
 
-## モノレポ コード構成方針
+## プロジェクト コード構成方針
 
 ```
-auto-reward-service/                  ← Turborepo ルート
-├── apps/
-│   ├── auth-service/                 # Unit 1
-│   ├── stress-service/               # Unit 2
-│   ├── reward-service/               # Unit 3
-│   ├── finance-service/              # Unit 4
-│   ├── notification-service/         # Unit 5
-│   ├── dashboard-service/            # Unit 6
-│   └── web/                          # Unit 7
-├── packages/
-│   ├── shared-types/                 # Unit 0
-│   ├── shared-clients/               # Unit 0
-│   ├── shared-ai/                    # Unit 0
-│   └── shared-config/                # Unit 0
-├── infrastructure/
-│   ├── docker-compose.yml
-│   └── nginx/
-├── turbo.json
-└── package.json
+auto-reward-service/               ← SAM プロジェクトルート
+├── src/
+│   ├── handlers/
+│   │   ├── webhook_handler.py     # Unit 1
+│   │   ├── intent_classifier.py   # Unit 2
+│   │   ├── character_reply.py     # Unit 2
+│   │   ├── onboarding_flow.py     # Unit 2
+│   │   ├── expense_extractor.py   # Unit 3
+│   │   ├── receipt_analyzer.py    # Unit 3
+│   │   ├── reward_pool_updater.py # Unit 4
+│   │   ├── reward_proposal.py     # Unit 5
+│   │   ├── push_notifier.py       # Unit 6
+│   │   └── liff_api.py            # Unit 7
+│   ├── services/
+│   │   ├── dynamodb_service.py    # Unit 0
+│   │   ├── bedrock_service.py     # Unit 0
+│   │   ├── line_service.py        # Unit 0
+│   │   ├── rakuten_service.py     # Unit 4
+│   │   ├── finance_engine.py      # Unit 5
+│   │   └── reward_pool_service.py # Unit 4/5
+│   ├── models/
+│   │   └── schemas.py             # Unit 0
+│   ├── prompts/
+│   │   ├── intent_prompt.py       # Unit 2
+│   │   ├── expense_prompt.py      # Unit 3
+│   │   ├── character_prompts.py   # Unit 2
+│   │   └── receipt_prompt.py      # Unit 3
+│   └── utils/
+│       ├── secrets.py             # Unit 0
+│       └── logger.py              # Unit 0
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── llm/                       # LLM応答品質テスト
+├── template.yaml                  # AWS SAM テンプレート
+├── samconfig.toml
+├── requirements.txt
+├── requirements-dev.txt
+└── Makefile
 ```
 
 ---
 
 ## Unit 一覧
 
-### Unit 0: 共有基盤（Shared Infrastructure）
+### Unit 0: SAM基盤 + 共通Layer
 
 **最初のサイクルで実装（先行必須）**
 
 | 内容 | 詳細 |
 |------|------|
-| **スコープ** | Turborepo 初期化、共有パッケージ 4 本、Docker Compose 骨格、Nginx 設定骨格 |
-| **成果物** | `packages/shared-types/`, `packages/shared-clients/`（スタブ）, `packages/shared-ai/`（スタブ）, `packages/shared-config/`, `infrastructure/docker-compose.yml`（骨格）, `infrastructure/nginx/nginx.conf` |
-| **完了条件** | 全サービスが共有パッケージを import できる; Docker Compose でインフラ（DB・Redis）が起動できる |
+| **スコープ** | SAMプロジェクト初期化、DynamoDBテーブル定義、共通Layerモジュール |
+| **成果物** | `template.yaml`（骨格）, `dynamodb_service.py`, `bedrock_service.py`, `line_service.py`, `schemas.py`, `secrets.py`, `logger.py` |
+| **完了条件** | `sam deploy` でDynamoDBテーブル作成成功; 共通Layerが各Lambdaからimportできる |
 
 **機能スライス:**
+
 | スライス | 内容 |
 |---------|------|
-| 0-1 | Turborepo + npm workspaces セットアップ、`package.json` 設定 |
-| 0-2 | `@ars/shared-types`: DTO・列挙型定義 |
-| 0-3 | `@ars/shared-config`: AppConfigModule, LoggerModule, HealthModule |
-| 0-4 | `@ars/shared-clients`: クライアントスタブ（型のみ、実装は後続 Unit で充実） |
-| 0-5 | `@ars/shared-ai`: AiModule スタブ（OpenAI SDK セットアップのみ） |
-| 0-6 | `infrastructure/`: Docker Compose 骨格（DB・Redis・ClickHouse コンテナ）、Nginx 骨格 |
+| 0-1 | SAMプロジェクト初期化・`template.yaml`骨格・`samconfig.toml`・`Makefile` |
+| 0-2 | `schemas.py`: DynamoDBスキーマ定数・Pydanticモデル定義 |
+| 0-3 | `dynamodb_service.py`: put/get/query/update共通操作 |
+| 0-4 | `bedrock_service.py`: Bedrockテキスト/画像呼び出し共通（モデルID設定ファイル化） |
+| 0-5 | `line_service.py`: Reply/Push/署名検証/Content API |
+| 0-6 | `secrets.py`: Secrets Manager/SSM取得ユーティリティ |
+| 0-7 | `logger.py`: 構造化ログ（PII出力禁止） |
+| 0-8 | DynamoDB `ArsTable` SAMリソース定義（PK/SK + GSI） |
 
 ---
 
-### Unit 1: Auth Service（U1 対応）
+### Unit 1: LINE Bot基盤（F1対応）
 
-**対応要件**: U1-01〜U1-05 / US-01, US-02
+**対応要件**: F1-01〜F1-04
 
 | 内容 | 詳細 |
 |------|------|
-| **スコープ** | ユーザー管理・プロフィール・嗜好設定・予算上限・通知設定 |
-| **DB** | PostgreSQL（`ars_auth`） |
-| **依存** | Unit 0（shared-config, shared-types） |
-| **完了条件** | `/users/me` GET/PATCH が動作する; Docker Compose で auth-service が起動する |
+| **スコープ** | Webhook受信・署名検証・メッセージルーティング |
+| **依存** | Unit 0 |
+| **完了条件** | LINE Webhookが受信できる; テキスト/画像/その他を正しくルーティングできる |
 
 **機能スライス:**
-| スライス | 機能 | 対応 US |
+
+| スライス | 機能 | 対応要件 |
 |---------|------|---------|
-| 1-1 | NestJS プロジェクト初期化 + PostgreSQL 接続 + HealthModule | — |
-| 1-2 | UserModule: プロフィール CRUD（GET/PATCH /users/me） + Unit テスト | US-01 |
-| 1-3 | PreferencesModule: 嗜好・予算上限・通知設定 CRUD + Unit テスト | US-02 |
-| 1-4 | AuthModule: JwtStrategy（X-User-Id ヘッダー検証）+ CurrentUserDecorator | — |
-| 1-5 | 統合テスト（Docker Compose 上での E2E） | — |
-| 1-6 | Docker Compose に auth-service + postgres-auth コンテナを追加 | — |
+| 1-1 | `webhook_handler.py`: API Gateway Lambda統合・LINEイベント受信 | F1-01 |
+| 1-2 | 署名検証（`X-Line-Signature`検証）・失敗時403返却 | F1-01 |
+| 1-3 | Message Router（text/image/sticker分岐）+ 各Lambdaへのルーティング | F1-02 |
+| 1-4 | Reply送信（line_service）・エラー時フォールバック | F1-03 |
+| 1-5 | SAMテンプレートに WebhookHandlerFunction + WebhookApi 追加 | — |
+| 1-6 | Webhook署名検証のセキュリティテスト | SEC-01 |
 
 ---
 
-### Unit 2: Stress Service（U2 対応）
+### Unit 2: リワードちゃんキャラクター（F2・F3対応）
 
-**対応要件**: U2-01, U2-05, U2-06, U2-07（MVP）/ US-03, US-04（一部）, US-05
-
-| 内容 | 詳細 |
-|------|------|
-| **スコープ** | 手動ストレス入力・スコア算出・閾値判定・リワードフロートリガー・履歴保存 |
-| **DB** | TimescaleDB（`ars_stress`） |
-| **依存** | Unit 0（shared-config, shared-types, shared-clients/RewardClient スタブ）, Unit 1（Auth） |
-| **完了条件** | ストレス入力→スコア算出→閾値判定→RewardClient 呼び出しが動作する |
-
-**機能スライス:**
-| スライス | 機能 | 対応 US |
-|---------|------|---------|
-| 2-1 | NestJS プロジェクト初期化 + TimescaleDB 接続 + HealthModule | — |
-| 2-2 | StressEntryModule: 手動入力エンドポイント + Unit テスト | US-03 |
-| 2-3 | StressScoringModule: スコア算出純粋関数 + Unit テスト + **PBT** | — |
-| 2-4 | StressThresholdModule: 閾値判定 + RewardClient 呼び出し + Unit テスト | US-05 |
-| 2-5 | 統合テスト（Stress 入力→閾値判定フロー） | — |
-| 2-6 | Docker Compose に stress-service + timescaledb コンテナを追加 | — |
-| 2-7 | （将来）TextSentimentAdapter: shared-ai 連携 | US-04 一部 |
-
----
-
-### Unit 3: Reward Service（U4 対応）
-
-**対応要件**: U4-01, U4-02, U4-05（MVP）/ US-08, US-10, US-11
+**対応要件**: F2-01〜F2-04, F3-01〜F3-04
 
 | 内容 | 詳細 |
 |------|------|
-| **スコープ** | リワードカタログ・ルールベース提案・フィードバック収集・通知トリガー |
-| **DB** | PostgreSQL（`ars_reward`）+ Redis（提案キャッシュ） |
-| **依存** | Unit 0, Unit 1, Unit 2（RewardClient を受け取る側）、Finance Client スタブ、Notification Client スタブ |
-| **完了条件** | Stress Service からのトリガーで提案が生成され、Notification Service に転送できる |
-
-**機能スライス:**
-| スライス | 機能 | 対応 US |
-|---------|------|---------|
-| 3-1 | NestJS プロジェクト初期化 + PostgreSQL + Redis 接続 | — |
-| 3-2 | CatalogModule: カタログ CRUD + シードデータ + Unit テスト | US-08 前提 |
-| 3-3 | RuleBasedEngineModule: 提案マトリクス純粋関数 + Unit テスト + **PBT** | US-08 |
-| 3-4 | ProposalModule: 提案生成フロー（FinanceClient → Engine → 保存 → NotifClient） | US-08 |
-| 3-5 | FeedbackModule: 採用/却下/後で + 支出記録（FinanceClient） + Unit テスト | US-10, US-11 |
-| 3-6 | 統合テスト（提案生成〜フィードバックフロー） | — |
-| 3-7 | Docker Compose に reward-service + postgres-reward + redis コンテナを追加 | — |
-| 3-8 | @ars/shared-clients の RewardClient を実装（スタブ → 実装） | — |
-
----
-
-### Unit 4: Finance Service（U3 対応）
-
-**対応要件**: U3-01, U3-04, U3-05（MVP）, U3-02, U3-06（Should）/ US-06, US-07
-
-| 内容 | 詳細 |
-|------|------|
-| **スコープ** | 収支管理・余裕額算出・CSV インポート・AI カテゴリ分類 |
-| **DB** | PostgreSQL（`ars_finance`） |
+| **スコープ** | Intent分類・キャラ口調生成・初回登録フロー・感情把握 |
 | **依存** | Unit 0, Unit 1 |
-| **完了条件** | 余裕額算出 API が動作する; Reward Service の FinanceClient が実際に呼び出せる |
+| **完了条件** | 「今日疲れた」に対してリワードちゃん口調でReplyが返る; 初回登録フローが完結する |
 
 **機能スライス:**
-| スライス | 機能 | 対応 US |
+
+| スライス | 機能 | 対応要件 |
 |---------|------|---------|
-| 4-1 | NestJS プロジェクト初期化 + PostgreSQL 接続 | — |
-| 4-2 | BudgetModule: 月次予算設定 CRUD + Unit テスト | US-06 |
-| 4-3 | AvailableBudgetModule: 余裕額算出純粋関数 + Unit テスト + **PBT** | US-06, US-08 前提 |
-| 4-4 | TransactionModule: 取引 CRUD + Unit テスト | US-07 |
-| 4-5 | CsvImportModule: CSV パース（三菱UFJ / 三井住友 / ゆうちょ）+ Unit テスト | US-07 |
-| 4-6 | CategoryClassifierAdapter: shared-ai 連携 + Unit テスト | US-07 |
-| 4-7 | 統合テスト | — |
-| 4-8 | Docker Compose に finance-service + postgres-finance コンテナを追加 | — |
-| 4-9 | @ars/shared-clients の FinanceClient を実装（スタブ → 実装） | — |
+| 2-1 | `intent_prompt.py` + `intent_classifier.py`: Intent分類（Nova Micro） | F3-04 |
+| 2-2 | `character_prompts.py`: フレンドリー口調プロンプト（デフォルト） | F3-01 |
+| 2-3 | `character_reply.py`: Nova Microで口調生成・DynamoDB LIFELOG保存 | F3-01 |
+| 2-4 | `onboarding_flow.py`: 収入/固定費チャット登録フロー・DynamoDB PROFILE/FIXED_COSTS保存 | F2-01〜F2-04 |
+| 2-5 | 口調カスタマイズ追加（やさしい敬語・小悪魔） | F3-02 |
+| 2-6 | 制限到達退場演出（複数パターン） | F3-03 |
+| 2-7 | LLMプロンプトテスト（Intent精度・口調品質テスト） | TEST-01 |
 
 ---
 
-### Unit 5: Notification Service（U5 対応）
+### Unit 3: 支出記録（F4対応）
 
-**対応要件**: U5-01, U5-02, U5-03（MVP）/ US-05（通知送信部分）
+**対応要件**: F4-01〜F4-05
 
 | 内容 | 詳細 |
 |------|------|
-| **スコープ** | プッシュ通知生成・送信・スロットリング・デバイストークン管理 |
-| **DB** | PostgreSQL（`ars_notification`）+ Redis（スロットリングカウンター） |
-| **依存** | Unit 0, Unit 1, Unit 3（NotifClient を受け取る側） |
-| **完了条件** | Reward Service からのトリガーで Web Push 通知が送信できる |
+| **スコープ** | チャット支出抽出・確認フロー・レシート画像解析 |
+| **依存** | Unit 0, Unit 1, Unit 2 |
+| **完了条件** | 「プリン買った」で支出登録できる; レシート画像から支出JSON化できる |
 
 **機能スライス:**
-| スライス | 機能 | 対応 US |
+
+| スライス | 機能 | 対応要件 |
 |---------|------|---------|
-| 5-1 | NestJS プロジェクト初期化 + PostgreSQL + Redis 接続 | — |
-| 5-2 | DeviceTokenModule: トークン登録・削除 + Unit テスト | — |
-| 5-3 | ThrottleModule: 1日上限・静寂時間帯チェック（Redis）+ Unit テスト | US-05 |
-| 5-4 | CopyGeneratorAdapter: shared-ai 連携（通知コピー生成）+ Unit テスト | — |
-| 5-5 | NotificationModule: 送信フロー統合 + Web Push / FCM 送信 + Unit テスト | US-05 |
-| 5-6 | 統合テスト | — |
-| 5-7 | Docker Compose に notification-service + postgres-notif コンテナを追加 | — |
-| 5-8 | @ars/shared-clients の NotificationClient を実装（スタブ → 実装） | — |
+| 3-1 | `expense_prompt.py` + `expense_extractor.py`: テキスト→支出JSON化（Nova Micro） | F4-01 |
+| 3-2 | 追加質問フロー（金額・商品名が不足時にリワードちゃんが聞く） | F4-02 |
+| 3-3 | 確認・承認フロー（信頼度低→確認メッセージ→yes/noで保存） | F4-03 |
+| 3-4 | DynamoDB EXPENSE保存（確定後） | F4-01 |
+| 3-5 | `receipt_prompt.py` + `receipt_analyzer.py`: Nova Liteで画像→支出JSON | F4-04 |
+| 3-6 | レシート解析時間チェック（3秒超→非同期化→Push or「結果を見る」ボタン） | PERF-02 |
+| 3-7 | ARSカテゴリ分類（情緒安定費・回復費・緊急回復費等） | F4-05 |
+| 3-8 | LLM出力品質テスト（支出抽出精度） | TEST-01 |
 
 ---
 
-### Unit 6: Dashboard Service（U7 対応）
+### Unit 4: ご褒美候補プール（F5対応）
 
-**対応要件**: U7-01, U7-02, U7-03（MVP）, U7-04（Should）/ US-12, US-13
+**対応要件**: F5-01〜F5-05
 
 | 内容 | 詳細 |
 |------|------|
-| **スコープ** | ストレス推移・リワード履歴・財務サマリー・AI インサイト |
-| **DB** | ClickHouse |
-| **依存** | Unit 0, Unit 1, Unit 2, Unit 3, Unit 4（各 Client 経由） |
-| **完了条件** | ダッシュボード全 API が動作する |
+| **スコープ** | 嗜好記憶蓄積・楽天API連携・日次バッチでプール更新 |
+| **依存** | Unit 0, Unit 2 |
+| **完了条件** | 日次バッチが動作し、楽天APIの商品がDynamoDB reward_poolに格納される |
 
 **機能スライス:**
-| スライス | 機能 | 対応 US |
+
+| スライス | 機能 | 対応要件 |
 |---------|------|---------|
-| 6-1 | NestJS プロジェクト初期化 + ClickHouse 接続 | — |
-| 6-2 | StressTrendModule: ストレス推移データ API + Unit テスト | US-12 |
-| 6-3 | RewardHistoryModule: リワード履歴 API + Unit テスト | US-12 |
-| 6-4 | FinanceSummaryModule: 財務サマリー API + Unit テスト | US-12 |
-| 6-5 | InsightModule: AI インサイトレポート生成 + 月次キャッシュ + Unit テスト | US-13 |
-| 6-6 | 統合テスト | — |
-| 6-7 | Docker Compose に dashboard-service + clickhouse コンテナを追加 | — |
+| 4-1 | `rakuten_service.py`: 楽天ウェブサービスAPI商品検索 | F5-03 |
+| 4-2 | `reward_pool_service.py`: 嗜好×候補スコアリングロジック | F5-01 |
+| 4-3 | `reward_pool_updater.py`: 全ユーザー嗜好取得→楽天API→プール更新 | F5-02 |
+| 4-4 | EventBridge Scheduler SAMリソース定義（RewardPoolScheduler） | F5-02 |
+| 4-5 | スルー・購入履歴によるスコア調整 | F5-04, F5-05 |
+| 4-6 | 楽天APIモックテスト | TEST-04 |
 
 ---
 
-### Unit 7: Web フロントエンド
+### Unit 5: ご褒美提案（F6対応）
 
-**対応要件**: 全 US（US-01〜US-13）のフロントエンド実装
+**対応要件**: F6-01〜F6-05
 
 | 内容 | 詳細 |
 |------|------|
-| **スコープ** | React + Vite アプリ、全 Feature |
-| **依存** | Unit 0（shared-types）, Unit 1〜6（API 経由） |
-| **完了条件** | 全 Feature が動作し、バックエンドと E2E で接続できる |
+| **スコープ** | 状態推定・候補プールマッチング・余裕額チェック・キャラ口調での提案 |
+| **依存** | Unit 0, Unit 2, Unit 3, Unit 4 |
+| **完了条件** | 「疲れた」でご褒美提案がリワードちゃん口調で返る; 余裕額超過時はやんわり止める |
 
 **機能スライス:**
-| スライス | 機能 | 対応 US |
+
+| スライス | 機能 | 対応要件 |
 |---------|------|---------|
-| 7-1 | Vite + React + TypeScript 初期化、Router、Provider 設定 | — |
-| 7-2 | `features/auth/`: ログイン・初期設定ウィザード | US-01, US-02 |
-| 7-3 | `features/stress/`: ストレス入力ウィジェット・履歴 | US-03 |
-| 7-4 | `features/rewards/`: 提案カード・フィードバックボタン・履歴 | US-08, US-09, US-10, US-11 |
-| 7-5 | `features/finance/`: 収支入力・余裕額ウィジェット・CSV アップロード | US-06, US-07 |
-| 7-6 | `features/dashboard/`: ストレスグラフ・支出グラフ・AI インサイトカード | US-12, US-13 |
-| 7-7 | `features/notifications/`: 通知設定・履歴 | US-05 |
-| 7-8 | 統合テスト（MSW モック + Testing Library） | — |
-| 7-9 | Docker Compose に web コンテナを追加 | — |
+| 5-1 | `finance_engine.py`: DynamoDBから余裕額算出（0以上・上限超えない） | F6-04 |
+| 5-2 | `reward_proposal.py`: 状態ベクトル生成→候補プールマッチング | F6-01, F6-02 |
+| 5-3 | 余裕額チェック→予算内候補のみ選択 | F6-04 |
+| 5-4 | キャラ口調での提案メッセージ生成（Nova Micro） | F6-03 |
+| 5-5 | 買いすぎストップ（余裕額≦0時のやんわり止めReply） | F6-05 |
+| 5-6 | 提案履歴をDynamoDB REWARD_SUGGESTIONに保存 | F6-01 |
+| 5-7 | finance_engineユニットテスト（余裕額常に0以上・上限超えない） | TEST-02 |
+
+---
+
+### Unit 6: Push通知（F7対応）
+
+**対応要件**: F7-01〜F7-03
+
+| 内容 | 詳細 |
+|------|------|
+| **スコープ** | Push通知送信・1日1回上限管理・コンテンツ生成 |
+| **依存** | Unit 0, Unit 2, Unit 5 |
+| **完了条件** | EventBridgeからPush通知が送信される; 月200通超過しない |
+
+**機能スライス:**
+
+| スライス | 機能 | 対応要件 |
+|---------|------|---------|
+| 6-1 | `push_notifier.py`: 対象ユーザー取得・Push送信 | F7-01 |
+| 6-2 | 通数管理（今日既にPush済みかDynamoDBで確認） | F7-01, F7-03 |
+| 6-3 | Push通知コンテンツ生成（Nova Micro）「今日ちょっとだけ話したいことある〜」 | F7-02 |
+| 6-4 | EventBridge Scheduler SAMリソース定義（PushNotifierScheduler） | F7-01 |
+| 6-5 | 月200通上限チェックロジック（フリープラン保護） | COST-03 |
+
+---
+
+### Unit 7: LIFFダッシュボード（F8対応）
+
+**対応要件**: F8-01〜F8-03
+
+| 内容 | 詳細 |
+|------|------|
+| **スコープ** | LIFF用API + 最小限フロントエンド（HTML + LINE LIFF SDK） |
+| **依存** | Unit 0〜6 |
+| **完了条件** | LINEアプリ内でLIFFが開き、履歴・設定が表示できる |
+
+**機能スライス:**
+
+| スライス | 機能 | 対応要件 |
+|---------|------|---------|
+| 7-1 | `liff_api.py`: 履歴取得API・設定取得/更新API | F8-01, F8-03 |
+| 7-2 | LIFF App（最小HTML + LINE LIFF SDK）初期化 | F8-01 |
+| 7-3 | ご褒美メモ・履歴表示（キャラの言葉で表現） | F8-01, F8-02 |
+| 7-4 | 設定画面（口調選択・ご褒美枠変更） | F8-03 |
+| 7-5 | SAMテンプレートに LiffApiFunction + LiffApi 追加 | — |
+
+---

@@ -1,7 +1,8 @@
-# Application Design（統合版） — オートリワードサービス
+# Application Design（統合版） — オートリワードサービス（v2）
 
-**作成日**: 2026-05-08  
-**ステータス**: レビュー待ち
+**改訂日**: 2026-05-15  
+**変更理由**: コンセプト変更（LINE Bot + Lambda + DynamoDB へのアーキテクチャ刷新）
+**ステータス**: 確定
 
 ---
 
@@ -11,65 +12,61 @@
 
 | 項目 | 決定内容 |
 |------|---------|
-| モノレポ管理 | **Turborepo**（npm workspaces + ビルドキャッシュ） |
-| バックエンドフレームワーク | **NestJS（TypeScript）** 全サービス統一 |
-| モジュール境界 | **ハイブリッド**（コアドメインはドメイン分割、共通機能はレイヤー分割） |
-| サービス間通信 | **共有クライアントパッケージ**（@ars/shared-clients、HTTP 同期） |
-| API Gateway | **Nginx**（JWT 検証一元化、X-User-Id ヘッダー転送） |
-| OpenAI 統合 | **共有 AI クライアント**（@ars/shared-ai） |
-| フロントエンド状態管理 | **Zustand**（グローバル）+ **TanStack Query**（サーバーステート） |
-| フロントエンドコンポーネント | **Feature-based**（features/ 配下に機能単位） |
+| 実行基盤 | **AWS Lambda（Python）+ API Gateway** フルサーバーレス |
+| データベース | **DynamoDB シングルテーブルデザイン** |
+| LLM | **Amazon Bedrock（Nova Micro / Nova Lite）** モデル切り替え可能設計 |
+| 画像解析 | **Nova Lite 第一候補** → Textract+LLM → Claude Vision（フォールバック） |
+| 外部API | **楽天ウェブサービスAPI**（ご褒美候補プール） |
+| スケジューラ | **EventBridge Scheduler**（日次バッチ） |
+| IaC | **AWS SAM**（Serverless Application Model） |
+| 認証 | **LINEユーザーID**（Webhook署名検証）+ LIFF時LINEログイン |
+| シークレット管理 | **AWS Secrets Manager / SSM Parameter Store** |
+| フロントエンド | **LINE LIFF**（最小限）|
 
 ---
 
 ## 2. システム構成図
 
 ```
-[ブラウザ: React App（Vite）]
-        |
-        | HTTPS
-        v
-[Nginx API Gateway]
-  JWT 検証（Auth0/Cognito JWKS）
-  ルーティング
-        |
-        +─── /api/v1/users/        → auth-service:3001
-        +─── /api/v1/stress/       → stress-service:3002
-        +─── /api/v1/rewards/      → reward-service:3003
-        +─── /api/v1/finance/      → finance-service:3004
-        +─── /api/v1/notifications/→ notification-service:3005
-        +─── /api/v1/dashboard/    → dashboard-service:3006
+LINEユーザー
+  ↓（LINEアプリ：テキスト / 画像 / スタンプ）
+LINE Messaging API
+  ↓（Webhook POST）
+Amazon API Gateway
+  ↓
+Lambda: webhook_handler
+  ├─ LINE署名検証
+  ├─ Message Router
+  │     ├─ text → Lambda: intent_classifier
+  │     │           ├─ EXPENSE → Lambda: expense_extractor
+  │     │           ├─ REWARD  → Lambda: reward_proposal
+  │     │           ├─ GREET/CHAT → Lambda: character_reply
+  │     │           └─ ONBOARDING → Lambda: onboarding_flow
+  │     └─ image → Lambda: receipt_analyzer
+  └─ DynamoDB（シングルテーブル）
 
+日次バッチ
+  EventBridge Scheduler
+    └─ Lambda: reward_pool_updater
+          ├─ 楽天ウェブサービスAPI（商品取得）
+          └─ DynamoDB reward_pool 更新
 
-サービス間通信（@ars/shared-clients 経由、HTTP 同期）:
+Push通知
+  EventBridge Scheduler（1日1回）
+    └─ Lambda: push_notifier
+          ├─ DynamoDB（対象ユーザー取得）
+          └─ LINE Messaging API（Push送信）
 
-stress-service ─────────────────────→ reward-service
-                                              │
-                             ┌────────────────┤
-                             │                │
-                             v                v
-                      finance-service  notification-service
-                             
-reward-service ──────────────────────→ finance-service
-reward-service ──────────────────────→ notification-service
-dashboard-service ───────────────────→ stress-service
-dashboard-service ───────────────────→ reward-service
-dashboard-service ───────────────────→ finance-service
+LIFF（最小限）
+  LINE LIFF App
+    ├─ API Gateway
+    └─ Lambda: liff_api
+          └─ DynamoDB
 
-
-共有パッケージ（@ars/*）:
-
-@ars/shared-types   ← 全サービス・フロントエンド
-@ars/shared-clients ← stress / reward / finance / notification / dashboard service
-@ars/shared-ai      ← stress / reward / finance / notification / dashboard service
-@ars/shared-config  ← 全バックエンドサービス
-
-
-外部サービス:
-
-Auth0/Cognito ← Nginx（JWT JWKS 検証）
-OpenAI API    ← @ars/shared-ai 経由
-Web Push/FCM  ← notification-service
+外部サービス連携
+  Amazon Bedrock（Nova Micro / Nova Lite）← 各Lambda
+  楽天ウェブサービスAPI               ← reward_pool_updater
+  AWS Secrets Manager / SSM           ← 全Lambda（シークレット取得）
 ```
 
 ---
@@ -78,75 +75,128 @@ Web Push/FCM  ← notification-service
 
 ```
 auto-reward-service/
-├── apps/
-│   ├── auth-service/          # NestJS（PostgreSQL）
-│   ├── stress-service/        # NestJS（TimescaleDB）
-│   ├── reward-service/        # NestJS（PostgreSQL + Redis）
-│   ├── finance-service/       # NestJS（PostgreSQL）
-│   ├── notification-service/  # NestJS（PostgreSQL + Redis）
-│   ├── dashboard-service/     # NestJS（ClickHouse）
-│   └── web/                   # React + Vite（TypeScript）
-├── packages/
-│   ├── shared-types/          # @ars/shared-types
-│   ├── shared-clients/        # @ars/shared-clients
-│   ├── shared-ai/             # @ars/shared-ai
-│   └── shared-config/         # @ars/shared-config
-├── infrastructure/
-│   ├── docker-compose.yml
-│   └── nginx/
-│       └── nginx.conf
-├── turbo.json
-└── package.json
+├── src/
+│   ├── handlers/
+│   │   ├── webhook_handler.py         # LINE Webhook受信・署名検証・Router
+│   │   ├── intent_classifier.py       # Intent分類（Nova Micro）
+│   │   ├── expense_extractor.py       # 支出抽出・確認フロー（Nova Micro）
+│   │   ├── receipt_analyzer.py        # レシート画像解析（Nova Lite）
+│   │   ├── character_reply.py         # リワードちゃん口調生成（Nova Micro）
+│   │   ├── onboarding_flow.py         # 初回登録チャットフロー
+│   │   ├── reward_proposal.py         # ご褒美提案（候補プールマッチング）
+│   │   ├── reward_pool_updater.py     # 日次バッチ（楽天API → DynamoDB）
+│   │   ├── push_notifier.py           # Push通知（1日1回）
+│   │   └── liff_api.py                # LIFF用APIエンドポイント
+│   ├── services/
+│   │   ├── dynamodb_service.py        # DynamoDB操作共通
+│   │   ├── bedrock_service.py         # Bedrock呼び出し共通（モデル切替対応）
+│   │   ├── line_service.py            # LINE API（Reply/Push/署名検証）
+│   │   ├── rakuten_service.py         # 楽天API連携
+│   │   ├── finance_engine.py          # 余裕額算出ロジック
+│   │   └── reward_pool_service.py     # 候補プール選択ロジック
+│   ├── models/
+│   │   └── schemas.py                 # DynamoDBスキーマ定数・Pydanticモデル
+│   ├── prompts/
+│   │   ├── intent_prompt.py           # Intent分類プロンプト
+│   │   ├── expense_prompt.py          # 支出抽出プロンプト
+│   │   ├── character_prompts.py       # 口調別リワードちゃんプロンプト
+│   │   └── receipt_prompt.py          # レシート解析プロンプト
+│   └── utils/
+│       ├── secrets.py                 # Secrets Manager取得ユーティリティ
+│       └── logger.py                  # 構造化ログ（PII出力禁止）
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── llm/                           # LLM応答品質テスト
+├── template.yaml                      # AWS SAM テンプレート
+├── samconfig.toml                     # SAM設定
+├── requirements.txt
+├── requirements-dev.txt
+└── Makefile
 ```
 
 ---
 
-## 4. サービスサマリー
+## 4. Lambda関数サマリー
 
-| サービス | Unit | ポート | DB | 主な責務 |
-|---------|------|--------|----|---------| 
-| auth-service | U1 | 3001 | PostgreSQL | ユーザー・嗜好・予算・通知設定管理 |
-| stress-service | U2 | 3002 | TimescaleDB | ストレス収集・スコアリング・閾値判定・リワードフロートリガー |
-| reward-service | U4 | 3003 | PostgreSQL + Redis | 提案生成・カタログ・フィードバック・リワードフローオーケストレーター |
-| finance-service | U3 | 3004 | PostgreSQL | 収支管理・余裕額算出・CSV インポート |
-| notification-service | U5 | 3005 | PostgreSQL + Redis | プッシュ通知生成・送信・スロットリング |
-| dashboard-service | U7 | 3006 | ClickHouse | データ集計・グラフ・AI インサイト |
+| Lambda関数 | Unit | トリガー | 主な責務 |
+|-----------|------|---------|----------|
+| `webhook_handler` | Unit 1 | API Gateway（LINE Webhook） | 署名検証・メッセージルーティング |
+| `intent_classifier` | Unit 2 | Lambda（webhook_handler から呼び出し） | テキストのIntent分類（Nova Micro） |
+| `character_reply` | Unit 2 | Lambda（intent_classifier から） | リワードちゃん口調のReply生成（Nova Micro） |
+| `onboarding_flow` | Unit 2 | Lambda（intent_classifier から） | 初回登録チャットフロー管理 |
+| `expense_extractor` | Unit 3 | Lambda（intent_classifier から） | 支出テキスト抽出・JSON化・確認フロー |
+| `receipt_analyzer` | Unit 3 | Lambda（webhook_handler から） | レシート画像解析（Nova Lite） |
+| `reward_proposal` | Unit 5 | Lambda（intent_classifier から） | ご褒美提案（候補プールマッチング + 余裕額チェック） |
+| `reward_pool_updater` | Unit 4 | EventBridge Scheduler（日次） | 楽天API → 候補プール更新 |
+| `push_notifier` | Unit 6 | EventBridge Scheduler（1日1回） | Push通知送信・通数管理 |
+| `liff_api` | Unit 7 | API Gateway（LIFF） | LIFF用API（履歴・設定・口調変更） |
 
 ---
 
-## 5. 主要オーケストレーションフロー
+## 5. 主要フロー
 
-### ストレス閾値超過 → リワード通知
+### 会話フロー（テキスト）
 
 ```
-1. ユーザーがストレスを入力
-2. stress-service: スコア算出 → 閾値チェック
-3. [閾値超過] → reward-service: generateProposals()
-4. reward-service → finance-service: getAvailableRewardBudget()
-5. reward-service: RuleBasedEngine で提案生成
-6. reward-service → notification-service: sendRewardProposalNotification()
-7. notification-service: LLM でコピー生成 → スロットリングチェック → Push 送信
+1. ユーザーがLINEにメッセージ送信
+2. webhook_handler: 署名検証 → メッセージ種別判定
+3. intent_classifier: Nova Micro でIntent分類
+   （ONBOARDING / EXPENSE / REWARD / GREET / CHAT / UNKNOWN）
+4a. EXPENSE → expense_extractor: 支出JSON化 → 確認フロー → DynamoDB保存
+4b. REWARD → reward_proposal: 候補プールマッチング → キャラReply
+4c. GREET/CHAT → character_reply: 感情把握 → Nova Micro でリワードちゃんReply
+4d. ONBOARDING → onboarding_flow: 収入・固定費チャット → DynamoDB登録
+5. LINE Reply API で応答
+```
+
+### レシート画像フロー
+
+```
+1. ユーザーがLINEにレシート画像送信
+2. webhook_handler: 画像メッセージ検出 → receipt_analyzer 呼び出し
+3. receipt_analyzer: LINE Content API で画像取得 → Nova Lite で解析 → 支出JSON
+4. 解析時間が3秒以内 → Reply で確認
+   解析時間が3秒超 → 「解析中だよ〜」Reply → 非同期完了後 Push または「結果を見る」ボタン
+5. ユーザー確認後 → DynamoDB保存
+```
+
+### ご褒美候補プール更新フロー（日次バッチ）
+
+```
+1. EventBridge Scheduler が reward_pool_updater を起動（毎日深夜）
+2. 全ユーザーの嗜好（preference_memory）を DynamoDB から取得
+3. 楽天APIで嗜好カテゴリに合致する商品を取得
+4. 購入・スルー履歴でスコアリング → プール更新
+5. 古い候補削除 → DynamoDB reward_pool 保存
 ```
 
 ---
 
-## 6. PBT（プロパティベーステスト）対象コンポーネント
+## 6. LLMテスト対象
 
-| コンポーネント | サービス | 対象プロパティ |
-|-------------|---------|--------------|
-| `StressScoringService.calculateScore()` | stress-service | スコアが常に 0〜100 の範囲内、重みの合計が 1.0 のとき入力変化に単調応答 |
-| `RuleBasedEngineService.filterByCriteria()` | reward-service | フィルタ結果が余裕額・ストレスレベルの条件を必ず満たす、空でない入力に対し提案が返る |
-| `AvailableBudgetService.calculateAvailableBudget()` | finance-service | 結果が常に 0 以上、limit の上限を超えない |
+| Lambda / 関数 | テスト方針 | テスト内容 |
+|--------------|-----------|----------|
+| `intent_classifier` | プロンプトテスト | 各Intentが正しく分類されるか（EXPENSE/REWARD/GREET等） |
+| `expense_extractor` | 出力品質テスト | 支出JSON（item/amount/category）が正しく抽出されるか |
+| `character_reply` | 口調品質テスト | リワードちゃんの口調・キャラ性格が維持されるか |
+| `receipt_analyzer` | 出力品質テスト | レシート画像から支出情報が正確に抽出されるか |
+| `finance_engine` | ユニットテスト | 余裕額算出が0以上かつ上限を超えないか |
+| `reward_pool_service` | ユニットテスト | 候補選択が余裕額・状態条件を満たすか |
 
 ---
 
-## 7. セキュリティ設計ポイント（Security Baseline）
+## 7. セキュリティ設計ポイント
 
 | ルール | 実装方針 |
-|--------|---------|
-| SECURITY-01（暗号化） | DB 接続に TLS 必須、PostgreSQL / Redis / ClickHouse 暗号化設定 |
-| SECURITY-02（アクセスログ） | Nginx アクセスログを JSON 形式で出力、ログ集約 |
-| SECURITY-03（アプリログ） | 構造化ログ（@ars/shared-config/LoggerModule）、PII・トークンはログ出力禁止 |
+|--------|----------|
+| SEC-01 LINE署名検証 | `X-Line-Signature` ヘッダーをチャネルシークレットで検証。検証失敗は 403 返却 |
+| SEC-02 シークレット管理 | チャネルシークレット・アクセストークン・Bedrock設定はすべて Secrets Manager / SSM に格納 |
+| SEC-03 DynamoDB暗号化 | デフォルト暗号化（AWS管理キー）を有効化 |
+| SEC-04 ログPII禁止 | LINEユーザーID・チャット内容は `logger.py` でマスク。テキスト内容はログ出力しない |
+| SEC-05 IAM最小権限 | 各Lambda関数のIAM RoleはDynamoDB・Bedrock・SSMの必要操作のみに限定 |
+| SEC-06 WAF基本ルール | API GatewayにAWS WAF（AWSManagedRulesCommonRuleSet）を適用 |
+| SEC-07 LIFF検証 | LIFFアクセストークンをLINE Platform APIで検証してからDynamoDBアクセス |
 
 ---
 
@@ -155,6 +205,9 @@ auto-reward-service/
 | ドキュメント | パス |
 |------------|------|
 | コンポーネント定義 | [components.md](./components.md) |
-| メソッドシグネチャ | [component-methods.md](./component-methods.md) |
+| 関数シグネチャ | [component-methods.md](./component-methods.md) |
 | サービス詳細 | [services.md](./services.md) |
 | 依存関係マトリクス | [component-dependency.md](./component-dependency.md) |
+| Unit定義 | [unit-of-work.md](./unit-of-work.md) |
+| Unit依存関係 | [unit-of-work-dependency.md](./unit-of-work-dependency.md) |
+| ストーリーマップ | [unit-of-work-story-map.md](./unit-of-work-story-map.md) |

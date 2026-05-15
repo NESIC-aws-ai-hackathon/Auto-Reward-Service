@@ -134,3 +134,81 @@
 - 各フェーズのエントリを独立した H2 セクション（時系列順）に再構成
 - README 豪華化・Inception 不整合修正の記録を追記
 - **対象ファイル**: `aidlc-docs/audit.md`
+
+---
+
+## [2026-05-15] コンセプト大幅変更 — INCEPTION フェーズ再実行
+
+### ユーザーリクエスト（原文）
+> AI-DLCに従って開発を進める
+> まずは現状の分析をして
+> inceptionフェーズが終わったところだが、docs/コンセプト変更定義書.mdの通り大きくコンセプトを変更しようと考えている
+> AI-DLCに従って全体的に変更をしてほしい
+> 質問があれば質問もお願い
+
+### 変更分類（Change Classification）
+- **分類**: **SPEC_CHANGE**（仕様そのものの大幅変更）
+- **深刻度**: **全面的なコンセプトピボット**
+- **根拠**: `docs/コンセプト変更定義書.md` に基づく
+
+### 旧コンセプト → 新コンセプトの主要差分
+
+| 領域 | 旧コンセプト | 新コンセプト |
+|------|-------------|-------------|
+| **UI/UX** | React Web App（MVP）+ 将来モバイル | **LINE Bot中心**、Webアプリ不要 |
+| **体験の中心** | ダッシュボード＋プッシュ通知 | **リワードちゃん（キャラクター）との会話** |
+| **入力方式** | フォーム入力・5段階ストレス評価 | **チャット・画像（レシート）・愚痴** |
+| **データ蓄積** | 明示的な記録 | **会話の副産物として自然に育つ** |
+| **リワード提案** | ストレス閾値超過→リアルタイム提案 | **ご褒美候補プール方式**（事前蓄積→状態マッチング） |
+| **アーキテクチャ** | 6 NestJS マイクロサービス + Nginx + Turborepo | **LINE Bot → API Gateway → Lambda + DynamoDB** |
+| **DB** | PostgreSQL / TimescaleDB / ClickHouse / Redis | **DynamoDB** |
+| **LLM** | OpenAI GPT-4o | **Amazon Nova（Micro/Lite）**、品質不足時 Haiku/Sonnet |
+| **認証** | Auth0 / AWS Cognito + JWT | **LINE ユーザーID ベース** |
+| **ダッシュボード** | React Web ダッシュボード | **LIFF（最小限）、数値は見せずキャラの言葉で表現** |
+| **通知** | FCM/APNs プッシュ通知 | **LINE Push メッセージ（1日1回上限）** |
+| **初回登録** | フォーム＋ウィザード | **リワードちゃんとのチャットで登録** |
+| **収益モデル** | サブスクリプション中心 | **アフィリエイト・提携商品・プレミアム課金** |
+
+### 影響範囲
+- INCEPTION フェーズの全成果物が影響を受ける
+  - `requirements.md` → 全面書き換え
+  - `workflow-plan.md` → 全面書き換え
+  - `application-design/` 配下全ファイル → 全面書き換え
+  - `unit-of-work*.md` → 全面書き換え
+- `docs/要件定義書.md` → 新コンセプトに合わせて全面改訂が必要
+
+### 対応方針
+- INCEPTION フェーズを Requirements Analysis から再実行
+- 新コンセプトに基づく質問ファイルを作成し、不明点を確認
+- 回答後、全 Inception 成果物を再生成
+
+### ステータス
+- **質問ファイル作成**: `aidlc-docs/inception/requirements/concept-change-questions.md`
+- **回答完了**（2026-05-15）
+
+### 確定技術スタック（Q&A 回答より）
+
+| 項目 | 決定内容 |
+|------|---------|
+| **バックエンド** | AWS Lambda（Python）+ API Gateway（フルサーバーレス） |
+| **データベース** | DynamoDB シングルテーブルデザイン（PK=LINEユーザーID, SK=PROFILE#/EXPENSE#…） |
+| **LLM** | Amazon Bedrock（Nova Micro/Nova Lite）、モデル切り替え可能設計 |
+| **画像解析** | Amazon Nova Lite 第一候補、精度不足時は Textract+LLM or Claude Vision |
+| **IaC** | AWS SAM（Serverless Application Model） |
+| **LINE APIプラン** | フリープラン（Push通常会話はReply中心、Pushはデモ用・1日1回） |
+| **ご褒美データソース** | 楽天API |
+| **認証** | LINEユーザーID + LIFF利用時はLINEログインアクセストークン |
+| **開発優先順位** | LINE Bot基盤 → リワードちゃん会話品質 → 支出抽出 → ご褒美提案 → その他 |
+| **セキュリティ重点** | LINE Bot特有（Webhook署名検証、チャネルシークレット管理） |
+| **言語** | Python 統一 |
+| **感情把握** | 会話自動推定 主 + 「今日どうだった？」的な間接質問 |
+| **テスト戦略** | LLM応答テスト重点（プロンプトテスト・出力品質テスト） |
+| **収益機能** | MVPでは実装しない |
+| **口調カスタマイズ** | MVP で 2〜3 種類 |
+| **MVP スコープ除外** | アフィリエイト実装・サービス強度測定基盤 |
+
+### 次アクション
+- Requirements Analysis 再実行 → `requirements.md` 全面書き換え
+- Workflow Planning 再実行 → `workflow-plan.md` 全面書き換え
+- Application Design 再実行 → `application-design/` 全面書き換え
+- Units Generation 再実行 → `unit-of-work*.md` 全面書き換え

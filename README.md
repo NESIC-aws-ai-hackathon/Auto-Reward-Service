@@ -1,246 +1,257 @@
-# オートリワードサービス（Auto Reward Service）
+# オートリワードサービス（ARS）— リワードちゃん
 
 <div align="center">
 
-> ### 🎁 「欲望を先回りした自立型家計簿」
+> ### 🎁 「話すだけで家計簿になる。好きなものを覚えて、買っていい理由をくれる。」
 
-[![Status](https://img.shields.io/badge/status-inception-blue)](#)
+[![Status](https://img.shields.io/badge/AI--DLC-Inception_Complete-blue)](#)
 [![Theme](https://img.shields.io/badge/theme-人をダメにする-ff69b4)](#)
+[![LINE Bot](https://img.shields.io/badge/LINE-Messaging_API-00C300)](#)
+[![AWS Lambda](https://img.shields.io/badge/AWS-Lambda_(Python)-FF9900)](#)
+[![DynamoDB](https://img.shields.io/badge/AWS-DynamoDB-4053D6)](#)
+[![Bedrock](https://img.shields.io/badge/AWS-Bedrock_(Nova)-232F3E)](#)
 [![License](https://img.shields.io/badge/license-MIT-green)](#ライセンス)
-[![Tech](https://img.shields.io/badge/AI-GPT--4o-orange)](#技術スタック)
-[![Infra](https://img.shields.io/badge/infra-AWS%20%2F%20Docker-232F3E?logo=amazonaws)](#インフラ)
 
 </div>
 
 ---
 
-## 🌟 概要
+## 概要
 
-**オートリワードサービス（ARS）** は、AI-DLC ハッカソン「人をダメにする」テーマのもとで構築する、  
-ストレス検知 × 財務状況連動型の **自動ご褒美提案サービス** です。
+**オートリワードサービス（ARS）** は、AI-DLC ハッカソン「人をダメにする」テーマのもとで構築する、LINE Bot 中心の **AI 家計簿 × ご褒美提案サービス** です。
 
-仕事や私生活で一定以上の「ストレス」を感じたとき、ユーザーの現在の財務状況を自動分析し、  
-**「いま、これを買っていい」** という最適なご褒美をプッシュ通知します。
+LINEで **リワードちゃん** と話しているだけで、愚痴・支出・好み・ご褒美履歴が **会話の副産物として** 育っていきます。
+ユーザーは家計簿を頑張らない。でも気づいたら、自分の消費傾向が整理されている。
+そしてリワードちゃんは、ユーザーの好きなものや今月の余裕を覚えて、ちょうど弱っているタイミングで「これ買っちゃおうよ〜」と財布をゆるめてきます。
 
 > 💬 *「買っていいよ」の一言を、自分の代わりに AI が言ってくれる。*
 
 ---
 
-## 🎯 サービスコンセプト
+## サービスコンセプト
 
 | 項目 | 内容 |
 |------|------|
-| キャッチコピー | 欲望を先回りした自立型家計簿 |
+| キャッチコピー | 頑張らない家計簿アプリ「ARS」 |
 | テーマ | 人をダメにする |
 | ターゲット | 忙しい社会人・育児中の親・フリーランス |
-| コアバリュー | 「頑張った自分」への承認を自動化し、健全な支出と自己肯定感を両立する |
+| コアバリュー | 会話するだけで家計が育ち、AI キャラが「買っていい理由」を作ってくれる |
+| UI | LINE Bot（リワードちゃん）+ LIFF（最小限ダッシュボード） |
 
 ---
 
-## 💡 解決する課題
+## 成功シナリオ
 
-| # | 課題 | 影響 |
-|---|------|------|
-| 1 | 頑張っても自分にご褒美を与えるタイミングがわからない | 燃え尽き・モチベーション低下 |
-| 2 | 「買っていいか」の判断に認知負荷がかかる | 衝動買いまたは過剰な節制 |
-| 3 | 家計簿は「記録」するだけで行動を促さない | 財務ツールが受動的にしか機能しない |
-| 4 | ストレス発散のための支出が罪悪感と結びつきやすい | 精神的疲弊の悪化 |
-
----
-
-## ✨ 成功シナリオ
-
-> 佐藤さん（32歳・会社員）は月曜の残業後、スマホに通知が届く。
+> 田中さん（26歳・会社員）は残業後、LINEでリワードちゃんにつぶやく。
 >
-> **「今日は頑張りましたね 🎉 残高余裕は ¥3,200 です。近くのラーメン店で一杯いかがですか？🍜」**
+> **ユーザー**: 今日疲れた  
+> **リワードちゃん**: 前に抹茶好きって言ってたよね〜。今日ならこの抹茶プリン、ちょうどいいかも。320円だし、これは回復費でいけるよ。
 >
-> タップ一つで予約完了。翌朝は「昨夜の支出 ¥850 を記録しました」と報告される。
+> 家計簿をつけたつもりはないのに、支出も感情も好みも自然に記録されている。
 
 ---
 
-## 🏗️ システムアーキテクチャ
+## システムアーキテクチャ
 
-イベント駆動マイクロサービスアーキテクチャを採用。各 Unit が独立したサービスとして動作し、  
-Apache Kafka を介して非同期に連携します。
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                       クライアント層                          │
-│    iOS App (React Native)    Android App    Web App (React)  │
-└──────────────────────────┬──────────────────────────────────┘
-                           │ HTTPS / WebSocket
-┌──────────────────────────▼──────────────────────────────────┐
-│                  API Gateway (Kong Gateway)                   │
-│           認証・レートリミット・ルーティング                      │
-└──────┬──────────┬──────────┬──────────┬──────────┬──────────┘
-       │          │          │          │          │
-       ▼          ▼          ▼          ▼          ▼
-  [U1 Auth]  [U2 Stress] [U3 Finance] [U4 Reward] [U5 Notif]
-       │          │          │          │          │
-       └──────────┴──────────┴────┬─────┴──────────┘
-                                  │
-                     ┌────────────▼────────────┐
-                     │     Apache Kafka          │
-                     │  (非同期イベントバス)       │
-                     └────────────┬────────────┘
-                                  │
-                     ┌────────────▼────────────┐
-                     │  [U7 Dashboard Service]  │
-                     │   集計・分析・インサイト    │
-                     └─────────────────────────┘
-```
-
-### データフロー（ストレス検知 → ご褒美通知）
+AWS サーバーレスアーキテクチャを採用。LINE Bot を入口として、Lambda 関数群が連携します。
 
 ```
-① ストレス入力 or カレンダー自動同期
-       ↓
-② Stress Service がスコア算出（0〜100）
-       ↓ 閾値超過（デフォルト 70）
-③ Kafka: stress.threshold.exceeded イベント発行
-       ↓
-④ Finance Service が余裕額を算出
-       ↓
-⑤ Reward Service が提案リストを生成（LLM パーソナライズ）
-       ↓
-⑥ Notification Service がプッシュ通知を配信 📲
+LINEユーザー
+  ↓（テキスト / 画像 / スタンプ）
+LINE Messaging API
+  ↓（Webhook POST）
+Amazon API Gateway（+ WAF）
+  ↓
+Lambda: webhook_handler
+  ├─ LINE署名検証（X-Line-Signature）
+  ├─ Message Router
+  │     ├─ text  → intent_classifier
+  │     │           ├─ EXPENSE    → expense_extractor  → DynamoDB
+  │     │           ├─ REWARD     → reward_proposal    → DynamoDB
+  │     │           ├─ GREET/CHAT → character_reply
+  │     │           └─ ONBOARDING → onboarding_flow    → DynamoDB
+  │     └─ image → receipt_analyzer → DynamoDB
+  └─ LINE Reply API で応答
+
+日次バッチ（EventBridge Scheduler）
+  └─ reward_pool_updater → 楽天API → DynamoDB
+
+Push通知（EventBridge Scheduler / 1日1回上限）
+  └─ push_notifier → LINE Push API
+
+LIFF（最小限）
+  └─ API Gateway → liff_api → DynamoDB
+```
+
+### データストア
+
+**DynamoDB シングルテーブルデザイン**
+
+| PK | SK プレフィックス | 用途 |
+|----|-------------------|------|
+| `USER#{lineUserId}` | `PROFILE#` | 収入・固定費・ご褒美枠・口調設定 |
+| `USER#{lineUserId}` | `EXPENSE#{isoTimestamp}` | 支出記録 |
+| `USER#{lineUserId}` | `CHAT#{isoTimestamp}` | 会話ログ |
+| `USER#{lineUserId}` | `PREF_MEMORY#` | 嗜好記憶（好きなカテゴリ・商品傾向） |
+| `USER#{lineUserId}` | `REWARD_POOL#` | ご褒美候補プール |
+| `USER#{lineUserId}` | `REWARD_SUGGESTION#{isoTimestamp}` | ご褒美提案・結果 |
+
+---
+
+## 主要機能（8 Unit 構成）
+
+| Unit | 名称 | 役割 | MVP |
+|------|------|------|-----|
+| Unit 0 | **SAM基盤** | SAMプロジェクト・共通Layer・DynamoDBテーブル定義 | ✅ |
+| Unit 1 | **LINE Bot基盤** | Webhook受信・署名検証・Router・Reply/Push | ✅ |
+| Unit 2 | **リワードちゃんキャラクター** | Intent分類・口調生成・感情把握・オンボーディング | ✅ |
+| Unit 3 | **支出記録** | チャット支出抽出・確認フロー・レシート画像解析 | ✅ |
+| Unit 4 | **ご褒美候補プール** | 嗜好記憶・楽天API連携・日次バッチ更新 | ✅ |
+| Unit 5 | **ご褒美提案** | 状態推定・候補マッチング・余裕額チェック | ✅ |
+| Unit 6 | **Push通知** | 通数管理・コンテンツ生成・EventBridge | ✅ |
+| Unit 7 | **LIFFダッシュボード** | 履歴・設定・口調選択（最小限） | ✅ |
+
+---
+
+## 技術スタック
+
+| レイヤー | 技術 | 備考 |
+|---------|------|------|
+| メッセージングUI | LINE Messaging API（フリープラン） | Reply中心、Push は月200通上限 |
+| LIFF | LINE LIFF | ご褒美メモ・履歴・設定のみ |
+| API エントリポイント | Amazon API Gateway | Webhook + LIFF API |
+| バックエンド | AWS Lambda（Python） | 全関数 Python 統一 |
+| データベース | Amazon DynamoDB | シングルテーブルデザイン |
+| LLM | Amazon Bedrock（Nova Micro / Nova Lite） | モデル切り替え可能設計 |
+| 画像解析 | Nova Lite → Textract+LLM → Claude Vision | フォールバック方式 |
+| 外部API | 楽天ウェブサービスAPI | ご褒美候補プール |
+| スケジューラ | Amazon EventBridge Scheduler | 日次バッチ・Push通知 |
+| IaC | AWS SAM | template.yaml で全リソース定義 |
+| シークレット管理 | AWS Secrets Manager / SSM | チャネルシークレット・トークン等 |
+| セキュリティ | AWS WAF | API Gateway に適用 |
+| テスト | pytest + LLM応答品質テスト | プロンプトテスト重点 |
+
+---
+
+## プロジェクト構成
+
+```
+auto-reward-service/
+├── src/
+│   ├── handlers/              # Lambda関数ハンドラー
+│   │   ├── webhook_handler.py
+│   │   ├── intent_classifier.py
+│   │   ├── expense_extractor.py
+│   │   ├── receipt_analyzer.py
+│   │   ├── character_reply.py
+│   │   ├── onboarding_flow.py
+│   │   ├── reward_proposal.py
+│   │   ├── reward_pool_updater.py
+│   │   ├── push_notifier.py
+│   │   └── liff_api.py
+│   ├── services/              # 共通サービスモジュール
+│   │   ├── dynamodb_service.py
+│   │   ├── bedrock_service.py
+│   │   ├── line_service.py
+│   │   ├── rakuten_service.py
+│   │   ├── finance_engine.py
+│   │   └── reward_pool_service.py
+│   ├── models/                # スキーマ定義
+│   │   └── schemas.py
+│   ├── prompts/               # LLMプロンプト
+│   │   ├── intent_prompt.py
+│   │   ├── expense_prompt.py
+│   │   ├── character_prompts.py
+│   │   └── receipt_prompt.py
+│   └── utils/
+│       ├── secrets.py
+│       └── logger.py
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── llm/                   # LLM応答品質テスト
+├── template.yaml              # AWS SAM テンプレート
+├── samconfig.toml
+├── requirements.txt
+├── requirements-dev.txt
+└── Makefile
 ```
 
 ---
 
-## 🔧 主要機能（7 Unit 構成）
+## セキュリティ設計
 
-| Unit | サービス名 | 役割 | MVP |
-|------|-----------|------|-----|
-| U1 | **ユーザー管理** | アカウント・プロフィール・嗜好設定・予算上限管理 | ✅ |
-| U2 | **ストレスセンシング** | カレンダー・テキスト・活動量からストレス度を推定（0〜100） | ✅ |
-| U3 | **財務状況分析** | 収支管理・CSV インポート・リワード余裕額算出 | ✅ |
-| U4 | **リワード提案エンジン** | ストレス×余裕額×嗜好から AI がご褒美を提案 | ✅ |
-| U5 | **通知・配信** | FCM / APNs 経由のプッシュ通知・スロットリング制御 | ✅ |
-| U6 | **リワード実行** | Uber Eats・食べログ等へのワンタップ連携（将来フェーズ） | 🔜 |
-| U7 | **振り返りダッシュボード** | ストレス・ご褒美・財務のビジュアライズ＋ AI インサイト | ✅ |
-
-### ストレススコア算出ロジック
-
-```
-stress_score = 0.4 × manual_input
-             + 0.2 × calendar_density_score
-             + 0.3 × text_sentiment_score
-             + 0.1 × (1 - sleep_quality_score)
-```
-
-### リワード提案マトリクス
-
-| ストレスレベル | 余裕額 | 提案例 | 価格帯 |
-|--------------|--------|--------|--------|
-| 高（70〜100） | ¥5,000 以上 | スパ・高級ディナー | ¥3,000〜¥8,000 |
-| 高（70〜100） | ¥500〜¥4,999 | スイーツ・ちょっといい外食 | ¥500〜¥2,000 |
-| 中（40〜69）  | ¥2,000 以上 | カフェ・マッサージ・映画 | ¥1,000〜¥3,000 |
-| 低（0〜39）   | 任意 | 今日は休息がご褒美 | — |
-
----
-
-## 💰 ビジネスモデル
-
-| モデル | 詳細 |
-|--------|------|
-| サブスクリプション | 月額 ¥480（ベーシック）/ ¥980（プレミアム） |
-| アフィリエイト / 送客手数料 | EC・デリバリー・体験予約への送客収益 |
-| データインサイト販売（匿名集計） | ストレスパターン×消費傾向の企業向けレポート |
-
-### KPI ロードマップ
-
-| フェーズ | 期間 | 指標 | 目標値 |
-|---------|------|------|--------|
-| MVP | 〜3 ヶ月 | DAU | 500 人 |
-| MVP | 〜3 ヶ月 | 提案→実行転換率 | 30% 以上 |
-| Growth | 〜6 ヶ月 | MAU | 10,000 人 |
-| Growth | 〜6 ヶ月 | 月次チャーン率 | 5% 以下 |
-| Scale | 〜12 ヶ月 | ARR | ¥50M |
-
----
-
-## 🛠️ 技術スタック
-
-| レイヤー | 技術 |
-|---------|------|
-| モバイル | React Native（iOS / Android 共通） |
-| Web フロント | React + TypeScript + Vite |
-| BFF / API Gateway | Kong Gateway |
-| バックエンド | Python (FastAPI) / Node.js (Hono) |
-| メッセージブローカー | Apache Kafka |
-| RDBMS | PostgreSQL 16 |
-| 時系列 DB | TimescaleDB |
-| OLAP | ClickHouse |
-| キャッシュ | Redis 7 |
-| AI / LLM | OpenAI GPT-4o |
-| インフラ（MVP） | Docker Compose / Render.com |
-| インフラ（本番） | AWS EKS + Terraform |
-| CI/CD | GitHub Actions |
-| 監視 | Datadog（APM + ログ） |
-
----
-
-## 🔒 セキュリティ設計
-
-| 観点 | 対策 |
+| 要件 | 対策 |
 |------|------|
-| 通信 | 全通信 TLS 1.3 必須 |
-| 認証 | JWT + リフレッシュトークンローテーション |
-| 金融データ | AES-256 暗号化 at rest・口座番号マスク |
-| 個人データ | GDPR / 個人情報保護法準拠・データ最小化原則 |
-| AI 入力 | プライベートテキストはサーバー送信前に匿名化 |
-| 依存関係 | Dependabot + Snyk による定期脆弱性スキャン |
+| LINE署名検証 | `X-Line-Signature` をチャネルシークレットで HMAC-SHA256 検証。検証失敗は 403 |
+| シークレット管理 | チャネルシークレット・アクセストークンは Secrets Manager / SSM に格納（平文禁止） |
+| データ暗号化 | DynamoDB 保存データの暗号化（AWS管理キー） |
+| PII保護 | ログに LINE ユーザーID・チャット内容等 PII を出力しない |
+| IAM最小権限 | 各Lambda関数の IAM Role は必要操作のみに限定 |
+| WAF | API Gateway に AWS WAF（AWSManagedRulesCommonRuleSet）を適用 |
+| LIFF検証 | LIFF アクセストークンを LINE Platform API で検証 |
 
 ---
 
-## 📋 MVP スコープ
+## MVP スコープ
 
-MVP（ハッカソン・PoC）で優先実装する機能を以下に絞ります。
-
-| Unit | 含める機能 |
+| 区分 | 含める機能 |
 |------|-----------|
-| U1 ユーザー管理 | 登録・ログイン・プロフィール・嗜好設定・通知設定 |
-| U2 ストレスセンシング | 手動入力・スコア算出・閾値判定・履歴保存 |
-| U3 財務状況分析 | 手動収支入力・月次予算管理・余裕額算出 |
-| U4 リワード提案エンジン | カタログ管理・ルールベース提案・フィードバック収集 |
-| U5 通知・配信 | プッシュ通知・通知コピー生成・スロットリング |
-| U7 振り返りダッシュボード | ストレス推移グラフ・ご褒美履歴・財務影響サマリー |
+| LINE Bot基盤 | Webhook受信・署名検証・メッセージルーティング・Reply/Push |
+| 初回登録 | 収入・固定費・ご褒美枠をチャットで登録 |
+| キャラクター | リワードちゃん口調生成・口調カスタマイズ（2〜3種）・感情把握 |
+| 支出記録 | チャット支出入力・レシート画像解析・確認フロー |
+| 候補プール | 嗜好記憶・楽天API連携・日次バッチ更新 |
+| ご褒美提案 | 状態推定・候補マッチング・余裕額チェック・買いすぎストップ |
+| Push通知 | 1日1回デモ用Push・通数管理（月200通） |
+| LIFF | ご褒美メモ・支出サマリー・設定・口調選択 |
 
-インフラは **Docker Compose** でローカル起動、各 Unit のコード生成と並行してコンテナ定義を追加していきます。
+### MVP対象外（将来フェーズ）
+
+- アフィリエイト・収益機能
+- 外部サービス連携（UberEats等）自動実行
+- CSV / 銀行API連携
+- ウェアラブルデバイス連携
 
 ---
 
-## 📁 ドキュメント
+## ドキュメント
 
 | ドキュメント | 内容 |
 |-------------|------|
-| [要件定義書.md](要件定義書.md) | エレベーターピッチ・ペルソナ・ユーザーストーリー・API 設計・データモデル・セキュリティ設計（全詳細） |
-| [aidlc-docs/](aidlc-docs/) | AI-DLC プロセス管理ドキュメント（状態・監査・計画） |
+| [docs/コンセプト変更定義書.md](docs/コンセプト変更定義書.md) | コンセプトピボット（Web App → LINE Bot）の変更定義 |
+| [old/docs/要件定義書.md](old/docs/要件定義書.md) | 旧要件定義書（参照用・old退避済み） |
+| [aidlc-docs/](aidlc-docs/) | AI-DLC プロセス管理ドキュメント（状態・監査・設計・計画） |
+| [aidlc-docs/inception/requirements/requirements.md](aidlc-docs/inception/requirements/requirements.md) | 要件定義書 v2（確定版） |
+| [aidlc-docs/inception/application-design/application-design.md](aidlc-docs/inception/application-design/application-design.md) | 統合アプリケーション設計書 |
 
 ---
 
-## 🚀 ローカル起動（MVP）
+## ローカル開発（準備中）
 
 ```bash
 # リポジトリのクローン
-git clone https://github.com/your-org/auto-reward-service.git
+git clone <repository-url>
 cd auto-reward-service
 
-# 環境変数の設定
-cp .env.example .env
-# .env を編集して OpenAI API キー等を設定
+# Python 仮想環境のセットアップ
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Docker Compose で全サービスを起動
-docker compose up -d
+# 依存関係のインストール
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
-# API Gateway にアクセス
-# http://localhost:8000
+# SAM ビルド & ローカル実行
+sam build
+sam local start-api
+
+# テスト実行
+pytest tests/
 ```
 
 ---
 
-## 📄 ライセンス
+## ライセンス
 
 MIT License
-

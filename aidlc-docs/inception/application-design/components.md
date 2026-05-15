@@ -1,244 +1,272 @@
-# コンポーネント定義 — オートリワードサービス
+# コンポーネント定義 — オートリワードサービス（v2）
 
-**アーキテクチャ方針（回答まとめ）:**
-- モノレポ: **Turborepo**（npm workspaces + ビルドキャッシュ）
-- モジュール境界: **ハイブリッド**（コアドメインはドメイン分割、共通機能はレイヤー分割）
-- サービス間通信: **共有クライアントパッケージ**（@ars/shared-clients）
-- JWT 検証: **API Gateway（Nginx）で一元検証**（X-User-Id ヘッダー渡し）
-- OpenAI 呼び出し: **共有 AI クライアントモジュール**（@ars/shared-ai）
+**改訂日**: 2026-05-15 / コンセプト変更後版
+
+**アーキテクチャ方針:**
+- 実行基盤: **AWS Lambda（Python）+ API Gateway + DynamoDB**
+- LLM: **Amazon Bedrock（Nova Micro / Nova Lite）**
+- IaC: **AWS SAM**
 
 ---
 
 ## リポジトリ構成
 
 ```
-auto-reward-service/           # Turborepo ルート
-├── apps/
-│   ├── auth-service/          # U1: NestJS
-│   ├── stress-service/        # U2: NestJS
-│   ├── reward-service/        # U4: NestJS
-│   ├── finance-service/       # U3: NestJS
-│   ├── notification-service/  # U5: NestJS
-│   ├── dashboard-service/     # U7: NestJS
-│   └── web/                   # React (Vite + TypeScript)
-├── packages/
-│   ├── shared-types/          # @ars/shared-types
-│   ├── shared-clients/        # @ars/shared-clients
-│   ├── shared-ai/             # @ars/shared-ai
-│   └── shared-config/         # @ars/shared-config
-├── infrastructure/
-│   ├── docker-compose.yml
-│   └── nginx/
-│       └── nginx.conf         # API Gateway + JWT 検証
-├── turbo.json
-└── package.json
+auto-reward-service/               <- SAM プロジェクトルート
++-- src/
+|   +-- handlers/                  # Lambda関数ハンドラー（Unit 1-7）
+|   |   +-- webhook_handler.py     # Unit 1: LINE Webhook受信・Router
+|   |   +-- intent_classifier.py   # Unit 2: Intent分類（Nova Micro）
+|   |   +-- character_reply.py     # Unit 2: リワードちゃん口調生成
+|   |   +-- onboarding_flow.py     # Unit 2: 初回登録チャットフロー
+|   |   +-- expense_extractor.py   # Unit 3: 支出抽出・確認フロー
+|   |   +-- receipt_analyzer.py    # Unit 3: レシート画像解析（Nova Lite）
+|   |   +-- reward_proposal.py     # Unit 5: ご褒美候補マッチング
+|   |   +-- reward_pool_updater.py # Unit 4: 日次バッチ（楽天API）
+|   |   +-- push_notifier.py       # Unit 6: Push通知送信
+|   |   +-- liff_api.py            # Unit 7: LIFF用API
+|   +-- services/                  # 共通サービスモジュール（Unit 0）
+|   |   +-- dynamodb_service.py    # DynamoDB操作共通
+|   |   +-- bedrock_service.py     # Bedrock呼び出し共通
+|   |   +-- line_service.py        # LINE API（Reply/Push/署名検証）
+|   |   +-- rakuten_service.py     # 楽天API連携
+|   |   +-- finance_engine.py      # 余裕額算出ロジック
+|   |   +-- reward_pool_service.py # 候補プール選択ロジック
+|   +-- models/
+|   |   +-- schemas.py             # DynamoDBスキーマ定数・Pydanticモデル
+|   +-- prompts/                   # LLMプロンプトテンプレート
+|   |   +-- intent_prompt.py       # Intent分類プロンプト
+|   |   +-- expense_prompt.py      # 支出抽出プロンプト
+|   |   +-- character_prompts.py   # 口調別リワードちゃんプロンプト
+|   |   +-- receipt_prompt.py      # レシート解析プロンプト
+|   +-- utils/
+|       +-- secrets.py             # Secrets Manager/SSM取得
+|       +-- logger.py              # 構造化ログ（PIIマスク）
++-- tests/
+|   +-- unit/                      # ユニットテスト（pytest）
+|   +-- integration/               # 統合テスト
+|   +-- llm/                       # LLM応答品質テスト
++-- liff/                          # LIFFフロントエンド（Unit 7）
+|   +-- index.html
+|   +-- settings.html
+|   +-- assets/
++-- template.yaml                  # AWS SAM テンプレート
++-- samconfig.toml                 # SAM設定
++-- requirements.txt               # 本番依存
++-- requirements-dev.txt           # 開発依存（pytest等）
++-- Makefile                       # ビルド・テスト・デプロイ用
 ```
 
 ---
 
-## 共有パッケージ（packages/）
+## Lambda ハンドラー一覧
 
-### @ars/shared-types
-
-**責務**: 全サービス共通の TypeScript 型定義・DTO・列挙型
-
-| コンポーネント | 責務 |
-|--------------|------|
-| `UserDto` | ユーザー情報 DTO |
-| `StressEntryDto` | ストレスエントリ DTO |
-| `StressScoreDto` | ストレススコア DTO |
-| `RewardProposalDto` | リワード提案 DTO |
-| `FinanceBudgetDto` | 財務予算 DTO |
-| `NotificationDto` | 通知 DTO |
-| `RewardCategory` | リワードカテゴリ列挙型（FOOD / EXPERIENCE / ITEM / SERVICE） |
-| `StressLevel` | ストレスレベル列挙型（LOW / MEDIUM / HIGH） |
+| Lambda関数名 | Unit | トリガー | 記述 |
+|-----------|------|---------|------|
+| `webhook_handler` | Unit 1 | API Gateway POST /webhook | LINE Webhook受信・Router |
+| `intent_classifier` | Unit 2 | 内部呼び出し | Nova MicroでIntent分類 |
+| `character_reply` | Unit 2 | 内部呼び出し | リワードちゃん口調生成 |
+| `onboarding_flow` | Unit 2 | 内部呼び出し | 初回登録チャットフロー |
+| `expense_extractor` | Unit 3 | 内部呼び出し | 支出抽出・JSON化・確認 |
+| `receipt_analyzer` | Unit 3 | 内部呼び出し | Nova Lite画像解析 |
+| `reward_proposal` | Unit 5 | 内部呼び出し | 候補プールマッチング |
+| `reward_pool_updater` | Unit 4 | EventBridge Scheduler | 楽天API→候補プール更新 |
+| `push_notifier` | Unit 6 | EventBridge Scheduler | Push送信・通数管理 |
+| `liff_api` | Unit 7 | API Gateway GET/POST /liff/* | LIFF用API |
 
 ---
 
-### @ars/shared-clients
+## Lambda ハンドラー詳細
 
-**責務**: サービス間 HTTP 通信のクライアントラッパー（NestJS HttpModule ベース）
+### webhook_handler（Unit 1）
 
-| コンポーネント | 責務 |
-|--------------|------|
-| `StressClient` | Stress Service への HTTP 呼び出しラッパー |
-| `FinanceClient` | Finance Service への HTTP 呼び出しラッパー |
-| `RewardClient` | Reward Service への HTTP 呼び出しラッパー |
-| `NotificationClient` | Notification Service への HTTP 呼び出しラッパー |
-| `DashboardClient` | Dashboard Service への HTTP 呼び出しラッパー |
+| 項目 | 内容 |
+|------|------|
+| **責務** | LINE Webhookイベント受信・署名検証・メッセージ種別判定・各ハンドラーへの振り分け |
+| **トリガー** | API Gateway（POST /webhook） |
+| **入力** | LINE Webhook Event（JSON） |
+| **出力** | 200 OK（LINE Platformへの応答） |
+| **依存サービス** | `line_service`（署名検証）, `secrets`（チャネルシークレット）, `logger` |
+| **主要ロジック** | 1. X-Line-Signature検証 → 失敗時403 2. event.type判定 3. message.type分岐（text→intent_classifier, image→receipt_analyzer, その他→character_reply） |
+| **NFR** | SEC-01（署名検証必須）, PERF-01（3秒以内応答） |
 
----
+### intent_classifier（Unit 2）
 
-### @ars/shared-ai
+| 項目 | 内容 |
+|------|------|
+| **責務** | ユーザーテキストのIntent分類（EXPENSE/REWARD/GREET/CHAT/ONBOARDING/UNKNOWN） |
+| **入力** | `user_id: str`, `text: str` |
+| **出力** | `{"intent": str, "confidence": float}` |
+| **依存サービス** | `bedrock_service`（Nova Micro）, `dynamodb_service`（CHATログ保存）, `secrets`, `logger` |
+| **主要ロジック** | 1. intent_prompt.py でプロンプト構築 2. Nova Micro呼び出し 3. Intent + confidence返却 4. CHAT SK でログ保存 |
+| **NFR** | TEST-01（Intent分類精度テスト） |
 
-**責務**: OpenAI API 呼び出しの共有クライアントモジュール
+### character_reply（Unit 2）
 
-| コンポーネント | 責務 |
-|--------------|------|
-| `AiModule` | NestJS モジュール（OpenAI SDK 初期化・DI） |
-| `TextSentimentAnalyzer` | テキストから感情スコアを算出（Stress Service 用） |
-| `NotificationCopyGenerator` | 共感的通知コピーを生成（Notification Service 用） |
-| `InsightReportGenerator` | 月次インサイトレポートを生成（Dashboard Service 用） |
-| `TransactionCategoryClassifier` | 明細を自動カテゴリ分類（Finance Service 用） |
+| 項目 | 内容 |
+|------|------|
+| **責務** | リワードちゃんの口調でReplyテキストを生成 |
+| **入力** | `user_id: str`, `context: dict`, `tone_style: str` |
+| **出力** | `str`（リワードちゃんの応答テキスト） |
+| **依存サービス** | `bedrock_service`（Nova Micro）, `dynamodb_service`（LIFELOG保存）, `line_service`（Reply送信）, `secrets`, `logger` |
+| **主要ロジック** | 1. DynamoDBからユーザーPROFILE・直近CHAT取得 2. character_prompts.pyで口調テンプレート選択 3. Nova Micro呼び出し 4. LINE Reply送信 5. LIFELOG保存（推定感情・疲労度） |
+| **口調バリエーション** | `friendly`（デフォルト）, `polite`（やさしい敬語）, `devilish`（小悪魔） |
 
----
+### onboarding_flow（Unit 2）
 
-### @ars/shared-config
+| 項目 | 内容 |
+|------|------|
+| **責務** | 初回登録チャットフロー（収入・固定費・ご褒美枠をチャットで収集） |
+| **入力** | `user_id: str`, `text: str` |
+| **出力** | Reply メッセージ（次の質問 or 登録完了） |
+| **依存サービス** | `bedrock_service`（Nova Micro）, `dynamodb_service`（PROFILE/FIXED_COSTS保存）, `line_service`, `secrets`, `logger` |
+| **主要ロジック** | 1. DynamoDBからPROFILE取得（onboarding_step確認） 2. ステップに応じた質問・回答解析 3. 完了時にPROFILE + FIXED_COSTS保存 + ご褒美枠算出 |
 
-**責務**: NestJS 設定モジュールの共通実装
+### expense_extractor（Unit 3）
 
-| コンポーネント | 責務 |
-|--------------|------|
-| `AppConfigModule` | 環境変数読み込み（NestJS ConfigModule ラッパー） |
-| `LoggerModule` | 構造化ログ（JSON 形式、correlation ID 付き）|
-| `HealthModule` | `/health` エンドポイント共通実装 |
+| 項目 | 内容 |
+|------|------|
+| **責務** | テキストから支出情報をJSON化し、確認フローを経てDynamoDBに保存 |
+| **入力** | `user_id: str`, `text: str` |
+| **出力** | Reply メッセージ（確認質問 or 登録完了通知） |
+| **依存サービス** | `bedrock_service`（Nova Micro）, `dynamodb_service`（PENDING_EXPENSE/EXPENSE保存）, `line_service`, `secrets`, `logger` |
+| **主要ロジック** | 1. expense_prompt.pyでプロンプト構築 2. Nova Micro → 支出JSON 3. confidence低→追加質問 4. 確認→yes→EXPENSE保存 / no→破棄 5. ARSカテゴリ付与（情緒安定費・回復費等） |
 
----
+### receipt_analyzer（Unit 3）
 
-## バックエンドサービス（apps/）
+| 項目 | 内容 |
+|------|------|
+| **責務** | レシート画像から支出情報を抽出しJSON化 |
+| **入力** | `user_id: str`, `message_id: str` |
+| **出力** | Reply メッセージ（解析結果の確認） |
+| **依存サービス** | `bedrock_service`（Nova Lite）, `line_service`（Content API + Reply）, `dynamodb_service`（PENDING_EXPENSE保存）, `secrets`, `logger` |
+| **主要ロジック** | 1. LINE Content APIで画像バイナリ取得 2. receipt_prompt.pyでプロンプト構築 3. Nova Lite（マルチモーダル）で解析 4. 3秒以内→Reply / 3秒超→「解析中だよ〜」Reply + 非同期 |
+| **NFR** | PERF-02（3秒超→非同期化） |
 
-### Auth Service（U1）
+### reward_proposal（Unit 5）
 
-**責務**: ユーザーアカウント・プロフィール・設定管理。Auth0/Cognito との統合。
+| 項目 | 内容 |
+|------|------|
+| **責務** | ユーザーの状態と候補プールからご褒美を提案し、キャラ口調で返す |
+| **入力** | `user_id: str`, `context: dict` |
+| **出力** | Reply メッセージ（ご褒美提案 or 買いすぎ注意） |
+| **依存サービス** | `finance_engine`, `reward_pool_service`, `character_reply`, `dynamodb_service`（REWARD_SUGGESTION保存）, `line_service`, `secrets`, `logger` |
+| **主要ロジック** | 1. finance_engine.calculate_available_budget() 2. 余裕額≦0→買いすぎストップ（やんわり口調） 3. reward_pool_service.select_candidates()で候補選択 4. character_replyでキャラ口調提案生成 5. REWARD_SUGGESTION保存 |
 
-| モジュール | コンポーネント | 責務 |
-|----------|--------------|------|
-| `UserModule` | `UserController` | プロフィール CRUD エンドポイント（GET/PATCH /users/me） |
-| | `UserService` | ユーザー情報の取得・更新ビジネスロジック |
-| | `UserRepository` | users テーブルの CRUD（PostgreSQL） |
-| `PreferencesModule` | `PreferencesController` | 嗜好設定・予算上限・通知設定エンドポイント |
-| | `PreferencesService` | 設定値の検証・保存ロジック |
-| | `PreferencesRepository` | user_preferences テーブルの CRUD |
-| `AuthModule`（共通） | `JwtStrategy` | API Gateway から渡された X-User-Id ヘッダーを検証・リクエストコンテキストに注入 |
-| | `CurrentUserDecorator` | コントローラーでログインユーザーを取り出すデコレータ |
+### reward_pool_updater（Unit 4）
 
----
+| 項目 | 内容 |
+|------|------|
+| **責務** | 日次バッチで全ユーザーの候補プールを楽天APIから更新 |
+| **トリガー** | EventBridge Scheduler（毎日深夜） |
+| **入力** | Schedulerイベント |
+| **出力** | なし（DynamoDB更新） |
+| **依存サービス** | `dynamodb_service`（PREF_MEMORY取得/REWARD_POOL更新）, `rakuten_service`, `reward_pool_service`, `secrets`, `logger` |
+| **主要ロジック** | 1. 全ユーザーのPREF_MEMORY取得 2. 嗜好カテゴリで楽天API検索 3. 既存候補のスコア更新（スルー→減、購入系統→増） 4. 古い候補削除 5. REWARD_POOL保存 |
 
-### Stress Service（U2）
+### push_notifier（Unit 6）
 
-**責務**: ストレス度の収集・スコアリング・閾値判定。ストレス閾値超過時にリワードフローをトリガー。
+| 項目 | 内容 |
+|------|------|
+| **責務** | 1日1回のPush通知送信・通数管理 |
+| **トリガー** | EventBridge Scheduler（1日1回） |
+| **入力** | Schedulerイベント |
+| **出力** | なし（LINE Push送信） |
+| **依存サービス** | `dynamodb_service`（対象ユーザー取得・Push履歴確認）, `bedrock_service`（Nova Micro）, `line_service`（Push送信）, `secrets`, `logger` |
+| **主要ロジック** | 1. DynamoDBから対象ユーザー取得（今日未Push + 月200通未達） 2. Nova Microでコンテンツ生成 3. LINE Push API送信 4. Push履歴保存 |
+| **NFR** | COST-03（月200通上限遵守） |
 
-| モジュール | コンポーネント | 責務 |
-|----------|--------------|------|
-| `StressEntryModule` | `StressEntryController` | ストレスエントリ作成・履歴取得エンドポイント |
-| | `StressEntryService` | エントリ保存・スコア再計算のオーケストレーション |
-| | `StressEntryRepository` | stress_entries テーブルの CRUD（TimescaleDB） |
-| `StressScoringModule` | `StressScoringService` | 重み付き合成スコア算出（純粋関数 — **PBT 対象**） |
-| | `TextSentimentAdapter` | @ars/shared-ai の TextSentimentAnalyzer ラッパー |
-| `StressThresholdModule` | `StressThresholdService` | 閾値判定・リワードフロートリガー（RewardClient 呼び出し） |
-| | `StressSettingsController` | 閾値・カレンダー連携設定エンドポイント |
-| | `StressSettingsRepository` | stress_settings テーブルの CRUD |
+### liff_api（Unit 7）
 
----
-
-### Reward Service（U4）
-
-**責務**: ストレススコアと財務余裕額からパーソナライズされたリワード提案を生成。通知トリガーまで担当（リワードフローオーケストレーター）。
-
-| モジュール | コンポーネント | 責務 |
-|----------|--------------|------|
-| `CatalogModule` | `CatalogController` | リワードカタログ検索エンドポイント |
-| | `CatalogService` | カタログ検索・フィルタリング |
-| | `CatalogRepository` | reward_catalog テーブルの CRUD（PostgreSQL） |
-| `ProposalModule` | `ProposalController` | 提案一覧取得・採用履歴エンドポイント |
-| | `ProposalService` | 提案生成フローのオーケストレーション（FinanceClient → ProposalEngineService → NotificationClient） |
-| | `ProposalRepository` | reward_proposals テーブルの CRUD |
-| `ProposalEngineModule` | `RuleBasedEngineService` | ストレスレベル × 余裕額 → 提案リスト生成（純粋関数 — **PBT 対象**） |
-| | `AiPersonalizationService` | 過去フィードバックを基に提案スコアリング（将来フェーズ） |
-| `FeedbackModule` | `FeedbackController` | 採用/却下/後でフィードバックエンドポイント |
-| | `FeedbackService` | フィードバック保存・支出自動記録（FinanceClient 呼び出し） |
-| | `FeedbackRepository` | reward_feedbacks テーブルの CRUD |
-
----
-
-### Finance Service（U3）
-
-**責務**: 収支管理・余裕額算出・CSV インポート・AI カテゴリ分類。
-
-| モジュール | コンポーネント | 責務 |
-|----------|--------------|------|
-| `BudgetModule` | `BudgetController` | 月次予算・余裕額エンドポイント |
-| | `BudgetService` | 予算設定管理 |
-| | `BudgetRepository` | budgets テーブルの CRUD |
-| `AvailableBudgetModule` | `AvailableBudgetController` | GET /finance/available-reward-budget |
-| | `AvailableBudgetService` | 余裕額算出ロジック（純粋関数 — **PBT 対象**） |
-| `TransactionModule` | `TransactionController` | 取引履歴取得・手動追加エンドポイント |
-| | `TransactionService` | 取引の保存・カテゴリ分類オーケストレーション |
-| | `TransactionRepository` | transactions テーブルの CRUD |
-| `CsvImportModule` | `CsvImportController` | POST /finance/import/csv |
-| | `CsvImportService` | CSV パース・フォーマット変換（三菱UFJ / 三井住友 / ゆうちょ） |
-| | `CategoryClassifierAdapter` | @ars/shared-ai の TransactionCategoryClassifier ラッパー |
+| 項目 | 内容 |
+|------|------|
+| **責務** | LIFFアプリ用APIエンドポイント（履歴・設定・口調変更） |
+| **トリガー** | API Gateway（GET/POST /liff/*） |
+| **入力** | LIFFアクセストークン + リクエストパラメータ |
+| **出力** | JSON レスポンス |
+| **依存サービス** | `dynamodb_service`, `finance_engine`, `reward_pool_service`, `secrets`, `logger` |
+| **主要ロジック** | 1. LIFFアクセストークン検証（LINE Platform API） 2. パス分岐（/history, /settings, /pool） 3. DynamoDB読み書き 4. JSON返却 |
+| **NFR** | SEC-07（LIFFトークン検証必須） |
 
 ---
 
-### Notification Service（U5）
+## 共通サービスモジュール詳細
 
-**責務**: リワード提案通知の生成・送信・スロットリング管理。
+### dynamodb_service（Unit 0）
 
-| モジュール | コンポーネント | 責務 |
-|----------|--------------|------|
-| `DeviceTokenModule` | `DeviceTokenController` | デバイストークン登録・削除エンドポイント |
-| | `DeviceTokenService` | トークン管理 |
-| | `DeviceTokenRepository` | device_tokens テーブルの CRUD |
-| `NotificationModule` | `NotificationController` | 通知送信・履歴取得エンドポイント |
-| | `NotificationService` | 通知コピー生成 → スロットリング確認 → Web Push / FCM 送信のオーケストレーション |
-| | `NotificationRepository` | notification_logs テーブルの CRUD |
-| `ThrottleModule` | `ThrottleService` | 1日最大通知数・静寂時間帯（22:00〜7:00）チェック（Redis） |
-| `CopyGeneratorAdapter` | — | @ars/shared-ai の NotificationCopyGenerator ラッパー |
+| 項目 | 内容 |
+|------|------|
+| **責務** | DynamoDBシングルテーブルへの共通CRUD操作 |
+| **提供メソッド** | `put_item`, `get_item`, `query_by_sk_prefix`, `update_item`, `delete_item`, `batch_get` |
+| **設計ポイント** | PK/SK構築ヘルパー付き。エンティティ種別ごとのSKプレフィックス定数を`schemas.py`から参照 |
+
+### bedrock_service（Unit 0）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | Amazon Bedrockへのテキスト/画像推論リクエスト共通処理 |
+| **提供メソッド** | `invoke_model(prompt, model_id, image_bytes)` |
+| **設計ポイント** | model_idを設定ファイルから取得（モデル切り替え可能）。Nova Micro（テキスト）/ Nova Lite（マルチモーダル）をデフォルト |
+
+### line_service（Unit 0）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | LINE Messaging APIとの通信一元管理 |
+| **提供メソッド** | `verify_signature`, `reply_message`, `push_message`, `get_content`, `get_profile` |
+| **設計ポイント** | チャネルアクセストークン・シークレットはsecrets経由。Push送信前に通数チェックを呼び出し元の責務とする |
+
+### rakuten_service（Unit 4）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | 楽天ウェブサービスAPIとの連携 |
+| **提供メソッド** | `search_items(keyword, genre_id, price_range)` |
+| **設計ポイント** | APIキーはsecrets経由。レート制限対応（リトライ + バックオフ）。レスポンスをARS内部候補フォーマットに変換 |
+
+### finance_engine（Unit 5）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | ご褒美に使える余裕額算出（純粋計算ロジック） |
+| **提供メソッド** | `calculate_available_budget(user_id)` |
+| **算出ロジック** | `reward_budget = max(0, min(monthly_reward_limit, (income - fixed_costs) * 0.15) - current_month_expense)` |
+| **設計ポイント** | 常に0以上を保証。DynamoDBからPROFILE・FIXED_COSTS・今月EXPENSEを取得して計算 |
+
+### reward_pool_service（Unit 4/5）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | 候補プールから状態に合った候補を選択するマッチングロジック |
+| **提供メソッド** | `select_candidates(user_id, state, budget)` |
+| **設計ポイント** | 感情・疲労度・嗜好カテゴリ・予算範囲でフィルタ&スコアリング。上位N件を返却 |
+
+### secrets（Unit 0）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | AWS Secrets Manager / SSM Parameter Storeからの認証情報取得 |
+| **提供メソッド** | `get_secret(name)`, `get_parameter(name)` |
+| **設計ポイント** | Lambda実行環境でキャッシュ（Cold Start対策）。平文ハードコード禁止の強制 |
+
+### logger（Unit 0）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | 構造化ログ出力（JSON形式）・PII自動マスク |
+| **提供メソッド** | `info`, `warn`, `error`, `debug` |
+| **設計ポイント** | LINEユーザーID・チャットテキスト等のPIIをマスク（SEC-04準拠）。CloudWatch Logs向けJSON構造化出力 |
 
 ---
 
-### Dashboard Service（U7）
+## コンポーネント間インターフェースパターン
 
-**責務**: ストレス・リワード・財務データの集計・可視化・AI インサイト生成。
-
-| モジュール | コンポーネント | 責務 |
-|----------|--------------|------|
-| `StressTrendModule` | `StressTrendController` | ストレス推移データエンドポイント |
-| | `StressTrendService` | TimescaleDB / ClickHouse から集計（StressClient 経由） |
-| `RewardHistoryModule` | `RewardHistoryController` | リワード履歴タイムラインエンドポイント |
-| | `RewardHistoryService` | RewardClient 経由でデータ取得・集計 |
-| `FinanceSummaryModule` | `FinanceSummaryController` | 財務影響サマリーエンドポイント |
-| | `FinanceSummaryService` | FinanceClient 経由でデータ取得・集計 |
-| `InsightModule` | `InsightController` | AI インサイトレポートエンドポイント |
-| | `InsightService` | 月次インサイトレポート生成（InsightReportGeneratorAdapter 経由） |
-| | `InsightReportGeneratorAdapter` | @ars/shared-ai の InsightReportGenerator ラッパー |
-
----
-
-## フロントエンド（apps/web）
-
-**技術**: React + TypeScript + Vite  
-**状態管理**: Zustand（グローバル）+ TanStack Query（サーバーステート）  
-**コンポーネント設計**: Feature-based
-
-```
-apps/web/src/
-├── features/
-│   ├── auth/              # ログイン・登録・初期設定ウィザード
-│   ├── stress/            # ストレス入力・ダッシュボード
-│   ├── rewards/           # リワード提案一覧・フィードバック
-│   ├── finance/           # 収支設定・CSV インポート
-│   ├── dashboard/         # 振り返りグラフ・インサイト
-│   └── notifications/     # 通知設定・履歴
-├── shared/
-│   ├── components/        # 共通 UI コンポーネント（Button, Modal 等）
-│   ├── hooks/             # 共通カスタムフック
-│   ├── stores/            # Zustand ストア（auth, ui）
-│   └── api/               # API クライアント（axios インスタンス）
-└── app/
-    ├── App.tsx
-    ├── router.tsx          # React Router v6
-    └── providers.tsx       # QueryClient, Zustand, AuthProvider
-```
-
-| コンポーネント群 | 責務 |
-|----------------|------|
-| `features/auth/` | ログインフォーム・Google OAuth ボタン・初期設定ウィザード（カテゴリ選択・予算設定） |
-| `features/stress/` | ストレス入力ウィジェット（2タップ入力）・ストレス履歴カード |
-| `features/rewards/` | リワード提案カード一覧・採用/却下/後でボタン・採用済み履歴 |
-| `features/finance/` | 収支入力フォーム・余裕額ウィジェット・CSV アップロード・取引カテゴリ修正 |
-| `features/dashboard/` | ストレス推移グラフ・ご褒美支出棒グラフ・AI インサイトカード |
-| `features/notifications/` | 通知設定フォーム・通知履歴リスト |
-| `shared/stores/authStore` | Zustand: 認証状態（user, token, isAuthenticated） |
-| `shared/stores/uiStore` | Zustand: グローバル UI 状態（モーダル表示、ローディング） |
+| パターン | 用途 | 例 |
+|---------|------|-----|
+| **Lambda内部呼び出し** | webhook_handler → 各ハンドラー | Python関数直接import（同一Lambda内の場合）または Lambda invoke |
+| **共通サービスimport** | 各ハンドラー → services/ | `from services.dynamodb_service import put_item` |
+| **EventBridge Scheduler** | 定時バッチ起動 | Scheduler → reward_pool_updater / push_notifier |
+| **API Gateway → Lambda** | HTTP受信 | LINE Webhook / LIFF API |
+| **LINE Platform API** | 外部通信 | line_service → LINE Messaging API |
+| **Amazon Bedrock** | LLM推論 | bedrock_service → Bedrock Runtime API |
+| **楽天API** | 外部商品検索 | rakuten_service → 楽天ウェブサービスAPI |

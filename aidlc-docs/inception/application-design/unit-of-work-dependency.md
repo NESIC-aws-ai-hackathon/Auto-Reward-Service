@@ -1,94 +1,62 @@
-# Unit of Work 依存マトリクス — オートリワードサービス
+# Unit of Work 依存マトリクス — オートリワードサービス（v2）
+
+**改訂日**: 2026-05-15 / コンセプト変更後版
 
 ## 依存マトリクス
 
 `✅` = 依存あり（実装前に依存先が必要）  
 `—` = 依存なし
 
-※ Unit番号は要件定義書の Unit 番号と一致させています（U4=Reward Service、U3=Finance Service、U7=Dashboard Service）。
-実装サイクル順は「推奨実装順序」セクションを参照してください。
-
-| Unit | U0 基盤 | U1 Auth | U2 Stress | U4 Reward | U3 Finance | U5 Notif | U7 Dashboard |
-|------|--------|---------|----------|----------|-----------|---------|------------|
-| **U0 基盤** | — | — | — | — | — | — | — |
-| **U1 Auth** | ✅ | — | — | — | — | — | — |
-| **U2 Stress** | ✅ | ✅ | — | ✅（Client） | — | — | — |
-| **U4 Reward** | ✅ | ✅ | ✅（受信側） | — | ✅（Client） | ✅（Client） | — |
-| **U3 Finance** | ✅ | ✅ | — | — | — | — | — |
-| **U5 Notif** | ✅ | ✅ | — | ✅（受信側） | — | — | — |
-| **U7 Dashboard** | ✅ | ✅ | ✅（Client） | ✅（Client） | ✅（Client） | — | — |
-| **Web** | ✅（types） | ✅（API） | ✅（API） | ✅（API） | ✅（API） | ✅（API） | ✅（API） |
+| Unit | U0 基盤 | U1 LINE基盤 | U2 キャラ | U3 支出記録 | U4 候補プール | U5 提案 | U6 Push | U7 LIFF |
+|------|:------:|:----------:|:-------:|:---------:|:-----------:|:------:|:------:|:------:|
+| **U0 基盤** | — | — | — | — | — | — | — | — |
+| **U1 LINE基盤** | ✅ | — | — | — | — | — | — | — |
+| **U2 キャラ** | ✅ | ✅ | — | — | — | — | — | — |
+| **U3 支出記録** | ✅ | ✅ | ✅ | — | — | — | — | — |
+| **U4 候補プール** | ✅ | — | ✅（嗜好取得） | — | — | — | — | — |
+| **U5 提案** | ✅ | ✅ | ✅ | ✅（支出履歴） | ✅（候補） | — | — | — |
+| **U6 Push** | ✅ | ✅ | ✅ | — | — | ✅（提案内容） | — | — |
+| **U7 LIFF** | ✅ | — | — | ✅（支出履歴） | ✅（候補一覧） | ✅（提案履歴） | — | — |
 
 ---
 
 ## 実装順序グラフ
 
 ```
-Unit 0（基盤）
+Unit 0（SAM基盤 + 共通Layer）
     │
-    ├──► Unit 1（Auth Service）
+    ├──► Unit 1（LINE Bot基盤：Webhook + Router）
+    │         │
+    │         ▼
+    ├──► Unit 2（リワードちゃん：Intent + キャラ + 初回登録）
     │         │
     │    ┌────┤
     │    │    │
     │    ▼    ▼
-    ├──► Unit 2（Stress Service）─────────────────────────┐
-    │              │                                       │
-    │              │ RewardClient 呼び出し                  │
-    │              ▼                                       │
-    ├──► Unit 3（Reward Service）◄── FinanceClient ───────┤
-    │              │                                       │
-    │              │ NotificationClient 呼び出し            │
-    │              ▼                                       │
-    ├──► Unit 5（Notification Service）                    │
-    │                                                      │
-    ├──► Unit 4（Finance Service）─────────────────────────┘
+    ├──► Unit 3（支出記録：チャット + 画像解析）
+    │    │
+    ├──► Unit 4（候補プール：楽天API + 日次バッチ）
+    │    │         │
+    │    │    ┌────┘
+    │    ▼    ▼
+    ├──► Unit 5（ご褒美提案：マッチング + 余裕額）
+    │         │
+    │         ▼
+    ├──► Unit 6（Push通知：1日1回）
     │
-    └──► Unit 6（Dashboard Service）
-              │ 全 Client 依存
-              ▼
-         （全 Unit 完了後に実装推奨）
-
-Unit 7（Web Frontend）
-    └── 全バックエンド Unit 完了後（または並行して API モックで開発）
+    └──► Unit 7（LIFFダッシュボード：履歴 + 設定）
 ```
 
 ---
 
-## 推奨実装順序
+## 実装前提条件（ブロッキング依存）
 
-```
-[1] Unit 0  — 基盤（Turborepo + 共有パッケージ + Docker Compose 骨格）
-[2] Unit 1  — Auth Service
-[3] Unit 2  — Stress Service（RewardClient はスタブ呼び出し）
-[4] Unit 3  — Reward Service（FinanceClient, NotifClient はスタブ呼び出し）
-[5] Unit 4  — Finance Service（FinanceClient の実装を完成）
-[6] Unit 5  — Notification Service（NotifClient の実装を完成）
-[7] Unit 6  — Dashboard Service
-[8] Unit 7  — Web Frontend（バックエンド完成後 or MSW モック並行開発）
-```
-
----
-
-## shared-clients 実装スケジュール
-
-| Client | スタブ作成 | 実装完成 |
-|--------|----------|---------|
-| `RewardClient` | Unit 0 | Unit 3（スライス 3-8） |
-| `FinanceClient` | Unit 0 | Unit 4（スライス 4-9） |
-| `NotificationClient` | Unit 0 | Unit 5（スライス 5-8） |
-| `StressClient` | Unit 0 | Unit 7 Dashboard Service（スライス 6-1 内で充実） |
-| `DashboardClient` | Unit 0 | Unit 6（必要に応じて） |
-
----
-
-## ブロッキング依存（実装開始の前提）
-
-| 実装順 | サービス | 開始前に必要なこと |
-|--------|---------|------------------|
-| 第1 | U1 Auth Service | Unit 0 完了 |
-| 第2 | U2 Stress Service | Unit 0 完了, U1 Auth の users テーブルが存在する |
-| 第3 | U4 Reward Service | Unit 0 完了, U1 Auth 完了（※Stress Serviceは呼び出し元なので完了不要。RewardClientスタブが定義済みであれば開始可能） |
-| 第4 | U3 Finance Service | Unit 0 完了, U1 Auth 完了 |
-| 第5 | U5 Notification Service | Unit 0 完了, U1 Auth 完了, U4 Reward の RewardProposalDto が確定している |
-| 第6 | U7 Dashboard Service | Unit 0 完了, U1 Auth 完了, U2〜U5 の API が動作する |
-| 第7 | Web Frontend | Unit 0 の shared-types が確定している（MSW で並行開発可） |
+| Unit | 開始前の必須条件 |
+|------|--------------|
+| Unit 1 | Unit 0の `dynamodb_service`, `line_service`, `secrets` がimportできる |
+| Unit 2 | Unit 1のWebhook受信が動作し、ルーティングにフックできる |
+| Unit 3 | Unit 2のIntent分類が動作する（EXPENSE Intentを受け取れる） |
+| Unit 4 | Unit 2の嗜好記憶（PREF_MEMORY）スキーマが確定している |
+| Unit 5 | Unit 3のEXPENSE保存 + Unit 4のREWARD_POOL保存が動作する |
+| Unit 6 | Unit 5のREWARD_SUGGESTION保存が動作する |
+| Unit 7 | Unit 3の支出履歴 + Unit 5の提案履歴が取得できる |

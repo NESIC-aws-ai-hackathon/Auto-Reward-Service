@@ -1,4 +1,4 @@
-# オートリワードサービス（ARS）— リワードちゃん
+# オートリワードサービス（ARS）
 
 <div align="center">
 
@@ -226,32 +226,3 @@ auto-reward-service/
 | [aidlc-docs/inception/application-design/application-design.md](aidlc-docs/inception/application-design/application-design.md) | 統合アプリケーション設計書 |
 
 ---
-
-## ローカル開発（準備中）
-
-```bash
-# リポジトリのクローン
-git clone <repository-url>
-cd auto-reward-service
-
-# Python 仮想環境のセットアップ
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# 依存関係のインストール
-pip install -r requirements.txt
-pip install -r requirements-dev.txt
-
-# SAM ビルド & ローカル実行
-sam build
-sam local start-api
-
-# テスト実行
-pytest tests/
-```
-
----
-
-## ライセンス
-
-MIT License

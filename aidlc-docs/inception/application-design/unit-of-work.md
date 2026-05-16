@@ -34,6 +34,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 │   │   ├── bedrock_service.py     # Unit 0
 │   │   ├── line_service.py        # Unit 0
 │   │   ├── rakuten_service.py     # Unit 4
+│   │   ├── google_calendar_service.py # Unit 0
 │   │   ├── finance_engine.py      # Unit 5
 │   │   └── reward_pool_service.py # Unit 4/5
 │   ├── models/
@@ -68,7 +69,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 内容 | 詳細 |
 |------|------|
 | **スコープ** | SAMプロジェクト初期化、DynamoDBテーブル定義、共通Layerモジュール |
-| **成果物** | `template.yaml`（骨格）, `dynamodb_service.py`, `bedrock_service.py`, `line_service.py`, `schemas.py`, `secrets.py`, `logger.py` |
+| **成果物** | `template.yaml`（骨格）, `dynamodb_service.py`, `bedrock_service.py`, `line_service.py`, `google_calendar_service.py`, `schemas.py`, `secrets.py`, `logger.py` |
 | **完了条件** | `sam deploy` でDynamoDBテーブル作成成功; 共通Layerが各Lambdaからimportできる |
 
 **機能スライス:**
@@ -83,6 +84,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 0-6 | `secrets.py`: Secrets Manager/SSM取得ユーティリティ |
 | 0-7 | `logger.py`: 構造化ログ（PII出力禁止） |
 | 0-8 | DynamoDB `ArsTable` SAMリソース定義（PK/SK + GSI） |
+| 0-9 | `google_calendar_service.py`: Google Calendar API連携（OAuth token管理 + イベント取得）。`GOOGLE_OAUTH#` SKスキーマ定義。カレンダーデータはDDBに保存しない（毎回フェッチ）。ログにカレンダー内容を出力しない |
 
 ---
 
@@ -130,6 +132,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 2-5 | 口調カスタマイズ追加（やさしい敬語・小悪魔） | F3-02 |
 | 2-6 | 制限到達退場演出（複数パターン） | F3-03 |
 | 2-7 | LLMプロンプトテスト（Intent精度・口調品質テスト） | TEST-01 |
+| 2-8 | PREF_MEMORY蓄積: `character_reply` / `intent_classifier` が嗜好発話（「抹茶好き」「プリン最高」等）を検出し DynamoDB `PREF_MEMORY#` に upsert | F5-01前提 |
 
 ---
 
@@ -152,7 +155,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 3-3 | 確認・承認フロー（信頼度低→確認メッセージ→yes/noで保存） | F4-03 |
 | 3-4 | DynamoDB EXPENSE保存（確定後） | F4-01 |
 | 3-5 | `receipt_prompt.py` + `receipt_analyzer.py`: Nova Liteで画像→支出JSON | F4-04 |
-| 3-6 | レシート解析時間チェック（3秒超→非同期化→Push or「結果を見る」ボタン） | PERF-02 |
+| 3-6 | レシート解析時間チェック（3秒超→非同期化→Push or「結果を見る」ボタン）。非同期化には SQS キューを使用し、`template.yaml` への SQS リソース定義も本スライスに含める | PERF-02 |
 | 3-7 | ARSカテゴリ分類（情緒安定費・回復費・緊急回復費等） | F4-05 |
 | 3-8 | LLM出力品質テスト（支出抽出精度） | TEST-01 |
 
@@ -172,12 +175,15 @@ auto-reward-service/               ← SAM プロジェクトルート
 
 | スライス | 機能 | 対応要件 |
 |---------|------|---------|
-| 4-1 | `rakuten_service.py`: 楽天ウェブサービスAPI商品検索 | F5-03 |
+| 4-1 | `rakuten_service.py`: 楽天ウェブサービスAPI商品検索（新ドメイン `openapi.rakuten.co.jp` 対応） | F5-03 |
 | 4-2 | `reward_pool_service.py`: 嗜好×候補スコアリングロジック | F5-01 |
 | 4-3 | `reward_pool_updater.py`: 全ユーザー嗜好取得→楽天API→プール更新 | F5-02 |
 | 4-4 | EventBridge Scheduler SAMリソース定義（RewardPoolScheduler） | F5-02 |
 | 4-5 | スルー・購入履歴によるスコア調整 | F5-04, F5-05 |
 | 4-6 | 楽天APIモックテスト | TEST-04 |
+| **4-7** *(Growth)* | `rakuten_service.search_hotels()`: 楽天トラベル施設検索（同一アプリID利用）+ `reward_pool_updater` への統合 | — |
+| **4-8** *(Growth)* | `hotpepper_service.py`: ホットペッパーグルメAPI検索 + `reward_pool_updater` への統合 | — |
+| **4-9** *(Growth)* | `schemas.py`: REWARD_POOL アイテムに `type: product/travel/restaurant` フィールド追加・`reward_pool_service` カテゴリ重みづけ対応 | — |
 
 ---
 
@@ -188,7 +194,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 内容 | 詳細 |
 |------|------|
 | **スコープ** | 状態推定・候補プールマッチング・余裕額チェック・キャラ口調での提案 |
-| **依存** | Unit 0, Unit 2, Unit 3, Unit 4 |
+| **依存** | Unit 0, Unit 2, Unit 3, Unit 4（※Unit 1: コード依存は Unit 0 の `line_service` で代替可。統合テスト時には Unit 1 の Webhook ルーティングが必要） |
 | **完了条件** | 「疲れた」でご褒美提案がリワードちゃん口調で返る; 余裕額超過時はやんわり止める |
 
 **機能スライス:**
@@ -202,6 +208,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 5-5 | 買いすぎストップ（余裕額≦0時のやんわり止めReply） | F6-05 |
 | 5-6 | 提案履歴をDynamoDB REWARD_SUGGESTIONに保存 | F6-01 |
 | 5-7 | finance_engineユニットテスト（余裕額常に0以上・上限超えない） | TEST-02 |
+| 5-8 | Googleカレンダーコンテキスト活用: 連携済ユーザーの今日の予定を`google_calendar_service.get_today_events()`で取得し、`_build_calendar_context()`でLLMプロンプトに反映。「今日会議多かったでしょ？」等のコンテキスト対応提案。未連携時はスキップ（従来動作） | F9-01 |
 
 ---
 
@@ -234,7 +241,7 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 内容 | 詳細 |
 |------|------|
 | **スコープ** | LIFF用API + 最小限フロントエンド（HTML + LINE LIFF SDK） |
-| **依存** | Unit 0〜6 |
+| **依存** | Unit 0, Unit 3（支出履歴）, Unit 4（候補一覧）, Unit 5（提案履歴）（Unit 1/2/6 とは直接依存なし） |
 | **完了条件** | LINEアプリ内でLIFFが開き、履歴・設定が表示できる |
 
 **機能スライス:**
@@ -245,6 +252,5 @@ auto-reward-service/               ← SAM プロジェクトルート
 | 7-2 | LIFF App（最小HTML + LINE LIFF SDK）初期化 | F8-01 |
 | 7-3 | ご褒美メモ・履歴表示（キャラの言葉で表現） | F8-01, F8-02 |
 | 7-4 | 設定画面（口調選択・ご褒美枠変更） | F8-03 |
-| 7-5 | SAMテンプレートに LiffApiFunction + LiffApi 追加 | — |
-
+| 7-5 | SAMテンプレートに LiffApiFunction + LiffApi 追加 | — || 7-6 | Googleカレンダー連携 UI: LIFF設定画面に「カレンダー連携」ボタン追加。Google OAuth同意画面リダイレクト → コールバックでtoken交換 → DynamoDB `GOOGLE_OAUTH#` に refresh_token 保存。解除機能付き（revoke + 削除）。OAuth scope: `calendar.events.readonly` のみ | F9-02 |
 ---

@@ -14,6 +14,7 @@ webhook_handler
   │         ├──→ reward_proposal
   │         │       ├──→ finance_engine（余裕額算出）
   │         │       ├──→ reward_pool_service（候補選択）
+  │         │       ├──→ google_calendar_service（今日の予定取得→コンテキスト化）
   │         │       └──→ character_reply（キャラ口調で提案）
   │         ├──→ character_reply
   │         │       └──→ bedrock_service（Nova Micro）
@@ -36,25 +37,26 @@ push_notifier（EventBridge）
   └──→ line_service.push（Push送信）
 
 liff_api（API Gateway）
-  └──→ dynamodb_service（履歴・設定取得 / 設定更新）
+  ├──→ dynamodb_service（履歴・設定取得 / 設定更新）
+  └──→ google_calendar_service（OAuthコールバック処理・連携状況確認・解除）
 ```
 
 ---
 
 ## 共通サービス依存マトリクス
 
-| Lambda / コンポーネント | dynamodb_service | bedrock_service | line_service | rakuten_service | finance_engine | reward_pool_service | secrets | logger |
-|--------------------------|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| webhook_handler | ✔ | — | ✔ | — | — | — | ✔ | ✔ |
-| intent_classifier | ✔ | ✔ | — | — | — | — | ✔ | ✔ |
-| expense_extractor | ✔ | ✔ | ✔ | — | — | — | ✔ | ✔ |
-| receipt_analyzer | ✔ | ✔ | ✔ | — | — | — | ✔ | ✔ |
-| character_reply | ✔ | ✔ | ✔ | — | — | — | ✔ | ✔ |
-| onboarding_flow | ✔ | ✔ | ✔ | — | — | — | ✔ | ✔ |
-| reward_proposal | ✔ | ✔ | ✔ | — | ✔ | ✔ | ✔ | ✔ |
-| reward_pool_updater | ✔ | — | — | ✔ | — | ✔ | ✔ | ✔ |
-| push_notifier | ✔ | ✔ | ✔ | — | — | — | ✔ | ✔ |
-| liff_api | ✔ | — | — | — | ✔ | ✔ | ✔ | ✔ |
+| Lambda / コンポーネント | dynamodb_service | bedrock_service | line_service | rakuten_service | finance_engine | reward_pool_service | google_calendar_service | secrets | logger |
+|--------------------------|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| webhook_handler | ✔ | — | ✔ | — | — | — | — | ✔ | ✔ |
+| intent_classifier | ✔ | ✔ | — | — | — | — | — | ✔ | ✔ |
+| expense_extractor | ✔ | ✔ | ✔ | — | — | — | — | ✔ | ✔ |
+| receipt_analyzer | ✔ | ✔ | ✔ | — | — | — | — | ✔ | ✔ |
+| character_reply | ✔ | ✔ | ✔ | — | — | — | — | ✔ | ✔ |
+| onboarding_flow | ✔ | ✔ | ✔ | — | — | — | — | ✔ | ✔ |
+| reward_proposal | ✔ | ✔ | ✔ | — | ✔ | ✔ | ✔ | ✔ | ✔ |
+| reward_pool_updater | ✔ | — | — | ✔ | — | ✔ | — | ✔ | ✔ |
+| push_notifier | ✔ | ✔ | ✔ | — | — | — | — | ✔ | ✔ |
+| liff_api | ✔ | — | — | — | ✔ | ✔ | ✔ | ✔ | ✔ |
 
 ---
 
@@ -189,6 +191,8 @@ liff_api（API Gateway）
 | LINE Platform API | liff_api | LIFFアクセストークン検証 | なし（公開API） |
 | Amazon Bedrock | bedrock_service | テキスト推論（Nova Micro）・画像解析（Nova Lite） | IAM Role |
 | 楽天ウェブサービスAPI | rakuten_service | 商品検索 | アプリID |
+| Google Calendar API | google_calendar_service | ユーザーの予定取得（読み取り専用） | OAuth 2.0（refresh_token） |
+| Google OAuth 2.0 | liff_api, google_calendar_service | カレンダー連携の認可 | Client ID / Secret |
 | AWS Secrets Manager | secrets | シークレット取得 | IAM Role |
 | AWS SSM Parameter Store | secrets | パラメータ取得 | IAM Role |
 | Amazon DynamoDB | dynamodb_service | 全データ読み書き | IAM Role |

@@ -95,6 +95,7 @@ LIFF（最小限）
 | `USER#{lineUserId}` | `PREF_MEMORY#` | 嗜好記憶（好きなカテゴリ・商品傾向） |
 | `USER#{lineUserId}` | `REWARD_POOL#` | ご褒美候補プール |
 | `USER#{lineUserId}` | `REWARD_SUGGESTION#{isoTimestamp}` | ご褒美提案・結果 |
+| `USER#{lineUserId}` | `GOOGLE_OAUTH#` | Google OAuth refresh_token（暗号化）・接続日時 |
 
 ---
 
@@ -125,6 +126,7 @@ LIFF（最小限）
 | LLM | Amazon Bedrock（Nova Micro / Nova Lite） | モデル切り替え可能設計 |
 | 画像解析 | Nova Lite → Textract+LLM → Claude Vision | フォールバック方式 |
 | 外部API | 楽天ウェブサービスAPI | ご褒美候補プール |
+| カレンダー連携 | Google Calendar API（OAuth 2.0） | 予定コンテキストでご褒美提案を強化 |
 | スケジューラ | Amazon EventBridge Scheduler | 日次バッチ・Push通知 |
 | IaC | AWS SAM | template.yaml で全リソース定義 |
 | シークレット管理 | AWS Secrets Manager / SSM | チャネルシークレット・トークン等 |
@@ -210,7 +212,6 @@ auto-reward-service/
 
 - アフィリエイト・収益機能
 - 外部サービス連携（UberEats等）自動実行
-- CSV / 銀行API連携
 - ウェアラブルデバイス連携
 
 ---

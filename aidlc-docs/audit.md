@@ -4,6 +4,34 @@
 
 ---
 
+## [2026-05-16] Google Calendar連携（F9）追加
+
+### 変更の性質
+FEATURE_ADD — MVP機能追加（設計ドキュメント変更のみ、アプリコード未作成）
+
+### 変更内容
+| 対象ファイル | 変更内容 |
+|-------------|---------|
+| `requirements.md` | F9セクション追加（F9-01 カレンダーコンテキスト提案 Must, F9-02 LIFF OAuth UI Must）、GOOGLE_OAUTH# スキーマ追加、SEC-08/09追加、技術スタックにGoogle Calendar API追加 |
+| `components.md` | `google_calendar_service.py` コンポーネント追加、reward_proposal依存サービスに追記 |
+| `component-methods.md` | google_calendar_service の7関数シグネチャ追加 |
+| `services.md` | GOOGLE_OAUTH# DynamoDB SK追加、Secrets Manager secrets追加、LIFF APIルート4本追加、LiffApiFunction備考更新 |
+| `application-design.md` | システム図更新、リポ構成追加、SEC-08/09セキュリティルール追加 |
+| `unit-of-work.md` | スライス 0-9（google_calendar_service基盤）、5-8（カレンダー活用提案）、7-6（OAuth UI）追加 |
+| `component-dependency.md` | 呼び出しツリー・依存マトリクス・外部依存テーブル更新 |
+| `unit-of-work-story-map.md` | カレンダー連携行追加、F9-01/F9-02カバレッジ追加、SEC-08/09追加、MVPスコープ外からカレンダー連携を削除 |
+| `unit-of-work-dependency.md` | Unit 5/Unit 7 前提条件にGoogle Calendar依存追記 |
+| `aidlc-state.md` | 確定技術スタックにGoogle Calendar API追加 |
+| `README.md` | GOOGLE_OAUTH# スキーマ追加、技術スタックにGoogle Calendar API追加 |
+
+### 設計上の重要決定
+- **カレンダーデータのDDB非保存**: イベントタイトル・内容は毎回APIフェッチのみ（プライバシー保護）
+- **OAuthスコープ最小化**: `calendar.events.readonly`のみ許可
+- **refresh_tokenのみ保存**: `GOOGLE_OAUTH#` SK に暗号化して保存
+- **ログ制約**: カレンダーイベント内容は一切CloudWatch Logsに出力しない（SEC-08）
+
+---
+
 ## [2026-05-07] ワークフロー開始 / Workspace Detection
 
 ### ユーザーリクエスト（原文）

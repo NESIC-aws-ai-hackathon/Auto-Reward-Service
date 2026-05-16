@@ -39,7 +39,7 @@
 | `RewardPoolUpdaterFunction` | 512 MB | 300s | バッチ処理。全ユーザー分を処理 |
 | `RewardProposalFunction` | 256 MB | 10s | Bedrock呼び出し含む |
 | `PushNotifierFunction` | 256 MB | 300s | バッチ処理。複数ユーザーへPush |
-| `LiffApiFunction` | 256 MB | 10s | DynamoDB読み書きのみ |
+| `LiffApiFunction` | 256 MB | 10s | DynamoDB読み書き + Google Calendar OAuth処理 |
 
 ---
 
@@ -76,6 +76,7 @@
 | `USER#{lineUserId}` | `REWARD_POOL#` | candidates: [{id, name, price, category, score, source_url, fetched_at}], updated_at | — |
 | `USER#{lineUserId}` | `REWARD_SUGGESTION#{isoTimestamp}` | item_id, item_name, price, proposed_at, outcome (bought/skip/none), feedback_at | — |
 | `USER#{lineUserId}` | `PUSH_LOG#{isoDate}` | sent_at, content_preview, message_count_today, message_count_month | — |
+| `USER#{lineUserId}` | `GOOGLE_OAUTH#` | encrypted_refresh_token, connected_at, email_hint(masked) | — |
 
 ### ARSカテゴリ一覧
 
@@ -106,6 +107,10 @@
 | `/liff/settings` | GET | `LiffApiFunction` | LIFFアクセストークン検証 | 口調・ご褒美枠等の現在設定取得 |
 | `/liff/settings` | PATCH | `LiffApiFunction` | LIFFアクセストークン検証 | 設定変更（口調・ご褒美枠） |
 | `/liff/pool` | GET | `LiffApiFunction` | LIFFアクセストークン検証 | 現在の候補プール一覧 |
+| `/liff/google/connect` | GET | `LiffApiFunction` | LIFFアクセストークン検証 | Google OAuth同意画面へのリダイレクトURL生成 |
+| `/liff/google/callback` | GET | `LiffApiFunction` | stateパラメータ検証 | OAuthコールバック→token交換→refresh_token保存 |
+| `/liff/google/disconnect` | POST | `LiffApiFunction` | LIFFアクセストークン検証 | Google連携解除（revoke + GOOGLE_OAUTH#削除） |
+| `/liff/google/status` | GET | `LiffApiFunction` | LIFFアクセストークン検証 | Googleカレンダー連携状況取得 |
 
 ### EventBridge Scheduler
 
@@ -200,7 +205,10 @@ LINEアプリ内ブラウザ (LIFF)
 |--------------|------|-----------|
 | `ars/line/channel-secret` | LINE チャネルシークレット | webhook_handler |
 | `ars/line/channel-access-token` | LINE チャネルアクセストークン | 全LINE通信Lambda |
-| `ars/rakuten/app-id` | 楽天アプリID | reward_pool_updater |
+| `ars/rakuten/app-id` | 楽天アプリイト（商品・トラベル共通） | reward_pool_updater |
+| `ars/hotpepper/api-key` | ホットペッパーグルメAPIキー（Growth） | reward_pool_updater |
+| `ars/google/client-id` | Google OAuth 2.0 Client ID | liff_api, google_calendar_service |
+| `ars/google/client-secret` | Google OAuth 2.0 Client Secret | liff_api, google_calendar_service |
 | `ars/liff/liff-id` | LIFF ID | liff_api |
 
 ---
@@ -216,6 +224,6 @@ LINEアプリ内ブラウザ (LIFF)
 | expense_extractor | Read/Write | InvokeModel | Read | — | — |
 | receipt_analyzer | Read/Write | InvokeModel | Read | — | — |
 | reward_proposal | Read/Write | InvokeModel | Read | — | — |
-| reward_pool_updater | Read/Write | — | Read | — | HTTPS外部（楽天API） |
+| reward_pool_updater | Read/Write | — | Read | — | HTTPS外部（楽天API / ホットペッパーグルメAPI · Growth） |
 | push_notifier | Read/Write | InvokeModel | Read | — | — |
-| liff_api | Read/Write | — | Read | — | HTTPS外部（LINE検証API） |
+| liff_api | Read/Write | — | Read | — | HTTPS外部（LINE検証API・Google Calendar API・Google OAuth） |

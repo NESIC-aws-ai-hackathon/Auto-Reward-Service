@@ -22,6 +22,7 @@
 | IaC | AWS SAM |
 | LINE APIプラン | フリープラン（Push 1日1回・通常はReply中心） |
 | ご褒美データ | 楽天ウェブサービスAPI |
+| カレンダー連携 | Google Calendar API（OAuth 2.0 / calendar.events.readonly） |
 | 認証 | LINEユーザーID + LIFF時LINEログイン |
 | 言語 | Python 統一 |
 

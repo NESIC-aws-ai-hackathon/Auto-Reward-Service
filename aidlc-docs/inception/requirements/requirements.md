@@ -1,4 +1,4 @@
-# 要件定義書 — オートリワードサービス（確定版 v2 / コンセプト変更後）
+﻿# 要件定義書 — オートリワードサービス（確定版 v2 / コンセプト変更後）
 
 **改訂日**: 2026-05-15  
 **変更理由**: コンセプト変更定義書（`docs/コンセプト変更定義書.md`）に基づく全面改訂
@@ -51,6 +51,7 @@ LINEでリワードちゃんと話すだけで、支出・感情ログ・嗜好�
 | **認証** | LINEユーザーID（LINE Webhook署名検証） | LIFF利用時はLINEログインアクセストークンも取得 |
 | **IaC** | AWS SAM（Serverless Application Model） | Lambda + API Gateway をコードで定義 |
 | **セキュリティ重点** | LINE Webhook署名検証 + チャネルシークレット管理 | OWASP Top10 準拠も適用 |
+| **カレンダー連携** | Google Calendar API（OAuth 2.0 / calendar.events.readonly） | 予定コンテキストをご褒美提案に活用 |
 
 ---
 
@@ -100,6 +101,7 @@ LIFF（最小限）
 | `USER#{lineUserId}` | `PREF_MEMORY#` | 嗜好・好み記憶 |
 | `USER#{lineUserId}` | `REWARD_POOL#` | ご褒美候補プール |
 | `USER#{lineUserId}` | `REWARD_SUGGESTION#{timestamp}` | 提案履歴 |
+| `USER#{lineUserId}` | `GOOGLE_OAUTH#` | Google OAuth refresh_token（暗号化保存）・接続日時・メールhint |
 
 ---
 
@@ -181,6 +183,15 @@ LIFF（最小限）
 | F8-03 | 設定（口調・ご褒美枠） | Should | 口調選択・月次ご褒美枠の変更 |
 | F8-04 | ご褒美候補一覧 | Could | 現在のご褒美候補プールをLIFFで確認 |
 
+### F9: Googleカレンダー連携
+
+| 機能ID | 機能名 | 優先度 | 説明 |
+|--------|--------|--------|------|
+| F9-01 | カレンダーコンテキスト提案 | Must | 連携済ユーザーの予定を毎回APIフェッチし、「今日会議多かったでしょ？」等の共感型フレーズをご褒美提案に追加。DDBにカレンダーデータは保存しない |
+| F9-02 | LIFFカレンダー連携UI | Must | LIFF設定画面からGoogle OAuth同意→refresh_token保存→解除。scope: `calendar.events.readonly`のみ |
+
+> **プライバシー方針**: カレンダーイベントのタイトル・内容はDynamoDBに保存せず、毎回APIでフェッチ。ログ出力も一切禁止。DynamoDBに保存するのは`refresh_token`のみ。
+
 ---
 
 ## 5. 非機能要件
@@ -196,6 +207,8 @@ LIFF（最小限）
 | SEC-05 | LIFF のオリジン検証（LINEのOAuthフロー遵守） |
 | SEC-06 | Lambda 関数の IAM 権限は最小権限原則 |
 | SEC-07 | API Gateway に AWS WAF の基本ルール適用（OWASP Top10対策） |
+| SEC-08 | Google Calendarイベントデータ（タイトル・内容）はDynamoDB保存・ログ出力一切禁止（個人情報保護） |
+| SEC-09 | Google OAuthスコープは`calendar.events.readonly`のみ許可（最小権限原則） |
 
 ### 5.2 パフォーマンス
 
@@ -292,6 +305,7 @@ LIFF（最小限）
 - F6（ご褒美提案）F6-01〜F6-04（Must）、F6-05（Should）
 - F7（Push通知）全機能
 - F8（LIFF）F8-01〜F8-03（Should）
+- F9（Googleカレンダー連携）F9-01, F9-02（Must）
 
 ### MVP対象外（将来フェーズ）
 - アフィリエイト・収益機能
@@ -300,7 +314,3 @@ LIFF（最小限）
 - CSV/銀行API連携
 - ウェアラブルデバイス連携
 - F8-04 候補一覧LIFF（Could）
-
----
-
-## 1. プロジェクト概要

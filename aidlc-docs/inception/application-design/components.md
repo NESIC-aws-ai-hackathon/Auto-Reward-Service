@@ -29,7 +29,9 @@ auto-reward-service/               <- SAM プロジェクトルート
 |   |   +-- dynamodb_service.py    # DynamoDB操作共通
 |   |   +-- bedrock_service.py     # Bedrock呼び出し共通
 |   |   +-- line_service.py        # LINE API（Reply/Push/署名検証）
-|   |   +-- rakuten_service.py     # 楽天API連携
+|   |   +-- rakuten_service.py     # 楽天API連携（商品・トラベル）
+|   |   +-- hotpepper_service.py   # ホットペッパーグルメAPI（Unit 4 Growth）
+|   |   +-- google_calendar_service.py # Google Calendar参照（OAuth + 予定取得）
 |   |   +-- finance_engine.py      # 余裕額算出ロジック
 |   |   +-- reward_pool_service.py # 候補プール選択ロジック
 |   +-- models/
@@ -150,7 +152,7 @@ auto-reward-service/               <- SAM プロジェクトルート
 | **責務** | ユーザーの状態と候補プールからご褒美を提案し、キャラ口調で返す |
 | **入力** | `user_id: str`, `context: dict` |
 | **出力** | Reply メッセージ（ご褒美提案 or 買いすぎ注意） |
-| **依存サービス** | `finance_engine`, `reward_pool_service`, `character_reply`, `dynamodb_service`（REWARD_SUGGESTION保存）, `line_service`, `secrets`, `logger` |
+| **依存サービス** | `finance_engine`, `reward_pool_service`, `google_calendar_service`（カレンダーコンテキスト取得）, `character_reply`, `dynamodb_service`（REWARD_SUGGESTION保存）, `line_service`, `secrets`, `logger` |
 | **主要ロジック** | 1. finance_engine.calculate_available_budget() 2. 余裕額≦0→買いすぎストップ（やんわり口調） 3. reward_pool_service.select_candidates()で候補選択 4. character_replyでキャラ口調提案生成 5. REWARD_SUGGESTION保存 |
 
 ### reward_pool_updater（Unit 4）
@@ -220,9 +222,29 @@ auto-reward-service/               <- SAM プロジェクトルート
 
 | 項目 | 内容 |
 |------|------|
-| **責務** | 楽天ウェブサービスAPIとの連携 |
-| **提供メソッド** | `search_items(keyword, genre_id, price_range)` |
-| **設計ポイント** | APIキーはsecrets経由。レート制限対応（リトライ + バックオフ）。レスポンスをARS内部候補フォーマットに変換 |
+| **責務** | 楽天ウェブサービスAPIとの連携（商品検索 + トラベル施設検索） |
+| **提供メソッド** | `search_items(keyword, genre_id, price_range)`, `search_hotels(checkin, checkout, area_code, max_charge)` |
+| **設計ポイント** | APIキーはsecrets経由。レート制限対応（リトライ + バックオフ）。レスポンスをARS内部候補フォーマットに変換。**MVPは `search_items` のみ**、`search_hotels` は Growthフェーズ。新ドメイン `openapi.rakuten.co.jp`（2026/2月移行済）・`accessKey`ヘッダー必須 |
+
+### hotpepper_service（Unit 4 Growth）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | ホットペッパーグルメAPIとの連携（エリア・ジャンル・予算・位置情報で検索） |
+| **提供メソッド** | `search_restaurants(lat, lng, budget_code, genre_code, count)` |
+| **設計ポイント** | APIキーはsecrets経由（`ars/hotpepper/api-key`）。リクルートID登録で即日無料取得。位置情報は将来LIFF経由で取得。**Growthフェーズ実装**。なおじゃらんWebサービスは同種の旅行検索APIだが、トラベルは楽天でカバーできるため優先度低 |
+
+### google_calendar_service（Unit 0）
+
+| 項目 | 内容 |
+|------|------|
+| **責務** | Google Calendar APIとの連携（OAuth 2.0 + 予定取得） |
+| **提供メソッド** | `get_today_events(user_id)`, `get_upcoming_events(user_id, days)`, `exchange_code(auth_code)`, `is_connected(user_id)` |
+| **OAuthフロー** | LIFF設定画面からGoogle OAuth 2.0同意画面へリダイレクト → コールバックでauthorization code取得 → `liff_api` 経由でtoken交換 |
+| **スコープ** | `calendar.events.readonly`（読み取り専用）のみ |
+| **データ保存ポリシー** | **カレンダーデータはDynamoDBに一切保存しない**。毎回APIでフェッチ。OAuth `refresh_token` のみDynamoDB `GOOGLE_OAUTH#` SKに保存（暗号化） |
+| **ログ制約** | カレンダーのイベントタイトル・内容は一切ログ出力しない（SEC-04強化、個人情報保護） |
+| **設計ポイント** | Google API Client ID / Secret は secrets 経由。access_token は毎回 refresh_token から再取得（Lambdaメモリ内のみ）。接続解除機能付き（LIFF設定画面から refresh_token 削除 + Google側revoke） |
 
 ### finance_engine（Unit 5）
 

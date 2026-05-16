@@ -316,11 +316,75 @@ def build_confirm_template(text: str, yes_label: str, no_label: str) -> dict:
 ```python
 def search_items(keyword: str, genre_id: str | None = None, price_min: int | None = None, price_max: int | None = None) -> list[dict]:
     """楽天商品検索APIを呼び出し、ARS内部候補フォーマットに変換して返す。
-    Returns: [{"id": str, "name": str, "price": int, "category": str, "source_url": str, "image_url": str}]
+    エンドポイント: https://openapi.rakuten.co.jp/ichiba/api/IchibaItem/Search/20220601（2026/2移行済み）
+    Returns: [{"id": str, "name": str, "price": int, "type": "product", "category": str, "source_url": str, "image_url": str}]
     """
 
-def _convert_to_candidate(rakuten_item: dict) -> dict:
-    """楽天APIレスポンスをARS候補フォーマットに変換。"""
+def search_hotels(area_code: str, checkin: str, checkout: str, max_charge: int | None = None) -> list[dict]:
+    """楽天トラベル施設検索APIを呼び出す（同一アプリIDで利用可能）。Growth フェーズで実装。
+    エンドポイント: https://openapi.rakuten.co.jp/travel/api/Hotel/SimpleSearch/20170426
+    Returns: [{"id": str, "name": str, "price": int, "type": "travel", "category": str, "source_url": str, "image_url": str}]
+    """
+
+def _convert_to_candidate(item: dict, item_type: str = "product") -> dict:
+    """楽天APIレスポンス（商品/トラベル）をARS候補フォーマットに変換。type フィールドを付与。"""
+
+def _call_with_retry(url: str, params: dict) -> dict:
+    """レート制限（1req/秒）を考慮してリトライ付きでAPI呼び出しを行う。"""
+```
+
+### hotpepper_service（Growth）
+
+```python
+def search_restaurants(lat: float, lng: float, budget_code: str | None = None, genre_code: str | None = None, range_km: int = 3, count: int = 5) -> list[dict]:
+    """ホットペッパーグルメAPIでレストランを検索する。Growth フェーズで実装。
+    エンドポイント: https://webservice.recruit.co.jp/hotpepper/gourmet/v1/
+    lat/lng: ユーザー位置情報（将来LIFF経由で取得）
+    budget_code: B001（〜500円）〜B013（5001〜7000円）等
+    Returns: [{"id": str, "name": str, "price": int, "type": "restaurant", "category": str, "source_url": str, "image_url": str}]
+    """
+
+def _convert_to_candidate(shop: dict) -> dict:
+    """ホットペッパーAPIレスポンスをARS候補フォーマットに変換。"""
+```
+
+### google_calendar_service
+
+```python
+def get_today_events(user_id: str) -> list[dict] | None:
+    """今日のカレンダー予定を取得する。未連携の場合はNoneを返す。
+    ※カレンダーデータはDynamoDBに保存しない（毎回APIフェッチ）。
+    ※イベントタイトル・内容はログに出力しない（SEC-04/個人情報保護）。
+    Returns: [{"start": str(ISO), "end": str(ISO), "summary": str, "is_all_day": bool}] | None
+    """
+
+def get_upcoming_events(user_id: str, days: int = 3) -> list[dict] | None:
+    """今後N日間のカレンダー予定を取得する。
+    Returns: [{"start": str, "end": str, "summary": str, "is_all_day": bool}] | None
+    """
+
+def exchange_code(auth_code: str, redirect_uri: str) -> dict:
+    """OAuth authorization codeをaccess_token + refresh_tokenに交換する。
+    refresh_tokenのみDynamoDB GOOGLE_OAUTH# に保存。access_tokenはメモリ内で使い捨て。
+    Returns: {"access_token": str, "refresh_token": str, "expires_in": int}
+    """
+
+def revoke_and_delete(user_id: str) -> None:
+    """Google側でtokenをrevokeし、DynamoDBからGOOGLE_OAUTH#を削除する。"""
+
+def is_connected(user_id: str) -> bool:
+    """ユーザーがGoogleカレンダー連携済みかどうかを返す。"""
+
+def _get_access_token(user_id: str) -> str | None:
+    """DynamoDBからrefresh_tokenを取得し、access_tokenを再取得する。
+    refresh_token失効時はNoneを返す（再連携が必要）。
+    """
+
+def _build_calendar_context(events: list[dict]) -> str:
+    """カレンダー予定からLLMプロンプト用のコンテキスト文字列を生成する。
+    例: '今日は会議3件、19時から飲み会の予定がある'
+    ※イベント内容の要約のみ。生データはプロンプトに含めない。
+    """
 ```
 
 ### finance_engine

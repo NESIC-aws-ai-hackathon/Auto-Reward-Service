@@ -1,0 +1,360 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Auto Reward Service — LINE Bot with AI Reward Suggestions
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ArsTable
+        LINE_SECRET_NAME: ars/line
+        GOOGLE_SECRET_NAME: ars/google
+        RAKUTEN_SECRET_NAME: ars/rakuten
+        LOG_LEVEL: INFO
+        BEDROCK_TEXT_MODEL_ID: "amazon.nova-lite-v1:0"
+        BEDROCK_IMAGE_MODEL_ID: "amazon.nova-lite-v1:0"
+        BEDROCK_FALLBACK_MODEL_ID: "amazon.nova-lite-v1:0"
+        DAILY_CHAT_LIMIT: "50"
+    Layers:
+      - !Ref ArsCommonLayer
+    Tracing: PassThrough
+    Tags:
+      Project: auto-reward-service
+      Stage: prod
+
+Resources:
+
+  # ─────────────────────────────────────────
+  # DynamoDB
+  # ─────────────────────────────────────────
+  ArsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ArsTable
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: entityType
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: entityType-index
+          KeySchema:
+            - AttributeName: entityType
+              KeyType: HASH
+            - AttributeName: PK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: auto-reward-service
+        - Key: Stage
+          Value: prod
+
+  # ─────────────────────────────────────────
+  # Lambda Layer
+  # ─────────────────────────────────────────
+  ArsCommonLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: ArsCommonLayer
+      ContentUri: layer/
+      CompatibleRuntimes:
+        - python3.13
+      RetentionPolicy: Retain
+
+  # ─────────────────────────────────────────
+  # IAM Role（全 Lambda 共有）
+  # ─────────────────────────────────────────
+  ArsLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ArsLambdaRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: ArsDynamoDBPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:BatchWriteItem
+                Resource:
+                  - !GetAtt ArsTable.Arn
+                  - !Sub "${ArsTable.Arn}/index/*"
+        - PolicyName: ArsBedrockPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: "*"
+        - PolicyName: ArsSecretsManagerPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/line*"
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/google*"
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/rakuten*"
+
+  # ─────────────────────────────────────────
+  # Lambda Functions（Unit 1〜7 で追加予定）
+  # ─────────────────────────────────────────
+  # CharacterReply  — Unit 2
+  # ImageAnalysis   — Unit 3
+  # BatchProcessor  — Unit 5/6
+  # LiffApi         — Unit 7
+
+  # ─────────────────────────────────────────
+  # API Gateway（Unit 1）
+  # ─────────────────────────────────────────
+  WebhookApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+      CorsConfiguration:
+        AllowOrigins:
+          - "https://liff.line.me"
+        AllowMethods:
+          - GET
+          - PUT
+          - POST
+          - OPTIONS
+        AllowHeaders:
+          - Authorization
+          - Content-Type
+        MaxAge: 86400
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 200
+        ThrottlingRateLimit: 100
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  # ─────────────────────────────────────────
+  # Lambda Functions（Unit 1）
+  # ─────────────────────────────────────────
+  WebhookHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: WebhookHandlerFunction
+      Handler: handlers.webhook_handler.handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 29
+      Role: !GetAtt ArsLambdaRole.Arn
+      Events:
+        WebhookPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /webhook
+            Method: POST
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  # ─────────────────────────────────────────
+  # CloudWatch Logs（Unit 1）
+  # ─────────────────────────────────────────
+  WebhookFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${WebhookHandlerFunction}"
+      RetentionInDays: 30
+
+  # ─────────────────────────────────────────
+  # EventBridge Scheduler（Unit 1 ウォームアップ）
+  # ─────────────────────────────────────────
+  SchedulerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ArsSchedulerExecutionRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt WebhookHandlerFunction.Arn
+                  - !GetAtt RewardPoolUpdaterFunction.Arn
+
+  WarmupWebhookScheduler:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: WarmupWebhookScheduler
+      ScheduleExpression: rate(5 minutes)
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt WebhookHandlerFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"source": "warmup"}'
+
+  # ─────────────────────────────────────────
+  # Lambda Functions（Unit 4）
+  # ─────────────────────────────────────────
+  RewardPoolUpdaterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: RewardPoolUpdaterFunction
+      Handler: handlers.reward_pool_updater.lambda_handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 300
+      Role: !GetAtt ArsLambdaRole.Arn
+      Environment:
+        Variables:
+          RAKUTEN_DEFAULT_KEYWORDS: "スイーツ,コスメ,本,入浴剤,アロマ"
+          RAKUTEN_MAX_ITEMS_PER_POOL: "20"
+          RAKUTEN_HITS_PER_KEYWORD: "5"
+          HOTPEPPER_SECRET_NAME: "ars/hotpepper/api-key"
+          ENABLE_HOTEL_SEARCH: "true"
+          HOTEL_HITS_PER_KEYWORD: "3"
+          ENABLE_RESTAURANT_SEARCH: "false"
+          RESTAURANT_HITS_PER_KEYWORD: "3"
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  # ─────────────────────────────────────────
+  # CloudWatch Logs（Unit 4）
+  # ─────────────────────────────────────────
+  RewardPoolUpdaterFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${RewardPoolUpdaterFunction}"
+      RetentionInDays: 30
+
+  # ─────────────────────────────────────────
+  # EventBridge Scheduler（Unit 4 日次バッチ JST 02:00）
+  # ─────────────────────────────────────────
+  RewardPoolScheduler:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: RewardPoolScheduler
+      ScheduleExpression: "cron(0 17 * * ? *)"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt RewardPoolUpdaterFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"source": "scheduler"}'
+
+  # ─────────────────────────────────────────
+  # Lambda Functions（Unit 7）
+  # ─────────────────────────────────────────
+  LiffApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: LiffApiFunction
+      Handler: handlers.liff_api.handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 10
+      Role: !GetAtt ArsLambdaRole.Arn
+      Environment:
+        Variables:
+          LIFF_CHANNEL_ID: "2010106872"
+      Events:
+        LiffApiProxy:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /api/{proxy+}
+            Method: ANY
+        LiffPage:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /liff
+            Method: GET
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  # ─────────────────────────────────────────
+  # CloudWatch Logs（Unit 7）
+  # ─────────────────────────────────────────
+  LiffApiFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${LiffApiFunction}"
+      RetentionInDays: 30
+
+Outputs:
+  ArsTableName:
+    Description: DynamoDB table name
+    Value: !Ref ArsTable
+  ArsTableArn:
+    Description: DynamoDB table ARN
+    Value: !GetAtt ArsTable.Arn
+  ArsCommonLayerArn:
+    Description: Lambda Layer ARN
+    Value: !Ref ArsCommonLayer
+  ArsLambdaRoleArn:
+    Description: Lambda execution role ARN
+    Value: !GetAtt ArsLambdaRole.Arn
+  WebhookApiEndpoint:
+    Description: LINE Webhook URL (POST /webhook)
+    Value: !Join
+      - ""
+      - - !GetAtt WebhookApi.ApiEndpoint
+        - "/webhook"
+  RewardPoolUpdaterFunctionArn:
+    Description: Reward pool batch updater Lambda ARN
+    Value: !GetAtt RewardPoolUpdaterFunction.Arn
+  LiffApiEndpoint:
+    Description: LIFF Dashboard URL
+    Value: !Join
+      - ""
+      - - !GetAtt WebhookApi.ApiEndpoint
+        - "/liff"
+  LiffApiFunctionArn:
+    Description: LIFF API Lambda ARN
+    Value: !GetAtt LiffApiFunction.Arn

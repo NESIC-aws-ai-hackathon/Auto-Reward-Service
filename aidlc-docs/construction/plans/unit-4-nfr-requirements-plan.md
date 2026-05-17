@@ -1,0 +1,23 @@
+## Unit 4 NFR Requirements Plan
+
+- [x] Unit 4 Functional Design 成果物確認（domain-entities.md / business-logic-model.md / business-rules.md）
+- [x] Unit 0〜2 NFR 継承要件の洗い出し（PERF-01/03、SCAL-01/02/03、SEC-01/02/04、AVAIL-01/03）
+- [x] Unit 4 新規 NFR 特定
+  - [x] PERF-4-01: 日次バッチ全処理時間上限
+  - [x] PERF-4-02: 楽天API呼び出し間隔（レートリミット対応）
+  - [x] PERF-4-03: Secrets Manager AppID キャッシュ
+  - [x] SCAL-4-01: バッチ処理ユーザー数スケーリング（Lambda タイムアウト上限）
+  - [x] SEC-4-01: 楽天 AppID の Secrets Manager 管理
+  - [x] SEC-4-02: 楽天APIレスポンスの安全なパース（XSS等不要、URLはそのまま保存）
+  - [x] AVAIL-4-01: 楽天API障害時の既存プール維持
+  - [x] COST-4-01: 楽天API無料枠内運用（1日N回制限）
+  - [x] COST-4-02: Secrets Manager呼び出し最小化（Lambda初期化時1回）
+  - [x] MAINT-4-01: バッチ実行サマリーログ（PoolUpdateResult出力）
+- [x] テックスタック決定
+  - [x] requests ライブラリ（既存Layer）で楽天API HTTP呼び出し
+  - [x] EventBridge Scheduler（cron式・JST考慮）
+  - [x] Lambda タイムアウト: 5分（300秒）
+  - [x] IAM 権限追加: なし（既存 DynamoDB + Secrets Manager 権限を継承）
+  - [x] 環境変数追加: RAKUTEN_DEFAULT_KEYWORDS（カンマ区切り）
+- [x] nfr-requirements.md 生成
+- [x] tech-stack-decisions.md 生成

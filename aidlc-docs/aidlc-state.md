@@ -5,7 +5,7 @@
 - **プロジェクト種別**: グリーンフィールド（新規開発）
 - **開始日**: 2026-05-07
 - **コンセプト変更日**: 2026-05-15
-- **現在のステージ**: INCEPTION フェーズ 完了（承認待ち）
+- **現在のステージ**: CONSTRUCTION フェーズ — Unit 7: LIFFダッシュボード（Code Generation 完了）
 
 ## コンセプト変更サマリー
 - **変更根拠**: `docs/コンセプト変更定義書.md`
@@ -50,14 +50,55 @@
 - [x] Unit 生成（v2）
 
 ### 🟢 CONSTRUCTION フェーズ
-- [ ] Unit 0: SAM基盤 + 共通Layer
-- [ ] Unit 1: LINE Bot基盤
-- [ ] Unit 2: リワードちゃんキャラクター
-- [ ] Unit 3: 支出記録
-- [ ] Unit 4: ご褒美候補プール
-- [ ] Unit 5: ご褒美提案
+- [x] Unit 0: SAM基盤 + 共通Layer
+  - [x] Functional Design
+  - [x] NFR Requirements
+  - [x] NFR Design
+  - [x] Infrastructure Design
+  - [x] Code Generation
+- [x] Unit 1: LINE Bot基盤
+  - [x] Functional Design
+  - [x] NFR Requirements
+  - [x] NFR Design
+  - [x] Infrastructure Design
+  - [x] Code Generation
+  - [x] Deploy Round 2（LINE疎通確認）✅ 2026-05-16
+- [x] Unit 2: リワードちゃんキャラクター
+  - [x] Functional Design
+  - [x] NFR Requirements
+  - [x] NFR Design
+  - [x] Infrastructure Design
+  - [x] Code Generation ✅ 2026-05-16／137テスト PASS
+  - [x] Deploy Round 3（リワードちゃん応答確認）✅ 2026-05-16
+- [x] Unit 3: 支出記録
+  - [x] Functional Design ✅ 2026-05-16
+  - [x] NFR Requirements ✅ 2026-05-16
+  - [x] NFR Design ✅ 2026-05-16
+  - [x] Infrastructure Design ✅ 2026-05-16
+  - [x] Code Generation ✅ 2026-05-16／254テスト PASS
+  - [x] Deploy（バグ修正含む）✅ 2026-05-16（ArsCommonLayer:13）
+- [x] Unit 4: ご褒美候補プール
+  - [x] Functional Design
+  - [x] NFR Requirements
+  - [x] NFR Design
+  - [x] Infrastructure Design
+  - [x] Code Generation ✅ 52テスト PASS
+  - [x] Growth機能 (4-7/4-8/4-9) ✅ 221テスト PASS（楽天トラベルAPI・ホットペッパーAPI・カテゴリ重みづけ）
+  - [x] Deploy Round 4 ✅ 2026-05-（UPDATE_COMPLETE）
+- [x] Unit 5: ご褒美提案
+  - [x] Functional Design ✅ 2026-05-16（F2-07 繰り越し機能含む）
+  - [x] NFR Requirements ✅ 2026-05-16
+  - [x] NFR Design ✅ 2026-05-16
+  - [x] Infrastructure Design ✅ 2026-05-16
+  - [x] Code Generation ✅ 313テスト PASS（繰り越し機能 F2-07 含む）
+  - [x] Deploy Round 5 ✅ 2026-05-16（U3〜U5 まとめデプロイ）
 - [ ] Unit 6: Push通知
 - [ ] Unit 7: LIFFダッシュボード
+  - [x] Functional Design ✅ 2026-05-16
+  - [x] NFR Requirements ✅ 2026-05-16
+  - [x] NFR Design ✅ 2026-05-16
+  - [x] Infrastructure Design ✅ 2026-05-16
+  - [x] Code Generation ✅ 344テスト PASS（31テスト追加）
 
 ### 🟡 OPERATIONS フェーズ
 - [ ] 運用（プレースホルダー）

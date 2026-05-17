@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>リワードちゃん</title>
+<style>
+:root {
+  --primary: #06C755;
+  --primary-dark: #05a348;
+  --bg: #f5f5f5;
+  --card-bg: #ffffff;
+  --text: #333333;
+  --text-sub: #888888;
+  --border: #e0e0e0;
+  --danger: #ff4444;
+  --warning: #ffaa00;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding-bottom: 70px;
+}
+.header {
+  background: var(--primary);
+  color: #fff;
+  padding: 16px 20px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.tab-bar {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  z-index: 100;
+}
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px 0;
+  font-size: 12px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.tab.active { color: var(--primary); font-weight: bold; }
+.tab-icon { font-size: 20px; display: block; margin-bottom: 2px; }
+.content { padding: 16px; }
+.page { display: none; }
+.page.active { display: block; }
+.card {
+  background: var(--card-bg);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.card-title { font-size: 14px; color: var(--text-sub); margin-bottom: 8px; }
+.budget-amount { font-size: 28px; font-weight: bold; color: var(--primary); }
+.budget-sub { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
+.progress-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  margin: 12px 0;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.progress-fill.warning { background: var(--warning); }
+.progress-fill.danger { background: var(--danger); }
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.list-item:last-child { border-bottom: none; }
+.list-item-name { font-size: 14px; flex: 1; }
+.list-item-amount { font-size: 14px; font-weight: bold; white-space: nowrap; margin-left: 8px; }
+.list-item-cat { font-size: 11px; color: var(--text-sub); }
+.list-item-date { font-size: 11px; color: var(--text-sub); }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: bold;
+}
+.badge-bought { background: #e8f5e9; color: #2e7d32; }
+.badge-skip { background: #fce4ec; color: #c62828; }
+.pool-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pool-item:last-child { border-bottom: none; }
+.pool-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  margin-right: 12px;
+  background: var(--border);
+}
+.pool-info { flex: 1; }
+.pool-name { font-size: 14px; font-weight: 500; }
+.pool-price { font-size: 13px; color: var(--primary); margin-top: 2px; }
+.pool-type { font-size: 11px; color: var(--text-sub); }
+.form-group { margin-bottom: 16px; }
+.form-label { font-size: 13px; color: var(--text-sub); margin-bottom: 6px; display: block; }
+.form-select, .form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  background: var(--card-bg);
+  color: var(--text);
+  -webkit-appearance: none;
+}
+.btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  transition: opacity 0.2s;
+}
+.btn:active { opacity: 0.7; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+.calendar-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.status-dot.connected { background: var(--primary); }
+.status-dot.disconnected { background: var(--text-sub); }
+.loading { text-align: center; padding: 40px; color: var(--text-sub); }
+.error-msg { text-align: center; padding: 20px; color: var(--danger); }
+.empty-msg { text-align: center; padding: 30px; color: var(--text-sub); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header" id="header">🎁 リワードちゃん</div>
+
+<div class="content">
+  <!-- ホーム -->
+  <div class="page active" id="page-home">
+    <div class="card">
+      <div class="card-title">今月のご褒美枠</div>
+      <div class="budget-amount" id="home-remaining">-</div>
+      <div class="budget-sub" id="home-budget-detail"></div>
+      <div class="progress-bar"><div class="progress-fill" id="home-progress"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">最近のご褒美提案</div>
+      <div id="home-suggestions"><div class="empty-msg">まだ提案がありません</div></div>
+    </div>
+  </div>
+
+  <!-- 支出 -->
+  <div class="page" id="page-expenses">
+    <div class="card">
+      <div class="card-title" id="expenses-title">今月の支出</div>
+      <div id="expenses-list"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <!-- ご褒美 -->
+  <div class="page" id="page-rewards">
+    <div class="card">
+      <div class="card-title">提案履歴</div>
+      <div id="reward-history"><div class="loading">読み込み中...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">ご褒美候補</div>
+      <div id="reward-pool"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <!-- 設定 -->
+  <div class="page" id="page-settings">
+    <div class="card">
+      <div class="card-title">基本設定</div>
+      <div class="form-group">
+        <label class="form-label">ニックネーム</label>
+        <input type="text" class="form-input" id="set-nickname" maxlength="20" placeholder="リワードちゃんからの呼び名">
+      </div>
+      <div class="form-group">
+        <label class="form-label">口調</label>
+        <select class="form-select" id="set-tone">
+          <option value="friendly">フレンドリー 😊</option>
+          <option value="polite">丁寧 🙇</option>
+          <option value="devilish">小悪魔 😈</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">月のご褒美枠（円）</label>
+        <input type="number" class="form-input" id="set-budget" min="1000" step="1000" placeholder="20000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">繰り越し率（0〜100%）</label>
+        <input type="number" class="form-input" id="set-carryover" min="0" max="100" step="10" placeholder="50">
+      </div>
+      <button class="btn btn-primary" id="btn-save-settings">保存する</button>
+    </div>
+    <div class="card">
+      <div class="card-title">Googleカレンダー連携</div>
+      <div class="calendar-status" id="calendar-section">
+        <div class="loading">確認中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" data-page="home"><span class="tab-icon">🏠</span>ホーム</div>
+  <div class="tab" data-page="expenses"><span class="tab-icon">💰</span>支出</div>
+  <div class="tab" data-page="rewards"><span class="tab-icon">🎁</span>ご褒美</div>
+  <div class="tab" data-page="settings"><span class="tab-icon">⚙️</span>設定</div>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  // ─── 定数 ───
+  const LIFF_ID = '2010106872-9t0gN1D6'; // デプロイ時に置換
+  let idToken = null;
+  let currentPage = 'home';
+
+  // ─── ユーティリティ ───
+  function fmt(n) {
+    return '¥' + Number(n || 0).toLocaleString('ja-JP');
+  }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return (d.getMonth()+1) + '/' + d.getDate();
+  }
+
+  async function api(path, opts = {}) {
+    const url = '/api' + path;
+    const headers = { 'Authorization': 'Bearer ' + idToken };
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    return res.json();
+  }
+
+  // ─── タブ切り替え ───
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      const page = this.dataset.page;
+      if (page === currentPage) return;
+      currentPage = page;
+      document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+      this.classList.add('active');
+      document.getElementById('page-' + page).classList.add('active');
+      loadPage(page);
+    });
+  });
+
+  // ─── ページ読み込み ───
+  async function loadPage(page) {
+    try {
+      if (page === 'home') await loadDashboard();
+      else if (page === 'expenses') await loadExpenses();
+      else if (page === 'rewards') await loadRewards();
+      else if (page === 'settings') await loadSettings();
+    } catch (e) {
+      console.error('loadPage error:', e);
+    }
+  }
+
+  async function loadDashboard() {
+    const data = await api('/dashboard');
+    const s = data.monthly_summary || {};
+    document.getElementById('home-remaining').textContent = fmt(s.remaining);
+    let detail = '予算 ' + fmt(s.total_budget) + ' / 支出 ' + fmt(s.total_spent);
+    if (s.carryover_amount > 0) detail += '（繰越 ' + fmt(s.carryover_amount) + '）';
+    document.getElementById('home-budget-detail').textContent = detail;
+    const pct = s.total_budget > 0 ? Math.min((s.total_spent / s.total_budget) * 100, 100) : 0;
+    const bar = document.getElementById('home-progress');
+    bar.style.width = pct + '%';
+    bar.className = 'progress-fill' + (pct > 90 ? ' danger' : pct > 70 ? ' warning' : '');
+
+    const sugEl = document.getElementById('home-suggestions');
+    const sugs = data.recent_suggestions || [];
+    if (sugs.length === 0) {
+      sugEl.innerHTML = '<div class="empty-msg">まだ提案がありません</div>';
+    } else {
+      sugEl.innerHTML = sugs.map(function(s) {
+        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">購入済</span>'
+                    : s.outcome === 'skip' ? '<span class="badge badge-skip">スキップ</span>' : '';
+        return '<div class="list-item"><div><div class="list-item-name">' + (s.item_name || '—') + '</div>'
+          + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
+          + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
+      }).join('');
+    }
+  }
+
+  async function loadExpenses() {
+    const data = await api('/expenses');
+    const el = document.getElementById('expenses-list');
+    document.getElementById('expenses-title').textContent = (data.month || '') + ' の支出';
+    const items = data.expenses || [];
+    if (items.length === 0) {
+      el.innerHTML = '<div class="empty-msg">まだ支出がありません</div>';
+    } else {
+      el.innerHTML = items.map(function(e) {
+        return '<div class="list-item"><div><div class="list-item-name">' + (e.item_name || '—') + '</div>'
+          + '<div class="list-item-cat">' + (e.ars_category || '') + '</div></div>'
+          + '<div class="list-item-amount">' + fmt(e.amount) + '</div></div>';
+      }).join('');
+    }
+  }
+
+  async function loadRewards() {
+    const [histData, poolData] = await Promise.all([api('/history'), api('/pool')]);
+
+    const histEl = document.getElementById('reward-history');
+    const sugs = histData.suggestions || [];
+    if (sugs.length === 0) {
+      histEl.innerHTML = '<div class="empty-msg">まだ提案がありません</div>';
+    } else {
+      histEl.innerHTML = sugs.map(function(s) {
+        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">購入済</span>'
+                    : s.outcome === 'skip' ? '<span class="badge badge-skip">スキップ</span>' : '';
+        return '<div class="list-item"><div><div class="list-item-name">' + (s.item_name || '—') + '</div>'
+          + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
+          + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
+      }).join('');
+    }
+
+    const poolEl = document.getElementById('reward-pool');
+    const items = poolData.items || [];
+    if (items.length === 0) {
+      poolEl.innerHTML = '<div class="empty-msg">候補がありません</div>';
+    } else {
+      poolEl.innerHTML = items.map(function(item) {
+        const typeLabel = item.type === 'travel' ? '🏨' : item.type === 'restaurant' ? '🍽️' : '🛒';
+        const imgTag = item.image_url ? '<img class="pool-img" src="' + item.image_url + '" alt="">'
+                                       : '<div class="pool-img"></div>';
+        const link = item.source_url ? ' onclick="window.open(\'' + item.source_url + '\')"' : '';
+        return '<div class="pool-item"' + link + '>' + imgTag
+          + '<div class="pool-info"><div class="pool-name">' + (item.name || '') + '</div>'
+          + '<div class="pool-price">' + fmt(item.price) + '</div>'
+          + '<div class="pool-type">' + typeLabel + ' ' + (item.category || '') + '</div></div></div>';
+      }).join('');
+    }
+  }
+
+  async function loadSettings() {
+    const data = await api('/settings');
+    document.getElementById('set-nickname').value = data.nickname || '';
+    document.getElementById('set-tone').value = data.tone || 'friendly';
+    document.getElementById('set-budget').value = data.reward_budget_monthly || '';
+    document.getElementById('set-carryover').value = Math.round((data.carryover_rate || 0.5) * 100);
+
+    // カレンダー連携
+    const calData = await api('/calendar/status');
+    const calEl = document.getElementById('calendar-section');
+    if (calData.connected) {
+      calEl.innerHTML = '<div><span class="status-dot connected"></span>連携済み</div>'
+        + '<button class="btn btn-danger" id="btn-cal-disconnect" style="width:auto;padding:8px 16px;font-size:13px;">解除</button>';
+      document.getElementById('btn-cal-disconnect').addEventListener('click', async function() {
+        if (confirm('カレンダー連携を解除しますか？')) {
+          await api('/calendar/disconnect', { method: 'POST' });
+          loadSettings();
+        }
+      });
+    } else {
+      calEl.innerHTML = '<div><span class="status-dot disconnected"></span>未連携</div>'
+        + '<div style="font-size:13px;color:var(--text-sub);">LINEで設定してね</div>';
+    }
+  }
+
+  // ─── 設定保存 ───
+  document.getElementById('btn-save-settings').addEventListener('click', async function() {
+    const body = {};
+    const nick = document.getElementById('set-nickname').value.trim();
+    if (nick) body.nickname = nick;
+    body.tone = document.getElementById('set-tone').value;
+    const budget = document.getElementById('set-budget').value;
+    if (budget) body.reward_budget_monthly = parseInt(budget, 10);
+    const co = document.getElementById('set-carryover').value;
+    if (co !== '') body.carryover_rate = parseInt(co, 10) / 100;
+
+    const result = await api('/settings', { method: 'PUT', body: body });
+    if (result.updated) {
+      alert('保存しました！');
+    } else if (result.error) {
+      alert(result.error);
+    }
+  });
+
+  // ─── LIFF 初期化 ───
+  async function initLiff() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login();
+        return;
+      }
+      idToken = liff.getIDToken();
+      const profile = await liff.getProfile();
+      document.getElementById('header').textContent = '🎁 ' + (profile.displayName || 'リワードちゃん');
+      loadPage('home');
+    } catch (e) {
+      console.error('LIFF init error:', e);
+      document.querySelector('.content').innerHTML = '<div class="error-msg">初期化に失敗しました。LINEアプリから開いてください。</div>';
+    }
+  }
+
+  // LIFF_ID が未設定の場合（開発時）はトークンなしで API を呼ぶ
+  if (LIFF_ID === '__LIFF_ID__') {
+    console.warn('LIFF_ID not set — running in dev mode');
+    loadPage('home');
+  } else {
+    initLiff();
+  }
+})();
+</script>
+</body>
+</html>

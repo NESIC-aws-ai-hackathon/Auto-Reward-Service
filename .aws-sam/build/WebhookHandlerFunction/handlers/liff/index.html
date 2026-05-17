@@ -92,6 +92,7 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .list-item:last-child { border-bottom: none; }
+.swipe-row .list-item { padding: 0; border-bottom: none; }
 .list-item-name { font-size: 14px; flex: 1; }
 .list-item-amount { font-size: 14px; font-weight: bold; white-space: nowrap; margin-left: 8px; }
 .list-item-cat { font-size: 11px; color: var(--text-sub); }
@@ -186,6 +187,44 @@ body {
   margin-left: 8px;
 }
 .btn-edit:active { opacity: 0.7; }
+/* スワイプ削除 */
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+.swipe-row:last-child { border-bottom: none; }
+.swipe-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  background: var(--card-bg);
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+  will-change: transform;
+  position: relative;
+  z-index: 1;
+}
+.swipe-content.swiped { transform: translateX(-80px); }
+.swipe-delete-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
+}
+/* list-item のスワイプ行内オーバーライドは上部に記載済み */
 /* 編集モーダル */
 .modal-overlay {
   display: none;
@@ -423,7 +462,7 @@ body {
       sugEl.innerHTML = sugs.map(function(s) {
         const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">購入済</span>'
                     : s.outcome === 'skip' ? '<span class="badge badge-skip">スキップ</span>' : '';
-        return '<div class="list-item"><div><div class="list-item-name">' + (s.item_name || '—') + '</div>'
+        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '—') + '</div>'
           + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
           + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
       }).join('');
@@ -449,19 +488,65 @@ body {
       const total = items.reduce(function(s, e) { return s + e.amount; }, 0);
       el.innerHTML = '<div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">合計: ' + fmt(total) + '</div>'
         + items.map(function(e) {
-          return '<div class="list-item">'
+          return '<div class="swipe-row" data-sk="' + escAttr(e.sk) + '">'
+            + '<button class="swipe-delete-btn" data-sk="' + escAttr(e.sk) + '">削除</button>'
+            + '<div class="swipe-content">'
+            + '<div class="list-item">'
             + '<div style="flex:1"><div class="list-item-name">' + escHtml(e.item_name || '—') + '</div>'
             + '<div class="list-item-cat">' + escHtml(e.ars_category || '') + '</div>'
             + '<div class="list-item-date">' + fmtDate(e.created_at) + (e.corrected ? ' ✏️' : '') + '</div></div>'
             + '<div style="display:flex;align-items:center">'
             + '<span class="list-item-amount">' + fmt(e.amount) + '</span>'
             + '<button class="btn-edit" data-sk="' + escAttr(e.sk) + '" data-name="' + escAttr(e.item_name || '') + '" data-amount="' + e.amount + '">修正</button>'
+            + '</div></div>'
             + '</div></div>';
         }).join('');
       // 修正ボタンのイベント
       el.querySelectorAll('.btn-edit').forEach(function(btn) {
         btn.addEventListener('click', function() {
           openEditModal(this.dataset.sk, this.dataset.name, this.dataset.amount);
+        });
+      });
+      // スワイプ削除
+      el.querySelectorAll('.swipe-row').forEach(function(row) {
+        var content = row.querySelector('.swipe-content');
+        var startX = 0, startY = 0, isDragging = false;
+        content.addEventListener('touchstart', function(ev) {
+          startX = ev.touches[0].clientX;
+          startY = ev.touches[0].clientY;
+          isDragging = true;
+        }, { passive: true });
+        content.addEventListener('touchmove', function(ev) {
+          if (!isDragging) return;
+          var dx = ev.touches[0].clientX - startX;
+          var dy = ev.touches[0].clientY - startY;
+          if (Math.abs(dy) > Math.abs(dx)) { isDragging = false; return; }
+          if (dx < -20) content.classList.add('swiped');
+          if (dx > 20) content.classList.remove('swiped');
+        }, { passive: true });
+        content.addEventListener('touchend', function() { isDragging = false; });
+        // 他行をタップしたら閉じる
+        content.addEventListener('click', function(ev) {
+          if (!ev.target.classList.contains('btn-edit')) {
+            content.classList.remove('swiped');
+          }
+        });
+      });
+      // 削除ボタンのイベント
+      el.querySelectorAll('.swipe-delete-btn').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          const sk = this.dataset.sk;
+          if (!confirm('この支出を削除しますか？')) return;
+          try {
+            const result = await api('/expenses?sk=' + encodeURIComponent(sk), { method: 'DELETE' });
+            if (result.deleted) {
+              loadExpenses();
+            } else {
+              alert('削除に失敗しました: ' + (result.error || ''));
+            }
+          } catch(e) {
+            alert('削除に失敗しました');
+          }
         });
       });
     }
@@ -537,7 +622,7 @@ body {
       histEl.innerHTML = sugs.map(function(s) {
         const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">購入済</span>'
                     : s.outcome === 'skip' ? '<span class="badge badge-skip">スキップ</span>' : '';
-        return '<div class="list-item"><div><div class="list-item-name">' + (s.item_name || '—') + '</div>'
+        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '—') + '</div>'
           + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
           + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
       }).join('');
@@ -550,13 +635,13 @@ body {
     } else {
       poolEl.innerHTML = items.map(function(item) {
         const typeLabel = item.type === 'travel' ? '🏨' : item.type === 'restaurant' ? '🍽️' : '🛒';
-        const imgTag = item.image_url ? '<img class="pool-img" src="' + item.image_url + '" alt="">'
+        const imgTag = item.image_url ? '<img class="pool-img" src="' + escAttr(item.image_url) + '" alt="">'
                                        : '<div class="pool-img"></div>';
-        const link = item.source_url ? ' onclick="window.open(\'' + item.source_url + '\')"' : '';
+        const link = item.source_url ? ' onclick="window.open(\'' + escAttr(item.source_url) + '\')"' : '';
         return '<div class="pool-item"' + link + '>' + imgTag
-          + '<div class="pool-info"><div class="pool-name">' + (item.name || '') + '</div>'
+          + '<div class="pool-info"><div class="pool-name">' + escHtml(item.name || '') + '</div>'
           + '<div class="pool-price">' + fmt(item.price) + '</div>'
-          + '<div class="pool-type">' + typeLabel + ' ' + (item.category || '') + '</div></div></div>';
+          + '<div class="pool-type">' + typeLabel + ' ' + escHtml(item.category || '') + '</div></div></div>';
       }).join('');
     }
   }

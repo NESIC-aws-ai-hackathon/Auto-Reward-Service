@@ -71,7 +71,7 @@ def _make_response(status: int, body: dict) -> dict:
             "Content-Type": "application/json; charset=utf-8",
             "Access-Control-Allow-Origin": "https://liff.line.me",
             "Access-Control-Allow-Headers": "Authorization,Content-Type",
-            "Access-Control-Allow-Methods": "GET,PUT,OPTIONS",
+            "Access-Control-Allow-Methods": "GET,PUT,DELETE,OPTIONS",
         },
         "body": json.dumps(body, ensure_ascii=False, default=_decimal_default),
     }
@@ -348,18 +348,59 @@ def _handle_pool(user_id: str, ddb: DynamoDBService) -> dict:
 
 
 def _handle_get_settings(user_id: str, ddb: DynamoDBService) -> dict:
-    """GET /api/settings — 設定取得"""
+    """GET /api/settings — 設定取得（固定費・記念日含む）"""
     pk = f"USER#{user_id}"
     profile = ddb.get_item(pk=pk, sk=SK_PROFILE) or {}
+    fixed_costs_item = ddb.get_item(pk=pk, sk="FIXED_COSTS#") or {}
 
     return _make_response(200, {
         "tone": profile.get("tone", "friendly"),
         "reward_budget_monthly": int(profile.get("reward_budget_monthly", 0)),
+        "monthly_income": int(profile.get("monthly_income", 0)),
         "bonus_months": profile.get("bonus_months") or [],
         "bonus_amount": int(profile.get("bonus_amount", 0)),
         "carryover_rate": float(profile.get("carryover_rate", 0.5)),
         "nickname": profile.get("nickname"),
+        "fixed_costs": fixed_costs_item.get("items") or [],
+        "anniversaries": profile.get("anniversaries") or [],
     })
+
+
+def _handle_delete_expense(user_id: str, ddb: DynamoDBService, query: dict) -> dict:
+    """DELETE /api/expenses?sk=EXPENSE#... — 支出削除"""
+    pk = f"USER#{user_id}"
+    sk = query.get("sk", "").strip()
+    if not sk.startswith(SK_PREFIX_EXPENSE):
+        return _make_response(400, {"error": "無効な支出IDです"})
+
+    existing = ddb.get_item(pk=pk, sk=sk)
+    if not existing:
+        return _make_response(404, {"error": "支出が見つかりません"})
+
+    amount = int(existing.get("amount", 0))
+    ddb.delete_item(pk=pk, sk=sk)
+
+    # 月次サマリーを差分調整
+    try:
+        prefix_len = len(SK_PREFIX_EXPENSE)
+        expense_month = sk[prefix_len:prefix_len + 7]  # "YYYY-MM"
+        month_sk = f"{SK_PREFIX_MONTHLY_SUMMARY}{expense_month}"
+        monthly = ddb.get_item(pk=pk, sk=month_sk)
+        if monthly:
+            current_total = int(monthly.get("total_amount", 0))
+            current_count = int(monthly.get("expense_count", 0))
+            ddb.update_item(
+                pk=pk,
+                sk=month_sk,
+                updates={
+                    "total_amount": max(0, current_total - amount),
+                    "expense_count": max(0, current_count - 1),
+                },
+            )
+    except Exception as e:
+        logger.warning("liff_expense_delete_monthly_adjust_failed", error=str(e))
+
+    return _make_response(200, {"deleted": True})
 
 
 def _handle_update_settings(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
@@ -651,6 +692,8 @@ def handler(event: dict, context: Any) -> dict:
             except json.JSONDecodeError:
                 return _make_response(400, {"error": "無効な JSON です"})
             return _handle_update_expense(user_id, ddb, body)
+        elif raw_path == "/api/expenses" and http_method == "DELETE":
+            return _handle_delete_expense(user_id, ddb, query)
         elif raw_path == "/api/monthly-chart" and http_method == "GET":
             return _handle_monthly_chart(user_id, ddb, query)
         elif raw_path == "/api/history" and http_method == "GET":

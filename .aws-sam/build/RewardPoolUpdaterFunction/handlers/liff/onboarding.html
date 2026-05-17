@@ -120,11 +120,113 @@
         return;
       }
       idToken = liff.getIDToken();
+      await loadProfile();
     } catch (e) {
       console.error('LIFF init error:', e);
     }
   }
   initLiff();
+
+  // ─── プロフィールを読み込んでフォームに反映 ───
+  async function loadProfile() {
+    try {
+      const headers = {};
+      if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+      const res = await fetch(`${API_BASE}/api/settings`, { headers });
+      if (!res.ok) return;
+      const d = await res.json();
+
+      // まず全チェックボックスをリセット（HTMLデフォルトをクリア）
+      ['fc_rent','fc_phone','fc_utility','fc_insurance','fc_loan',
+       'sub_netflix','sub_spotify','sub_youtube','sub_prime','sub_gym',
+       'ann_birthday','ann_partner','ann_wedding'
+      ].forEach(id => { document.getElementById(id).checked = false; });
+      document.querySelectorAll('.bonus-months input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+
+      // 月収
+      if (d.monthly_income > 0)
+        document.getElementById('income').value = Math.round(d.monthly_income / 10000);
+
+      // ボーナス
+      if (d.bonus_amount > 0)
+        document.getElementById('bonus').value = Math.round(d.bonus_amount / 10000);
+
+      // ボーナス月
+      if (d.bonus_months && d.bonus_months.length > 0) {
+        document.querySelectorAll('.bonus-months input[type="checkbox"]').forEach(cb => {
+          cb.checked = d.bonus_months.includes(parseInt(cb.value));
+        });
+      }
+
+      // 固定費・サブスク
+      const fixedMap = {
+        '家賃・住宅ローン': { cb: 'fc_rent',      amt: 'fc_rent_amt',      unit: 10000 },
+        'スマホ代':          { cb: 'fc_phone',     amt: 'fc_phone_amt',     unit: 10000 },
+        '光熱費':            { cb: 'fc_utility',   amt: 'fc_utility_amt',   unit: 10000 },
+        '保険':              { cb: 'fc_insurance', amt: 'fc_insurance_amt', unit: 10000 },
+        '奨学金・ローン':    { cb: 'fc_loan',      amt: 'fc_loan_amt',      unit: 10000 },
+      };
+      const subMap = {
+        'Netflix':           { cb: 'sub_netflix', amt: 'sub_netflix_amt',  unit: 1 },
+        'Spotify':           { cb: 'sub_spotify', amt: 'sub_spotify_amt',  unit: 1 },
+        'YouTube Premium':   { cb: 'sub_youtube', amt: 'sub_youtube_amt',  unit: 1 },
+        'Amazon Prime':      { cb: 'sub_prime',   amt: 'sub_prime_amt',    unit: 1 },
+        'ジム':              { cb: 'sub_gym',      amt: 'sub_gym_amt',     unit: 1 },
+      };
+      const otherFixed = [];
+      for (const item of (d.fixed_costs || [])) {
+        const name = item.name || '';
+        const amount = item.amount || 0;
+        if (fixedMap[name]) {
+          document.getElementById(fixedMap[name].cb).checked = true;
+          document.getElementById(fixedMap[name].amt).value = Math.round(amount / fixedMap[name].unit);
+        } else if (subMap[name]) {
+          document.getElementById(subMap[name].cb).checked = true;
+          document.getElementById(subMap[name].amt).value = Math.round(amount / subMap[name].unit);
+        } else {
+          otherFixed.push({ name, amount });
+        }
+      }
+      for (const item of otherFixed) {
+        const table = document.getElementById('otherFixedTable');
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `<input type="text" placeholder="項目名" value="${esc(item.name)}"><input type="number" class="amount" placeholder="金額" value="${item.amount}"><span style="font-size:12px">円</span><button class="delete-btn" onclick="this.parentNode.remove()">✕</button>`;
+        table.appendChild(row);
+      }
+
+      // 記念日
+      const annMap = {
+        '自分の誕生日':   { cb: 'ann_birthday', date: 'ann_birthday_date' },
+        'パートナー誕生日': { cb: 'ann_partner', date: 'ann_partner_date' },
+        '結婚記念日':     { cb: 'ann_wedding',  date: 'ann_wedding_date'  },
+      };
+      const otherAnn = [];
+      for (const ann of (d.anniversaries || [])) {
+        const name = ann.name || '';
+        const dateVal = (ann.date || '').replace('-', '/');
+        if (annMap[name]) {
+          document.getElementById(annMap[name].cb).checked = true;
+          document.getElementById(annMap[name].date).value = dateVal;
+        } else {
+          otherAnn.push({ name, date: dateVal });
+        }
+      }
+      for (const ann of otherAnn) {
+        const table = document.getElementById('otherAnnTable');
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.innerHTML = `<input type="text" placeholder="記念日名" value="${esc(ann.name)}"><input type="text" class="amount" placeholder="MM/DD" style="width:80px" value="${esc(ann.date)}"><button class="delete-btn" onclick="this.parentNode.remove()">✕</button>`;
+        table.appendChild(row);
+      }
+    } catch (e) {
+      console.warn('loadProfile failed:', e);
+    }
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
 
   function addFixedRow() {
     const table = document.getElementById('otherFixedTable');
@@ -252,10 +354,26 @@
       const result = await res.json();
 
       if (res.ok && result.success) {
-        alert(`登録完了！🎀\nごほうび枠: ${Math.floor(result.reward_budget / 10000)}万円`);
-        if (liff.isInClient()) {
-          liff.closeWindow();
-        }
+        const budgetMan = Math.floor(result.reward_budget / 10000);
+        const budgetSen = Math.floor((result.reward_budget % 10000) / 1000);
+        const budgetStr = budgetMan > 0
+          ? (budgetSen > 0 ? `${budgetMan}万${budgetSen}千円` : `${budgetMan}万円`)
+          : `${result.reward_budget.toLocaleString()}円`;
+        document.getElementById('loading').classList.remove('show');
+        // 完了メッセージを画面に表示
+        document.body.innerHTML = `
+          <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;background:#FFF5F9;font-family:-apple-system,sans-serif;">
+            <div style="font-size:48px;margin-bottom:16px;">🎀</div>
+            <h2 style="color:#FF6B9D;font-size:22px;margin-bottom:12px;">登録完了！</h2>
+            <div style="background:#fff;border-radius:16px;padding:20px 24px;box-shadow:0 2px 12px rgba(255,107,157,0.15);text-align:center;width:100%;max-width:320px;">
+              <div style="font-size:13px;color:#999;margin-bottom:4px;">今月のごほうび枠</div>
+              <div style="font-size:36px;font-weight:bold;color:#FF6B9D;">${budgetStr}</div>
+              <div style="font-size:13px;color:#666;margin-top:8px;">LINEにもお知らせしたよ✨<br>ごほうびを選びに行こう🍮</div>
+            </div>
+            <button onclick="if(liff.isInClient()){liff.closeWindow();}else{window.close();}" style="margin-top:24px;padding:14px 32px;background:linear-gradient(135deg,#FF6B9D,#FF8E53);color:#fff;border:none;border-radius:30px;font-size:16px;font-weight:bold;cursor:pointer;box-shadow:0 4px 12px rgba(255,107,157,0.4);">
+              閉じる
+            </button>
+          </div>`;
       } else {
         alert('エラー: ' + (result.error || '送信に失敗しました'));
       }

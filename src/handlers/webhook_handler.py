@@ -624,7 +624,7 @@ def _handle_postback(event):
             item_name = params.get("item", "")
             amount = int(params.get("amount", "0"))
             if amount > 0:
-                _save_expense_items(user_id, [{"item_name": item_name, "amount": amount, "category": "ご襲美費", "source": "postback"}], ddb)
+                _save_expense_items(user_id, [{"item_name": item_name, "amount": amount, "category": "ご褒美費", "source": "postback"}], ddb)
                 streak_msg = update_streak(user_id, ddb)
                 reply = f"{item_name} {amount}円、記録したよ〜🎀✨"
                 if streak_msg:

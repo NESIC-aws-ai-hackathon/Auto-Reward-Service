@@ -28,9 +28,17 @@ RICH_MENU = {
     "name": "リワードちゃんメニュー",
     "chatBarText": "メニューを開く",
     "areas": [
-        # 1行目
+        # 1行目: ダッシュボード / 話す / おすすめ
         {
             "bounds": {"x": 0, "y": 0, "width": 833, "height": 843},
+            "action": {
+                "type": "uri",
+                "label": "📊 ダッシュボード",
+                "uri": os.environ.get("LIFF_DASHBOARD_URL", "https://liff.line.me/2010106872-9t0gN1D6"),
+            },
+        },
+        {
+            "bounds": {"x": 833, "y": 0, "width": 834, "height": 843},
             "action": {
                 "type": "postback",
                 "label": "🎀 話す",
@@ -39,7 +47,7 @@ RICH_MENU = {
             },
         },
         {
-            "bounds": {"x": 833, "y": 0, "width": 834, "height": 843},
+            "bounds": {"x": 1667, "y": 0, "width": 833, "height": 843},
             "action": {
                 "type": "postback",
                 "label": "🎁 おすすめ",
@@ -47,8 +55,9 @@ RICH_MENU = {
                 "displayText": "おすすめしてもらう",
             },
         },
+        # 2行目: 支出を記録 / 今月の残り / 設定
         {
-            "bounds": {"x": 1667, "y": 0, "width": 833, "height": 843},
+            "bounds": {"x": 0, "y": 843, "width": 833, "height": 843},
             "action": {
                 "type": "postback",
                 "label": "📝 支出を記録",
@@ -56,9 +65,8 @@ RICH_MENU = {
                 "displayText": "支出を記録する",
             },
         },
-        # 2行目
         {
-            "bounds": {"x": 0, "y": 843, "width": 833, "height": 843},
+            "bounds": {"x": 833, "y": 843, "width": 834, "height": 843},
             "action": {
                 "type": "postback",
                 "label": "📋 今月の残り",
@@ -67,19 +75,11 @@ RICH_MENU = {
             },
         },
         {
-            "bounds": {"x": 833, "y": 843, "width": 834, "height": 843},
-            "action": {
-                "type": "uri",
-                "label": "📊 ダッシュボード",
-                "uri": os.environ.get("LIFF_DASHBOARD_URL", "https://liff.line.me/2010106872-9t0gN1D6"),
-            },
-        },
-        {
             "bounds": {"x": 1667, "y": 843, "width": 833, "height": 843},
             "action": {
                 "type": "uri",
                 "label": "⚙️ 設定",
-                "uri": os.environ.get("LIFF_ONBOARDING_URL", "https://liff.line.me/2010106872-9t0gN1D6"),
+                "uri": os.environ.get("LIFF_ONBOARDING_URL", "https://liff.line.me/2010106872-9t0gN1D6/onboarding"),
             },
         },
     ],

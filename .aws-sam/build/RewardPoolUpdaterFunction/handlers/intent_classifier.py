@@ -9,6 +9,7 @@ Bedrock Nova Micro に Intent 分類プロンプトを送信し、
 from __future__ import annotations
 
 import json
+import os
 
 from services.bedrock_service import BedrockService
 from utils.exceptions import BedrockError
@@ -18,6 +19,9 @@ from prompts.intent_prompt import INTENT_SYSTEM_PROMPT, build_intent_prompt
 logger = get_logger(__name__)
 
 _bedrock = BedrockService()
+
+# Intent分類用モデル（環境変数で上書き可能、ap-northeast-1ではnova-liteを使用）
+_INTENT_MODEL_ID = os.environ.get("BEDROCK_INTENT_MODEL_ID", "amazon.nova-lite-v1:0")
 
 # フォールバック戻り値
 _FALLBACK: dict = {"intent": "UNKNOWN", "confidence": 0.0}
@@ -41,6 +45,7 @@ def classify_intent(text: str) -> dict:
             prompt=prompt,
             system_prompt=INTENT_SYSTEM_PROMPT,
             max_tokens=100,
+            model_id=_INTENT_MODEL_ID,
         )
     except BedrockError as e:
         logger.warning("classify_intent bedrock error, fallback to UNKNOWN", error=str(e))

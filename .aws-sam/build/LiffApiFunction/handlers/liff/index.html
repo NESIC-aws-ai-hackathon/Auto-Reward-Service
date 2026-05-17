@@ -173,6 +173,60 @@ body {
 .loading { text-align: center; padding: 40px; color: var(--text-sub); }
 .error-msg { text-align: center; padding: 20px; color: var(--danger); }
 .empty-msg { text-align: center; padding: 30px; color: var(--text-sub); font-size: 14px; }
+/* 編集ボタン */
+.btn-edit {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-sub);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.btn-edit:active { opacity: 0.7; }
+/* 編集モーダル */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 24px 20px;
+  width: 88%;
+  max-width: 360px;
+}
+.modal-title { font-size: 16px; font-weight: bold; margin-bottom: 16px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.modal-actions .btn { flex: 1; }
+/* 月次グラフ */
+.chart-container { position: relative; height: 180px; margin: 8px 0; }
+/* 月選択 */
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.month-nav-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+}
+.month-nav-btn:active { opacity: 0.7; }
+.month-label { font-size: 14px; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -197,7 +251,15 @@ body {
   <!-- 支出 -->
   <div class="page" id="page-expenses">
     <div class="card">
-      <div class="card-title" id="expenses-title">今月の支出</div>
+      <div class="card-title">月次支出グラフ</div>
+      <div class="chart-container"><canvas id="monthly-chart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="month-nav">
+        <button class="month-nav-btn" id="btn-month-prev">◀ 前の月</button>
+        <span class="month-label" id="expenses-month-label">-</span>
+        <button class="month-nav-btn" id="btn-month-next">次の月 ▶</button>
+      </div>
       <div id="expenses-list"><div class="loading">読み込み中...</div></div>
     </div>
   </div>
@@ -256,7 +318,27 @@ body {
   <div class="tab" data-page="settings"><span class="tab-icon">⚙️</span>設定</div>
 </div>
 
+<!-- 支出編集モーダル -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-box">
+    <div class="modal-title">支出を修正</div>
+    <div class="form-group">
+      <label class="form-label">品名</label>
+      <input type="text" class="form-input" id="edit-item-name" maxlength="100">
+    </div>
+    <div class="form-group">
+      <label class="form-label">金額（円）</label>
+      <input type="number" class="form-input" id="edit-amount" min="1" max="9999999">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btn-edit-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="btn-edit-save">保存する</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (function() {
   'use strict';
@@ -265,6 +347,9 @@ body {
   const LIFF_ID = '2010106872-9t0gN1D6'; // デプロイ時に置換
   let idToken = null;
   let currentPage = 'home';
+  let currentExpenseMonth = null;  // 表示中の月 "YYYY-MM"
+  let editTargetSk = null;         // 編集対象の支出 SK
+  let monthlyChart = null;         // Chart.js インスタンス
 
   // ─── ユーティリティ ───
   function fmt(n) {
@@ -275,6 +360,10 @@ body {
     const d = new Date(iso);
     return (d.getMonth()+1) + '/' + d.getDate();
   }
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function escAttr(s) { return escHtml(s); }
 
   async function api(path, opts = {}) {
     const url = '/api' + path;
@@ -342,18 +431,98 @@ body {
   }
 
   async function loadExpenses() {
-    const data = await api('/expenses');
+    if (!currentExpenseMonth) {
+      currentExpenseMonth = new Date().toISOString().slice(0, 7);
+    }
+    document.getElementById('expenses-month-label').textContent = currentExpenseMonth;
+
+    // 月次グラフ（初回のみ描画、以降はデータ更新のみ）
+    loadMonthlyChart();
+
+    // 支出一覧
+    const data = await api('/expenses?month=' + currentExpenseMonth);
     const el = document.getElementById('expenses-list');
-    document.getElementById('expenses-title').textContent = (data.month || '') + ' の支出';
     const items = data.expenses || [];
     if (items.length === 0) {
-      el.innerHTML = '<div class="empty-msg">まだ支出がありません</div>';
+      el.innerHTML = '<div class="empty-msg">この月の支出はありません</div>';
     } else {
-      el.innerHTML = items.map(function(e) {
-        return '<div class="list-item"><div><div class="list-item-name">' + (e.item_name || '—') + '</div>'
-          + '<div class="list-item-cat">' + (e.ars_category || '') + '</div></div>'
-          + '<div class="list-item-amount">' + fmt(e.amount) + '</div></div>';
-      }).join('');
+      const total = items.reduce(function(s, e) { return s + e.amount; }, 0);
+      el.innerHTML = '<div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">合計: ' + fmt(total) + '</div>'
+        + items.map(function(e) {
+          return '<div class="list-item">'
+            + '<div style="flex:1"><div class="list-item-name">' + escHtml(e.item_name || '—') + '</div>'
+            + '<div class="list-item-cat">' + escHtml(e.ars_category || '') + '</div>'
+            + '<div class="list-item-date">' + fmtDate(e.created_at) + (e.corrected ? ' ✏️' : '') + '</div></div>'
+            + '<div style="display:flex;align-items:center">'
+            + '<span class="list-item-amount">' + fmt(e.amount) + '</span>'
+            + '<button class="btn-edit" data-sk="' + escAttr(e.sk) + '" data-name="' + escAttr(e.item_name || '') + '" data-amount="' + e.amount + '">修正</button>'
+            + '</div></div>';
+        }).join('');
+      // 修正ボタンのイベント
+      el.querySelectorAll('.btn-edit').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          openEditModal(this.dataset.sk, this.dataset.name, this.dataset.amount);
+        });
+      });
+    }
+  }
+
+  async function loadMonthlyChart() {
+    try {
+      const data = await api('/monthly-chart?months=6');
+      const rows = data.data || [];
+      const labels = rows.map(function(r) { return r.month.slice(5); }); // "05" 形式
+      const spents = rows.map(function(r) { return r.total_spent; });
+      const budgets = rows.map(function(r) { return r.budget; });
+
+      const ctx = document.getElementById('monthly-chart');
+      if (monthlyChart) {
+        monthlyChart.data.labels = labels;
+        monthlyChart.data.datasets[0].data = spents;
+        monthlyChart.data.datasets[1].data = budgets;
+        monthlyChart.update();
+      } else {
+        monthlyChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: '支出',
+                data: spents,
+                backgroundColor: 'rgba(6,199,85,0.7)',
+                borderRadius: 4,
+              },
+              {
+                label: '予算',
+                data: budgets,
+                type: 'line',
+                borderColor: '#ffaa00',
+                backgroundColor: 'transparent',
+                borderWidth: 2,
+                pointRadius: 3,
+                tension: 0.3,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { font: { size: 11 } } } },
+            scales: {
+              y: {
+                ticks: {
+                  callback: function(v) { return '¥' + (v / 10000).toFixed(0) + '万'; },
+                  font: { size: 10 },
+                },
+              },
+              x: { ticks: { font: { size: 11 } } },
+            },
+          },
+        });
+      }
+    } catch (e) {
+      console.error('chart load error:', e);
     }
   }
 
@@ -413,9 +582,69 @@ body {
       });
     } else {
       calEl.innerHTML = '<div><span class="status-dot disconnected"></span>未連携</div>'
-        + '<div style="font-size:13px;color:var(--text-sub);">LINEで設定してね</div>';
+        + '<button class="btn btn-outline" id="btn-cal-connect" style="width:auto;padding:8px 16px;font-size:13px;">Googleと連携する</button>';
+      document.getElementById('btn-cal-connect').addEventListener('click', async function() {
+        const authData = await api('/calendar/auth');
+        if (authData.auth_url) {
+          liff.openWindow({ url: authData.auth_url, external: true });
+        } else {
+          alert(authData.error || 'カレンダー連携の設定がまだ完了していません');
+        }
+      });
     }
   }
+
+  // ─── 月ナビ ───
+  document.getElementById('btn-month-prev').addEventListener('click', function() {
+    if (!currentExpenseMonth) return;
+    var parts = currentExpenseMonth.split('-');
+    var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+    m -= 1; if (m === 0) { m = 12; y -= 1; }
+    currentExpenseMonth = y + '-' + String(m).padStart(2, '0');
+    loadExpenses();
+  });
+  document.getElementById('btn-month-next').addEventListener('click', function() {
+    if (!currentExpenseMonth) return;
+    var now = new Date(), nowYM = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+    if (currentExpenseMonth >= nowYM) return;
+    var parts = currentExpenseMonth.split('-');
+    var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+    m += 1; if (m === 13) { m = 1; y += 1; }
+    currentExpenseMonth = y + '-' + String(m).padStart(2, '0');
+    loadExpenses();
+  });
+
+  // ─── 編集モーダル ───
+  function openEditModal(sk, name, amount) {
+    editTargetSk = sk;
+    document.getElementById('edit-item-name').value = name;
+    document.getElementById('edit-amount').value = amount;
+    document.getElementById('edit-modal').classList.add('open');
+  }
+  document.getElementById('btn-edit-cancel').addEventListener('click', function() {
+    document.getElementById('edit-modal').classList.remove('open');
+    editTargetSk = null;
+  });
+  document.getElementById('btn-edit-save').addEventListener('click', async function() {
+    if (!editTargetSk) return;
+    var newName = document.getElementById('edit-item-name').value.trim();
+    var newAmount = parseInt(document.getElementById('edit-amount').value, 10);
+    if (!newName || isNaN(newAmount) || newAmount < 1) {
+      alert('品名と金額を正しく入力してください');
+      return;
+    }
+    var result = await api('/expenses', {
+      method: 'PUT',
+      body: { sk: editTargetSk, item_name: newName, amount: newAmount },
+    });
+    if (result.updated) {
+      document.getElementById('edit-modal').classList.remove('open');
+      editTargetSk = null;
+      loadExpenses();
+    } else {
+      alert(result.error || '保存に失敗しました');
+    }
+  });
 
   // ─── 設定保存 ───
   document.getElementById('btn-save-settings').addEventListener('click', async function() {

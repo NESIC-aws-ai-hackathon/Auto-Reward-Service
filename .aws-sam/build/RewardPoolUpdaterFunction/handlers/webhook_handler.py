@@ -4,6 +4,7 @@ import base64
 import json
 import os
 import random
+import re
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -23,6 +24,12 @@ import handlers.receipt_analyzer as receipt_analyzer
 import handlers.reward_proposal as reward_proposal_handler
 from handlers.character_reply import _infer_emotion
 from models.schemas import SK_PENDING_CLARIFICATION, SK_PENDING_EXPENSE
+
+from services.talk_starter import generate_talk_starter
+from services.recommend_flow import start_recommend, handle_recommend_reply
+from services.quick_expense import show_quick_expense_options, handle_quick_expense_reply
+from services.monthly_report import generate_monthly_report
+from services.streak import update_streak
 
 logger = get_logger(__name__)
 
@@ -58,6 +65,12 @@ def _get_ddb():
 
 def handler(event, context):
     if event.get("source") == "warmup":
+        # コールドスタート後の最初のリクエストを高速化するためサービス接続を事前初期化
+        try:
+            get_line_service()
+            _get_ddb()
+        except Exception:
+            pass
         return {"statusCode": 200, "body": "warm"}
 
     body = event.get("body") or ""
@@ -94,6 +107,8 @@ def _route_event(event):
         _route_message(event)
     elif event_type == "follow":
         _handle_follow(event)
+    elif event_type == "postback":
+        _handle_postback(event)
     else:
         logger.info("unhandled_event_type", event_type=event_type)
 
@@ -215,6 +230,33 @@ def _handle_text(user_id, text, reply_token):
             logger.warning("post_reply_ops_failed", error=str(e))
         return
 
+    # RECOMMEND_STATE チェック（おすすめフロー中間状態）
+    recommend_state = ddb.get_item(pk=pk, sk="RECOMMEND_STATE#")
+    if recommend_state and recommend_state.get("step"):
+        messages = handle_recommend_reply(user_id, text, recommend_state, ddb)
+        get_line_service().reply_message(reply_token, messages)
+        try:
+            _update_daily_count(user_id, today, ddb)
+        except Exception as e:
+            logger.warning("post_reply_ops_failed", error=str(e))
+        return
+
+    # QUICK_EXPENSE_STATE チェック（クイック支出入力中間状態）
+    quick_state = ddb.get_item(pk=pk, sk="QUICK_EXPENSE_STATE#")
+    if quick_state and quick_state.get("step"):
+        messages, items_to_save = handle_quick_expense_reply(user_id, text, quick_state, ddb)
+        get_line_service().reply_message(reply_token, messages)
+        try:
+            _save_expense_items(user_id, items_to_save, ddb)
+            if items_to_save:
+                streak_msg = update_streak(user_id, ddb)
+                if streak_msg:
+                    get_line_service().push_message(user_id, [{"type": "text", "text": streak_msg}])
+            _update_daily_count(user_id, today, ddb)
+        except Exception as e:
+            logger.warning("post_reply_ops_failed", error=str(e))
+        return
+
     # Intent 分類（1回呼び出し）
     intent_result = classify_intent(text)
     intent = intent_result.get("intent", "CHAT")
@@ -256,11 +298,43 @@ def _handle_text(user_id, text, reply_token):
             )
             try:
                 _save_expense_items(user_id, items_to_save, ddb)
+                streak_msg = update_streak(user_id, ddb)
+                if streak_msg:
+                    try:
+                        get_line_service().push_message(user_id, [{"type": "text", "text": streak_msg}])
+                    except Exception:
+                        pass
                 _save_chat_log(user_id, text, reply_text, intent, ddb)
                 _update_daily_count(user_id, today, ddb)
             except Exception as e:
                 logger.warning("post_reply_ops_failed", error=str(e))
-            return
+
+    # EXPENSE_CORRECTION intent 処理（支出金額の手動修正）
+    if intent == "EXPENSE_CORRECTION":
+        reply_text = expense_extractor.handle_expense_correction(text, user_id, ddb)
+        get_line_service().reply_message(
+            reply_token, [{"type": "text", "text": reply_text}]
+        )
+        try:
+            _save_chat_log(user_id, text, reply_text, intent, ddb)
+            _update_daily_count(user_id, today, ddb)
+        except Exception as e:
+            logger.warning("post_reply_ops_failed", error=str(e))
+        return
+
+    # PROFILE_UPDATE intent 処理（収入変更・固定費追加削除・記念日追加）
+    if intent == "PROFILE_UPDATE":
+        from services.profile_updater import handle_profile_update
+        reply_text = handle_profile_update(user_id, text, ddb)
+        get_line_service().reply_message(
+            reply_token, [{"type": "text", "text": reply_text}]
+        )
+        try:
+            _save_chat_log(user_id, text, reply_text, intent, ddb)
+            _update_daily_count(user_id, today, ddb)
+        except Exception as e:
+            logger.warning("post_reply_ops_failed", error=str(e))
+        return
 
     # 通常チャットフロー
     profile = ddb.get_item(pk=pk, sk="PROFILE#") or {}
@@ -314,12 +388,38 @@ def _handle_text(user_id, text, reply_token):
         _save_chat_log(user_id, text, reply_text, intent, ddb)
         _update_daily_count(user_id, today, ddb)
         _detect_preferences(user_id, text, ddb)
+        _detect_anniversary(user_id, text, ddb)
     except Exception as e:
         logger.warning("post_reply_ops_failed", error=str(e))
 
 
 def _handle_image(user_id, message_id, reply_token):
-    """画像メッセージを受け取り、レシート解析を行う。"""
+    """画像メッセージを受け取り、SQS 経由でレシート解析を非同期実行する（Unit 3 スライス 3-6）"""
+    queue_url = os.getenv("RECEIPT_QUEUE_URL", "")
+
+    if queue_url:
+        # 非同期処理: SQS にジョブを投入し即返答
+        try:
+            import boto3
+            sqs = boto3.client("sqs")
+            sqs.send_message(
+                QueueUrl=queue_url,
+                MessageBody=json.dumps({"user_id": user_id, "message_id": message_id}),
+            )
+            get_line_service().reply_message(
+                reply_token,
+                [{"type": "text", "text": "レシート受け取ったよ！少し時間がかかるかも🎀\n解析できたらお知らせするね！"}],
+            )
+        except Exception as e:
+            logger.warning("sqs_send_failed", error=str(e))
+            _handle_image_sync(user_id, message_id, reply_token)
+    else:
+        # SQS 未設定時は同期処理（ローカル開発・テスト用）
+        _handle_image_sync(user_id, message_id, reply_token)
+
+
+def _handle_image_sync(user_id, message_id, reply_token):
+    """レシート画像を同期処理する（フォールバック）"""
     ddb = _get_ddb()
     try:
         image_bytes = get_line_service().get_message_content(message_id)
@@ -433,6 +533,117 @@ def _detect_preferences(user_id, text, ddb):
             })
         else:
             ddb.update_item(pk=pk, sk="PREF_MEMORY#", updates={"categories": new_categories, "updatedAt": now})
+
+
+# 記念日検知パターン（Unit 2 スライス 2-9）
+_ANNIVERSARY_PATTERNS = [
+    (r"(?:自分の|私の)?誕生日[はが]?\s*(\d{1,2})月(\d{1,2})日", "誕生日"),
+    (r"結婚記念日[はが]?\s*(\d{1,2})月(\d{1,2})日", "結婚記念日"),
+    (r"付き合[っい]た?記念日[はが]?\s*(\d{1,2})月(\d{1,2})日", "付き合った記念日"),
+    (r"(?:彼女|彼氏|パートナー)[のさん]*誕生日[はが]?\s*(\d{1,2})月(\d{1,2})日", "パートナー誕生日"),
+    (r"(?:子ども|子供|息子|娘)[のさん]*誕生日[はが]?\s*(\d{1,2})月(\d{1,2})日", "子どもの誕生日"),
+]
+
+
+def _detect_anniversary(user_id: str, text: str, ddb: DynamoDBService) -> None:
+    """会話から記念日情報を自然に検知し PROFILE# の anniversaries に保存する（Unit 2 スライス 2-9）"""
+    pk = f"USER#{user_id}"
+    for pattern, name in _ANNIVERSARY_PATTERNS:
+        m = re.search(pattern, text)
+        if m:
+            try:
+                month, day = int(m.group(1)), int(m.group(2))
+            except (IndexError, ValueError):
+                continue
+            if not (1 <= month <= 12 and 1 <= day <= 31):
+                continue
+            date_str = f"{month:02d}-{day:02d}"
+            profile = ddb.get_item(pk=pk, sk="PROFILE#") or {}
+            anniversaries = list(profile.get("anniversaries", []))
+            for a in anniversaries:
+                if a.get("name") == name:
+                    if a.get("date") == date_str:
+                        return
+                    a["date"] = date_str
+                    break
+            else:
+                anniversaries.append({"name": name, "date": date_str})
+            now = datetime.now(timezone.utc).isoformat()
+            ddb.update_item(pk=pk, sk="PROFILE#", updates={
+                "anniversaries": anniversaries, "updatedAt": now,
+            })
+            logger.info("anniversary_detected", user_id=user_id, anniversary_name=name, date=date_str)
+            return  # 1件ヒットしたら終了
+
+
+def _handle_postback(event):
+    """postback イベントを処理する（リッチメニューボタン等）"""
+    postback_data = (event.get("postback") or {}).get("data", "")
+    reply_token = event.get("replyToken", "")
+    user_id = (event.get("source") or {}).get("userId", "")
+
+    if not reply_token or not user_id:
+        return
+
+    # data=action=xxx をパース
+    params = {}
+    for pair in postback_data.split("&"):
+        if "=" in pair:
+            k, v = pair.split("=", 1)
+            params[k] = v
+
+    action = params.get("action", "")
+    ddb = _get_ddb()
+
+    try:
+        if action == "start_talk":
+            messages = generate_talk_starter(user_id, ddb)
+            get_line_service().reply_message(reply_token, messages)
+
+        elif action == "start_recommend":
+            messages = start_recommend(user_id, ddb)
+            get_line_service().reply_message(reply_token, messages)
+
+        elif action == "quick_expense":
+            from services.quick_expense import start_quick_expense_state
+            messages = show_quick_expense_options(user_id)
+            start_quick_expense_state(user_id, ddb)
+            get_line_service().reply_message(reply_token, messages)
+
+        elif action == "monthly_summary":
+            messages = generate_monthly_report(user_id, ddb)
+            get_line_service().reply_message(reply_token, messages)
+
+        elif action == "interested":
+            item_name = params.get("item", "それ")
+            get_line_service().reply_message(reply_token, [
+                {"type": "text", "text": f"{item_name}が気になるんだね！🎀 候補に入れとくね✨"}
+            ])
+
+        elif action == "purchased":
+            item_name = params.get("item", "")
+            amount = int(params.get("amount", "0"))
+            if amount > 0:
+                _save_expense_items(user_id, [{"item_name": item_name, "amount": amount, "category": "ご襲美費", "source": "postback"}], ddb)
+                streak_msg = update_streak(user_id, ddb)
+                reply = f"{item_name} {amount}円、記録したよ〜🎀✨"
+                if streak_msg:
+                    reply += f"\n\n{streak_msg}"
+                get_line_service().reply_message(reply_token, [{"type": "text", "text": reply}])
+            else:
+                get_line_service().reply_message(reply_token, [{"type": "text", "text": "記録したよ〜🎀"}])
+
+        else:
+            logger.info("unknown_postback_action", action=action)
+            get_line_service().reply_message(reply_token, [
+                {"type": "text", "text": "ん？ちょっとわからなかったかも🎀"}
+            ])
+    except Exception as e:
+        logger.exception("postback_handler_error", action=action)
+        try:
+            get_line_service().reply_message(reply_token, [{"type": "text", "text": ERROR_REPLY}])
+        except Exception:
+            pass
 
 
 def _handle_error(event, error):

@@ -118,7 +118,8 @@ class LineService:
         """
         try:
             response = self._blob_api.get_message_content(message_id=message_id)
-            return response.read()
+            # LINE Bot SDK v3 は bytearray を直接返す（.read() 不要）
+            return bytes(response)
         except Exception as e:
             raise LineServiceError(f"get_message_content 失敗: {e}", e) from e
 

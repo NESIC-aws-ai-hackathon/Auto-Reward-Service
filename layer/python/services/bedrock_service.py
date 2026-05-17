@@ -14,6 +14,7 @@ import time
 from typing import Optional
 
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 from utils.exceptions import BedrockError
@@ -24,7 +25,8 @@ logger = get_logger(__name__)
 # ─────────────────────────────────────────
 # リトライ設定
 # ─────────────────────────────────────────
-_RETRY_DELAYS = [0.5, 1.0, 2.0]  # 秒（最大 3 回）
+# リトライ設定（Lambda の29s制限内に収めるため1回のみ）
+_RETRY_DELAYS = [0.5, 1.0]  # 最大2試行（初回 + 1リトライ）
 _RETRYABLE_ERROR_CODES = frozenset(
     {
         "ThrottlingException",
@@ -38,9 +40,16 @@ class BedrockService:
     """Amazon Bedrock Converse API ラッパー"""
 
     def __init__(self) -> None:
+        # connect_timeout=5s, read_timeout=20s: Lambda 29s制限内で2回Bedrockを呼べるように設定
+        _config = Config(
+            connect_timeout=5,
+            read_timeout=20,
+            retries={"max_attempts": 1},  # boto3自動リトライなし（アプリ側で制御）
+        )
         self._client = boto3.client(
             "bedrock-runtime",
             region_name=os.environ.get("AWS_REGION", "ap-northeast-1"),
+            config=_config,
         )
         self.default_text_model = os.environ.get(
             "BEDROCK_TEXT_MODEL_ID", "amazon.nova-lite-v1:0"

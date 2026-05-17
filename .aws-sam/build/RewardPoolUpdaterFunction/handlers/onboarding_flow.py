@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import os
 import re
 from datetime import datetime, timezone, timedelta
 from decimal import Decimal
@@ -70,6 +71,25 @@ MSG_COMPLETED = (
     "これからリワードちゃんがお財布とご褒美を一緒に管理するね🎀\n"
     "何か買い物したり、疲れたときは気軽に話しかけてね！"
 )
+
+def _liff_hint_for_welcome() -> str:
+    """オンボーディング開始時にLIFF URLへの誤導文を返す。LIFF_URL未設定の場合は空文字。"""
+    url = os.environ.get("LIFF_URL", "")
+    if url:
+        return (
+            f"\n\nチャットで話しながら設定するよ！でも、先にURLからサクッと入力したい場合はこちらからでもOK🔗\n{url}"
+        )
+    return ""
+
+
+def _liff_hint_for_completed() -> str:
+    """オンボーディング完了時にLIFFダッシュボードURLへの誤導文を返す。"""
+    url = os.environ.get("LIFF_URL", "")
+    if url:
+        return (
+            f"\n\n📊 ダッシュボードでお財布の状況を確認できるよ～！\n{url}"
+        )
+    return ""
 
 MSG_BUDGET_ADJUSTED = "わかった！それじゃあご褒美枠は {budget:,}円/月 で設定するね✨"
 MSG_PARSE_ERROR_INCOME = "ごめん、金額がうまく読み取れなかったよ😢\n「25万」「300000」みたいに教えてね！"
@@ -160,7 +180,8 @@ def _extract_birthday(text: str) -> Optional[str]:
 
 def _calc_reward_budget(income: int, fixed_costs: int) -> int:
     """ご褒美枠を算出する。max(3000, min(余剰 * 0.15, 30000))"""
-    surplus = max(0, income - fixed_costs)
+    # DynamoDBから読んだ値はDecimal型のため明示的にint変換
+    surplus = max(0, int(income) - int(fixed_costs))
     return max(3000, min(int(surplus * 0.15), 30000))
 
 
@@ -354,7 +375,7 @@ def handle_onboarding(
 
         # オンボーディング完了
         _complete_onboarding(user_id, state, ddb_service)
-        return MSG_COMPLETED
+        return MSG_COMPLETED + _liff_hint_for_completed()
 
     # COMPLETED（再オンボーディング要求などで呼ばれた場合）
     return "もうセットアップは完了してるよ✨ 何か変えたいことがあれば教えてね！"
@@ -368,4 +389,4 @@ def start_onboarding(user_id: str, ddb_service: DynamoDBService) -> str:
     """
     state = {"step": STEP_WAITING_INCOME}
     _save_onboarding_state(user_id, state, ddb_service)
-    return MSG_WELCOME
+    return MSG_WELCOME + _liff_hint_for_welcome()

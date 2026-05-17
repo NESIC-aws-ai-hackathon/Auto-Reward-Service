@@ -4,6 +4,86 @@
 
 ---
 
+## [BUG FIX] Webhook 応答欠落 + LIFF URL オンボーディング誘導
+**Timestamp**: 2026-05-17T14:00:00Z
+**User Input**: "返信しても応答が返ってこないことが多々ある" / "オンボーディングの時はリワードちゃんからオンボーディング用URLへの誘導があるといいかも"
+
+### 根本原因分析
+1. **[PRIMARY] Bedrock タイムアウト**: boto3 デフォルト `read_timeout=60s`。ThrottlingException 発生時、`_RETRY_DELAYS = [0.5, 1.0, 2.0]`（3試行）で最悪60s×3+遅延=181秒/Bedrockコール。Lambda 29s制限を超えてタイムアウト → LINE に 200 OK が返らない → 応答なし
+2. **[SECONDARY] Warmup がサービス初期化をしない**: `{"source": "warmup"}` 受信時に即返却していたため LINE Service / DynamoDB が未初期化。最初のリクエストで全初期化コストが発生
+3. **[PERFORMANCE] Intent 分類に Nova Lite 使用**: 単純な分類に Nova Lite（重い）を使用していた
+
+### 修正内容
+| ファイル | 修正内容 |
+|---------|---------|
+| `layer/python/services/bedrock_service.py` | boto3 に `Config(connect_timeout=5, read_timeout=20, retries={'max_attempts': 1})` 追加。`_RETRY_DELAYS` を `[0.5, 1.0, 2.0]` → `[0.5, 1.0]`（最大2試行）に削減 |
+| `src/handlers/intent_classifier.py` | `BEDROCK_INTENT_MODEL_ID` 環境変数追加（デフォルト `nova-micro-v1:0`）。Intent分類をNova Micro（高速・安価）に変更 |
+| `src/handlers/webhook_handler.py` | Warmupハンドラーで `get_line_service()` + `_get_ddb()` を事前初期化するよう修正 |
+| `src/handlers/onboarding_flow.py` | `import os` 追加。`_liff_hint_for_welcome()` / `_liff_hint_for_completed()` 関数追加。`start_onboarding` と WAITING_BIRTHDAY 完了箇所で LIFF URL 誘導メッセージを付加 |
+| `template.yaml` | `BEDROCK_INTENT_MODEL_ID: "amazon.nova-micro-v1:0"` と `LIFF_URL: ""` を Globals に追加 |
+| `tests/unit/test_bedrock_service.py` | (変更なし — 既存テストは `_RETRY_DELAYS = [0.5, 1.0]` と互換) |
+| `tests/unit/test_webhook_handler.py` | `test_warmup_does_not_initialize_line_service` → `test_warmup_initializes_services` に名称・期待値変更 |
+
+### テスト結果
+- **448 テスト全 PASS**（既存 426 + 修正2件のテスト更新）
+
+### デプロイ結果
+- SAM `sam build + sam deploy` → CloudFormation `UPDATE_COMPLETE`
+- 全 Lambda 関数更新済み（WebhookHandlerFunction 含む）
+
+### 利用方法: LIFF URL の設定
+LIFF URL を設定する場合は AWS コンソールまたは samconfig.toml の `parameter_overrides` で:
+```
+LIFF_URL=https://liff.line.me/{your-liff-id}
+```
+設定されていない場合はメッセージに URL は含まれない（安全なデフォルト）。
+
+---
+
+## [CONSTRUCTION] Unit 6: Push通知 — Code Generation 完了
+**Timestamp**: 2026-05-17T10:00:00Z
+**User Input**: "unit6を始めてほしい 要件が明確なものについては質問を飛ばしていいよ、どんどん作って ただし、AI-DLCに従った資料は確実にしっかりと作成するようにして 追加機能指示もunit-6のフォルダに作成しているのでそれも参照して"
+
+### 実施内容
+1. **AI-DLC ドキュメント作成**（追加機能指示.md の詳細仕様に基づき質問スキップ）
+   - `functional-design/business-logic-model.md` — BL-6-01〜BL-6-06 ビジネスロジック
+   - `functional-design/business-rules.md` — BR-6-01〜BR-6-09 ビジネスルール
+   - `functional-design/domain-entities.md` — PUSH_QUEUE / PUSH_LOG / PUSH_SETTINGS スキーマ
+   - `nfr-infrastructure-design.md` — NFR要件 + NFR設計 + インフラ設計
+
+2. **サービス層（layer/python/services/）**
+   - `daily_push.py` — 日次 Push メッセージ生成（8 カテゴリ、時間帯別トーン、重み調整、重複回避）
+   - `push_manager.py` — Push 送信 + 月間通数管理（190 通上限）+ PUSH_LOG 記録
+   - `preference_extractor.py` — Bedrock による嗜好自動抽出 → PREF_MEMORY 更新
+
+3. **ハンドラー層（src/handlers/）**
+   - `push_scheduler_handler.py` — 毎朝 10:00 JST: GSI で全ユーザー取得 → ランダム時刻 → PUSH_QUEUE 書き込み
+   - `push_dispatcher_handler.py` — 10 分おき: PUSH_QUEUE から予定時刻到達分を送信
+   - `monthly_push_handler.py` — 毎月 1 日 9:00 JST: 月初レポート Push + push_count リセット
+
+4. **template.yaml 更新**
+   - PushSchedulerFunction / PushDispatcherFunction / MonthlyPushFunction 追加
+   - EventBridge Scheduler 3 本追加（cron/rate）
+   - SchedulerExecutionRole に新 Lambda ARN 追加
+   - CloudWatch LogGroup 3 本追加
+   - Outputs に新 Lambda ARN 追加
+
+5. **schemas.py 更新**
+   - `SK_PUSH_SETTINGS` / `SK_PREFIX_PUSH_QUEUE` 定数追加
+
+### テスト結果
+- **426 テスト全 PASS**（既存 344 + 新規 82）
+- テストファイル: test_daily_push.py / test_push_manager.py / test_preference_extractor.py / test_push_scheduler_handler.py / test_push_dispatcher_handler.py / test_monthly_push_handler.py
+
+### セキュリティ準拠
+| チェック | 結果 |
+|---------|------|
+| SEC-2-01: プロンプトインジェクション防止 | ✅ preference_extractor で `<user_message>` タグ使用 |
+| PII マスキング | ✅ user_id は先頭6字 + *** でログ出力 |
+| 月間通数制限 | ✅ 190 通上限チェック（フリープラン 200 通の安全マージン） |
+
+---
+
 ## [CONSTRUCTION開始] Unit 0: SAM基盤 + 共通Layer
 **Timestamp**: 2026-05-16T00:00:00Z
 **User Input**: "全て承認します AI-DLCに従ってconstractionフェーズに進んでください"

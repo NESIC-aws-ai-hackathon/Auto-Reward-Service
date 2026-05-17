@@ -184,6 +184,7 @@ def _handle_expenses(user_id: str, ddb: DynamoDBService, query: dict) -> dict:
         "month": month,
         "expenses": [
             {
+                "sk": item.get("SK", ""),
                 "item_name": item.get("item_name"),
                 "amount": int(item.get("amount", 0)),
                 "ars_category": item.get("ars_category"),
@@ -192,6 +193,110 @@ def _handle_expenses(user_id: str, ddb: DynamoDBService, query: dict) -> dict:
             for item in items
         ],
     })
+
+
+def _handle_update_expense(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """PUT /api/expenses — 支出金額・品名の手動修正"""
+    pk = f"USER#{user_id}"
+    sk = body.get("sk", "").strip()
+    if not sk.startswith(SK_PREFIX_EXPENSE):
+        return _make_response(400, {"error": "無効な支出IDです"})
+
+    # 既存アイテム取得
+    existing = ddb.get_item(pk=pk, sk=sk)
+    if not existing:
+        return _make_response(404, {"error": "支出が見つかりません"})
+
+    updates: dict[str, Any] = {}
+    old_amount = int(existing.get("amount", 0))
+    new_amount = old_amount
+
+    if "amount" in body:
+        try:
+            new_amount = int(body["amount"])
+            if not (1 <= new_amount <= 9_999_999):
+                return _make_response(400, {"error": "金額は 1〜9,999,999 円で指定してください"})
+            updates["amount"] = new_amount
+        except (ValueError, TypeError):
+            return _make_response(400, {"error": "amount は整数を指定してください"})
+
+    if "item_name" in body:
+        name = str(body["item_name"]).strip()
+        if not (1 <= len(name) <= 100):
+            return _make_response(400, {"error": "品名は 1〜100 文字で指定してください"})
+        updates["item_name"] = name
+
+    if not updates:
+        return _make_response(400, {"error": "更新するフィールドがありません"})
+
+    updates["updated_at"] = datetime.now(_JST).isoformat()
+    updates["corrected"] = True
+    ddb.update_item(pk=pk, sk=sk, updates=updates)
+
+    # 月次サマリーの total_amount を差分調整
+    delta = new_amount - old_amount
+    if delta != 0:
+        try:
+            prefix_len = len(SK_PREFIX_EXPENSE)
+            expense_month = sk[prefix_len:prefix_len + 7]  # "YYYY-MM"
+            month_sk = f"{SK_PREFIX_MONTHLY_SUMMARY}{expense_month}"
+            monthly = ddb.get_item(pk=pk, sk=month_sk)
+            if monthly:
+                current_total = int(monthly.get("total_amount", 0))
+                ddb.update_item(
+                    pk=pk,
+                    sk=month_sk,
+                    updates={"total_amount": max(0, current_total + delta)},
+                )
+        except Exception as e:
+            logger.warning("liff_expense_monthly_adjust_failed", error=str(e))
+
+    return _make_response(200, {"updated": True, "delta": delta})
+
+
+def _handle_monthly_chart(user_id: str, ddb: DynamoDBService, query: dict) -> dict:
+    """GET /api/monthly-chart — 過去N月分の支出グラフデータ"""
+    pk = f"USER#{user_id}"
+    try:
+        months_count = min(int(query.get("months", 6)), 12)
+    except (ValueError, TypeError):
+        months_count = 6
+
+    # 過去 N 月分の "YYYY-MM" リストを昇順で生成
+    now = datetime.now(_JST)
+    month_list: list[str] = []
+    year, month = now.year, now.month
+    for _ in range(months_count):
+        month_list.append(f"{year:04d}-{month:02d}")
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    month_list.reverse()
+
+    # DynamoDB から月次サマリーを取得
+    items = ddb.query_by_pk(
+        pk=pk,
+        sk_prefix=SK_PREFIX_MONTHLY_SUMMARY,
+        limit=months_count + 2,
+        descending=True,
+    )
+    summary_map = {
+        item.get("SK", "").replace(SK_PREFIX_MONTHLY_SUMMARY, ""): item
+        for item in items
+    }
+
+    data = []
+    for m in month_list:
+        s = summary_map.get(m, {})
+        budget = int(s.get("reward_budget", s.get("total_budget", 0)))
+        data.append({
+            "month": m,
+            "total_spent": int(s.get("total_amount", 0)),
+            "budget": budget,
+        })
+
+    return _make_response(200, {"data": data})
 
 
 def _handle_history(user_id: str, ddb: DynamoDBService) -> dict:
@@ -317,8 +422,104 @@ def _handle_update_settings(user_id: str, ddb: DynamoDBService, body: dict) -> d
     return _make_response(200, {"updated": True})
 
 
+def _handle_calendar_auth(user_id: str) -> dict:
+    """GET /api/calendar/auth — Google OAuth 認証 URL を返す"""
+    try:
+        from utils.secrets import get_google_secrets
+        secrets = get_google_secrets()
+        client_id = secrets.get("client_id", "")
+        redirect_uri = secrets.get("redirect_uri", "")
+    except Exception:
+        client_id = os.environ.get("GOOGLE_CLIENT_ID", "")
+        redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
+
+    if not client_id or not redirect_uri:
+        return _make_response(503, {"error": "Google Calendar 連携はまだ設定されていません"})
+
+    import urllib.parse
+    params = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/calendar.events.readonly",
+        "access_type": "offline",
+        "prompt": "consent",
+        "state": user_id,  # CSRF 対策: user_id をステートに埋め込む
+    }
+    auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urllib.parse.urlencode(params)}"
+    return _make_response(200, {"auth_url": auth_url})
+
+
+def _handle_calendar_callback(user_id: str, ddb: DynamoDBService, query: dict) -> dict:
+    """GET /api/calendar/callback — Google OAuth コールバック処理"""
+    code = query.get("code", "")
+    state = query.get("state", "")
+
+    # state 検証（CSRF 対策）
+    if state != user_id:
+        return _make_response(400, {"error": "不正なリクエストです"})
+
+    if not code:
+        return _make_response(400, {"error": "認証コードが見つかりません"})
+
+    try:
+        from utils.secrets import get_google_secrets
+        secrets = get_google_secrets()
+        client_id = secrets.get("client_id", "")
+        client_secret = secrets.get("client_secret", "")
+        redirect_uri = secrets.get("redirect_uri", "")
+    except Exception as e:
+        logger.warning("google_secrets_failed", error=str(e))
+        return _make_response(500, {"error": "認証設定の読み込みに失敗しました"})
+
+    # authorization_code → tokens 交換
+    import requests as req
+    try:
+        token_resp = req.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+            timeout=10,
+        )
+        token_resp.raise_for_status()
+        tokens = token_resp.json()
+    except Exception as e:
+        logger.warning("google_token_exchange_failed", error=str(e))
+        return _make_response(500, {"error": "トークン取得に失敗しました"})
+
+    refresh_token = tokens.get("refresh_token", "")
+    if not refresh_token:
+        return _make_response(400, {"error": "refresh_token が取得できませんでした。再度連携してください"})
+
+    # DynamoDB に保存（refresh_token は機密情報）
+    pk = f"USER#{user_id}"
+    now = datetime.now(_JST).isoformat()
+    ddb.put_item(pk, SK_GOOGLE_OAUTH, {
+        "entityType": "GOOGLE_OAUTH",
+        "refresh_token": refresh_token,
+        "connected_at": now,
+    })
+    logger.info("google_calendar_connected", user_id=user_id)
+
+    # LIFF ダッシュボードにリダイレクト
+    api_base = os.environ.get("LIFF_URL", "")
+    redirect_url = f"{api_base}/liff" if api_base else "/liff"
+    return {
+        "statusCode": 302,
+        "headers": {
+            "Location": redirect_url,
+            "Access-Control-Allow-Origin": "https://liff.line.me",
+        },
+        "body": "",
+    }
+
+
 def _handle_calendar_status(user_id: str, ddb: DynamoDBService) -> dict:
-    """GET /api/calendar/status — カレンダー連携状態"""
     pk = f"USER#{user_id}"
     oauth = ddb.get_item(pk=pk, sk=SK_GOOGLE_OAUTH)
 
@@ -365,6 +566,36 @@ def _serve_liff_html() -> dict:
     }
 
 
+def _serve_onboarding_html() -> dict:
+    """オンボーディングフォームの HTML を配信する"""
+    html_path = Path(__file__).parent / "liff" / "onboarding.html"
+    if not html_path.exists():
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "text/plain"},
+            "body": "Onboarding page not found",
+        }
+    html = html_path.read_text(encoding="utf-8")
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "text/html; charset=utf-8",
+        },
+        "body": html,
+    }
+
+
+def _handle_streak(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/streak — ストリーク情報"""
+    pk = f"USER#{user_id}"
+    streak = ddb.get_item(pk=pk, sk="STREAK#") or {}
+    return _make_response(200, {
+        "current_streak": int(streak.get("current_streak", 0)),
+        "longest_streak": int(streak.get("longest_streak", 0)),
+        "last_record_date": streak.get("last_record_date", ""),
+    })
+
+
 # ─────────────────────────────────────────
 # メインルーター
 # ─────────────────────────────────────────
@@ -396,6 +627,10 @@ def handler(event: dict, context: Any) -> dict:
     if raw_path == "/liff":
         return _serve_liff_html()
 
+    # /liff/onboarding → オンボーディングフォーム HTML
+    if raw_path == "/liff/onboarding":
+        return _serve_onboarding_html()
+
     # /api/* → 認証必須
     user_id = _extract_user_id(event)
     if not user_id:
@@ -410,6 +645,14 @@ def handler(event: dict, context: Any) -> dict:
             return _handle_dashboard(user_id, ddb)
         elif raw_path == "/api/expenses" and http_method == "GET":
             return _handle_expenses(user_id, ddb, query)
+        elif raw_path == "/api/expenses" and http_method == "PUT":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_update_expense(user_id, ddb, body)
+        elif raw_path == "/api/monthly-chart" and http_method == "GET":
+            return _handle_monthly_chart(user_id, ddb, query)
         elif raw_path == "/api/history" and http_method == "GET":
             return _handle_history(user_id, ddb)
         elif raw_path == "/api/pool" and http_method == "GET":
@@ -426,6 +669,15 @@ def handler(event: dict, context: Any) -> dict:
             return _handle_calendar_status(user_id, ddb)
         elif raw_path == "/api/calendar/disconnect" and http_method == "POST":
             return _handle_calendar_disconnect(user_id, ddb)
+        elif raw_path == "/api/calendar/auth" and http_method == "GET":
+            return _handle_calendar_auth(user_id)
+        elif raw_path == "/api/calendar/callback" and http_method == "GET":
+            return _handle_calendar_callback(user_id, ddb, query)
+        elif raw_path == "/api/onboarding" and http_method == "POST":
+            from handlers.liff_onboarding import _handle_onboarding
+            return _handle_onboarding(user_id, event)
+        elif raw_path == "/api/streak" and http_method == "GET":
+            return _handle_streak(user_id, ddb)
         else:
             return _make_response(404, {"error": "Not Found"})
     except Exception as e:

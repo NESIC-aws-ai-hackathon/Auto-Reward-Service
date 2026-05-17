@@ -5,7 +5,7 @@
 - **プロジェクト種別**: グリーンフィールド（新規開発）
 - **開始日**: 2026-05-07
 - **コンセプト変更日**: 2026-05-15
-- **現在のステージ**: CONSTRUCTION フェーズ — Unit 7: LIFFダッシュボード（Code Generation 完了）
+- **現在のステージ**: CONSTRUCTION フェーズ — Unit 6: Push通知（Code Generation 完了）
 
 ## コンセプト変更サマリー
 - **変更根拠**: `docs/コンセプト変更定義書.md`
@@ -93,6 +93,11 @@
   - [x] Code Generation ✅ 313テスト PASS（繰り越し機能 F2-07 含む）
   - [x] Deploy Round 5 ✅ 2026-05-16（U3〜U5 まとめデプロイ）
 - [ ] Unit 6: Push通知
+  - [x] Functional Design ✅ 2026-05-17
+  - [x] NFR Requirements ✅ 2026-05-17
+  - [x] NFR Design ✅ 2026-05-17
+  - [x] Infrastructure Design ✅ 2026-05-17
+  - [x] Code Generation ✅ 2026-05-17／426テスト PASS（既存313 + 新規113）
 - [ ] Unit 7: LIFFダッシュボード
   - [x] Functional Design ✅ 2026-05-16
   - [x] NFR Requirements ✅ 2026-05-16

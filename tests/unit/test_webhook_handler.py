@@ -132,11 +132,13 @@ class TestWarmup:
         result = handler({"source": "warmup"}, None)
         assert result["body"] == "warm"
 
-    def test_warmup_does_not_initialize_line_service(self):
-        """ウォームアップ時は LineService を一切呼び出さない"""
-        with patch("webhook_handler.get_line_service") as mock_get:
+    def test_warmup_initializes_services(self):
+        """ウォームアップ時はコールドスタート対策としてサービスを事前初期化する"""
+        with patch("webhook_handler.get_line_service") as mock_get_line, \
+             patch("webhook_handler._get_ddb") as mock_get_ddb:
             handler({"source": "warmup"}, None)
-        mock_get.assert_not_called()
+        mock_get_line.assert_called_once()
+        mock_get_ddb.assert_called_once()
 
 
 # ─────────────────────────────────────────

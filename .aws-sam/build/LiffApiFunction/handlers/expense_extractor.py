@@ -375,3 +375,125 @@ def _non_expense_reply() -> str:
 def _month_sk() -> str:
     """今月の SK を返す（例: MONTHLY_SUMMARY#2026-05）。"""
     return SK_PREFIX_MONTHLY_SUMMARY + datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+# ─────────────────────────────────────────
+# 支出修正（EXPENSE_CORRECTION intent）
+# ─────────────────────────────────────────
+
+_CORRECTION_SYSTEM_PROMPT = """ユーザーのメッセージから支出修正情報を抽出してください。
+商品名と修正後の正しい金額のみを抽出します。
+
+出力形式（JSON のみ・他のテキスト不可）:
+{"item_name": "商品名", "correct_amount": 金額の整数}
+
+抽出できない場合:
+{"item_name": null, "correct_amount": null}"""
+
+
+def handle_expense_correction(
+    text: str,
+    user_id: str,
+    ddb: DynamoDBService,
+) -> str:
+    """LINE で届いた支出修正メッセージを処理する。
+
+    過去 7 日間の支出から商品名で検索し、最初にマッチした支出の金額を更新する。
+
+    Returns:
+        返信テキスト
+    """
+    pk = f"USER#{user_id}"
+
+    # LLM で修正内容を抽出
+    prompt = f"<user_message>{text}</user_message>"
+    try:
+        raw = get_bedrock_service().invoke_text(
+            prompt,
+            system_prompt=_CORRECTION_SYSTEM_PROMPT,
+            temperature=0.1,
+            max_tokens=200,
+        )
+        parsed = _parse_json(raw)
+    except Exception as e:
+        logger.warning("expense_correction_llm_error", error=str(e))
+        return "修正内容を読み取れなかったよ😅 もう少し詳しく教えてね（例: プリンは350円が正しい）"
+
+    item_name = parsed.get("item_name")
+    correct_amount = parsed.get("correct_amount")
+
+    if not item_name or correct_amount is None:
+        return "修正内容を読み取れなかったよ😅 商品名と金額を教えてね（例: プリンは350円が正しい）"
+
+    try:
+        correct_amount = int(correct_amount)
+    except (ValueError, TypeError):
+        return "金額が読み取れなかったよ😅 数字で教えてね（例: 350円）"
+
+    if not (_AMOUNT_MIN <= correct_amount <= _AMOUNT_MAX):
+        return f"金額が範囲外だよ😅 1円〜9,999,999円の範囲で指定してね"
+
+    # 過去 7 日間の支出から item_name に部分一致するものを探す
+    recent_expenses = ddb.query_by_pk(
+        pk=pk,
+        sk_prefix=SK_PREFIX_EXPENSE,
+        limit=100,
+        descending=True,
+    )
+
+    matched = None
+    search_name = item_name.lower()
+    for expense in recent_expenses:
+        exp_name = (expense.get("item_name") or "").lower()
+        if search_name in exp_name or exp_name in search_name:
+            matched = expense
+            break
+
+    if not matched:
+        return f"「{item_name}」の支出が最近の記録の中に見つからなかったよ😅\n品名を正確に教えてね"
+
+    old_amount = int(matched.get("amount", 0))
+    delta = correct_amount - old_amount
+    expense_sk = matched.get("SK") or matched.get("sk", "")
+
+    if not expense_sk:
+        return "修正できなかったよ😅 もう一度試してみてね"
+
+    # 支出アイテムを更新
+    now = datetime.now(timezone.utc)
+    ddb.update_item(pk=pk, sk=expense_sk, updates={
+        "amount": correct_amount,
+        "updated_at": now.isoformat(),
+        "corrected": True,
+    })
+
+    # 月次サマリーを調整（delta 分だけ total_amount を加減算）
+    if delta != 0:
+        try:
+            # SK 例: "EXPENSE#2026-05-17T12:34:56.789000+00:00_..."  → "2026-05"
+            prefix_len = len(SK_PREFIX_EXPENSE)
+            expense_month = expense_sk[prefix_len:prefix_len + 7]  # "YYYY-MM"
+            month_sk = f"{SK_PREFIX_MONTHLY_SUMMARY}{expense_month}"
+            _adjust_monthly_amount(pk, month_sk, delta, ddb)
+        except Exception as e:
+            logger.warning("monthly_summary_adjust_failed", error=str(e))
+
+    item_display = matched.get("item_name") or item_name
+    abs_delta = abs(delta)
+    if delta == 0:
+        return f"「{item_display}」はもともと {correct_amount:,}円で記録されてたよ！変更なしだよ🍮"
+    direction = "追加" if delta > 0 else "差し引き"
+    return (
+        f"「{item_display}」を {old_amount:,}円 → {correct_amount:,}円に修正したよ✅\n"
+        f"月次集計を {abs_delta:,}円 {direction}したよ！"
+    )
+
+
+def _adjust_monthly_amount(pk: str, month_sk: str, delta: int, ddb: DynamoDBService) -> None:
+    """月次サマリーの total_amount を delta 分だけ調整する（非アトミック）。"""
+    monthly = ddb.get_item(pk=pk, sk=month_sk)
+    if not monthly:
+        return
+    current = int(monthly.get("total_amount", 0))
+    new_total = max(0, current + delta)
+    ddb.update_item(pk=pk, sk=month_sk, updates={"total_amount": new_total})

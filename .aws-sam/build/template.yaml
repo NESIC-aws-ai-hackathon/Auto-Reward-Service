@@ -17,7 +17,9 @@ Globals:
         BEDROCK_TEXT_MODEL_ID: amazon.nova-lite-v1:0
         BEDROCK_IMAGE_MODEL_ID: amazon.nova-lite-v1:0
         BEDROCK_FALLBACK_MODEL_ID: amazon.nova-lite-v1:0
+        BEDROCK_INTENT_MODEL_ID: amazon.nova-lite-v1:0
         DAILY_CHAT_LIMIT: '50'
+        LIFF_URL: ''
     Layers:
     - Ref: ArsCommonLayer
     Tracing: PassThrough
@@ -121,6 +123,20 @@ Resources:
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/line*
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/google*
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/rakuten*
+      - PolicyName: ArsSQSPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - sqs:SendMessage
+            - sqs:ReceiveMessage
+            - sqs:DeleteMessage
+            - sqs:GetQueueAttributes
+            Resource:
+              Fn::GetAtt:
+              - ReceiptProcessingQueue
+              - Arn
   WebhookApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -143,6 +159,16 @@ Resources:
       Tags:
         Project: auto-reward-service
         Stage: prod
+  ReceiptProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Sub: ${AWS::StackName}-receipt-queue
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 3600
+      Tags:
+      - Key: Project
+        Value: auto-reward-service
   WebhookHandlerFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -155,6 +181,10 @@ Resources:
         Fn::GetAtt:
         - ArsLambdaRole
         - Arn
+      Environment:
+        Variables:
+          RECEIPT_QUEUE_URL:
+            Ref: ReceiptProcessingQueue
       Events:
         WebhookPost:
           Type: HttpApi
@@ -199,6 +229,18 @@ Resources:
             - Fn::GetAtt:
               - RewardPoolUpdaterFunction
               - Arn
+            - Fn::GetAtt:
+              - PushSchedulerFunction
+              - Arn
+            - Fn::GetAtt:
+              - PushDispatcherFunction
+              - Arn
+            - Fn::GetAtt:
+              - MonthlyPushFunction
+              - Arn
+            - Fn::GetAtt:
+              - ReceiptProcessorFunction
+              - Arn
   WarmupWebhookScheduler:
     Type: AWS::Scheduler::Schedule
     Properties:
@@ -216,6 +258,38 @@ Resources:
           - SchedulerExecutionRole
           - Arn
         Input: '{"source": "warmup"}'
+  ReceiptProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ReceiptProcessorFunction
+      Handler: handlers.receipt_processor_handler.handler
+      CodeUri: ReceiptProcessorFunction
+      MemorySize: 512
+      Timeout: 60
+      Role:
+        Fn::GetAtt:
+        - ArsLambdaRole
+        - Arn
+      Events:
+        ReceiptQueue:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - ReceiptProcessingQueue
+              - Arn
+            BatchSize: 1
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+    Metadata:
+      SamResourceId: ReceiptProcessorFunction
+  ReceiptProcessorFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${ReceiptProcessorFunction}
+      RetentionInDays: 30
   RewardPoolUpdaterFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -267,6 +341,126 @@ Resources:
           - SchedulerExecutionRole
           - Arn
         Input: '{"source": "scheduler"}'
+  PushSchedulerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PushSchedulerFunction
+      Handler: handlers.push_scheduler_handler.handler
+      CodeUri: PushSchedulerFunction
+      MemorySize: 256
+      Timeout: 60
+      Role:
+        Fn::GetAtt:
+        - ArsLambdaRole
+        - Arn
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+    Metadata:
+      SamResourceId: PushSchedulerFunction
+  PushDispatcherFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PushDispatcherFunction
+      Handler: handlers.push_dispatcher_handler.handler
+      CodeUri: PushDispatcherFunction
+      MemorySize: 256
+      Timeout: 120
+      Role:
+        Fn::GetAtt:
+        - ArsLambdaRole
+        - Arn
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+    Metadata:
+      SamResourceId: PushDispatcherFunction
+  MonthlyPushFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MonthlyPushFunction
+      Handler: handlers.monthly_push_handler.handler
+      CodeUri: MonthlyPushFunction
+      MemorySize: 256
+      Timeout: 120
+      Role:
+        Fn::GetAtt:
+        - ArsLambdaRole
+        - Arn
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+    Metadata:
+      SamResourceId: MonthlyPushFunction
+  PushSchedulerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${PushSchedulerFunction}
+      RetentionInDays: 30
+  PushDispatcherFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${PushDispatcherFunction}
+      RetentionInDays: 30
+  MonthlyPushFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${MonthlyPushFunction}
+      RetentionInDays: 30
+  PushSchedulerSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: PushSchedulerSchedule
+      ScheduleExpression: cron(0 1 ? * * *)
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn:
+          Fn::GetAtt:
+          - PushSchedulerFunction
+          - Arn
+        RoleArn:
+          Fn::GetAtt:
+          - SchedulerExecutionRole
+          - Arn
+        Input: '{"source": "scheduler"}'
+  PushDispatcherSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: PushDispatcherSchedule
+      ScheduleExpression: rate(10 minutes)
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn:
+          Fn::GetAtt:
+          - PushDispatcherFunction
+          - Arn
+        RoleArn:
+          Fn::GetAtt:
+          - SchedulerExecutionRole
+          - Arn
+        Input: '{"source": "scheduler"}'
+  MonthlyPushSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: MonthlyPushSchedule
+      ScheduleExpression: cron(0 0 1 * ? *)
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn:
+          Fn::GetAtt:
+          - MonthlyPushFunction
+          - Arn
+        RoleArn:
+          Fn::GetAtt:
+          - SchedulerExecutionRole
+          - Arn
+        Input: '{"source": "scheduler"}'
   LiffApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -297,6 +491,20 @@ Resources:
               Ref: WebhookApi
             Path: /liff
             Method: GET
+        LiffOnboarding:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /liff/onboarding
+            Method: GET
+        CalendarCallback:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /api/calendar/callback
+            Method: GET
       Tags:
         Project: auto-reward-service
         Stage: prod
@@ -318,6 +526,12 @@ Outputs:
     Value:
       Fn::GetAtt:
       - ArsTable
+      - Arn
+  ReceiptProcessingQueueArn:
+    Description: Receipt Processing SQS Queue ARN
+    Value:
+      Fn::GetAtt:
+      - ReceiptProcessingQueue
       - Arn
   ArsCommonLayerArn:
     Description: Lambda Layer ARN
@@ -358,4 +572,22 @@ Outputs:
     Value:
       Fn::GetAtt:
       - LiffApiFunction
+      - Arn
+  PushSchedulerFunctionArn:
+    Description: Push Scheduler Lambda ARN
+    Value:
+      Fn::GetAtt:
+      - PushSchedulerFunction
+      - Arn
+  PushDispatcherFunctionArn:
+    Description: Push Dispatcher Lambda ARN
+    Value:
+      Fn::GetAtt:
+      - PushDispatcherFunction
+      - Arn
+  MonthlyPushFunctionArn:
+    Description: Monthly Push Lambda ARN
+    Value:
+      Fn::GetAtt:
+      - MonthlyPushFunction
       - Arn

@@ -17,7 +17,9 @@ Globals:
         BEDROCK_TEXT_MODEL_ID: "amazon.nova-lite-v1:0"
         BEDROCK_IMAGE_MODEL_ID: "amazon.nova-lite-v1:0"
         BEDROCK_FALLBACK_MODEL_ID: "amazon.nova-lite-v1:0"
+        BEDROCK_INTENT_MODEL_ID: "amazon.nova-lite-v1:0"
         DAILY_CHAT_LIMIT: "50"
+        LIFF_URL: ""
     Layers:
       - !Ref ArsCommonLayer
     Tracing: PassThrough
@@ -132,6 +134,17 @@ Resources:
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/line*"
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/google*"
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/rakuten*"
+        - PolicyName: ArsSQSPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt ReceiptProcessingQueue.Arn
 
   # ─────────────────────────────────────────
   # Lambda Functions（Unit 1〜7 で追加予定）
@@ -168,6 +181,19 @@ Resources:
         Stage: prod
 
   # ─────────────────────────────────────────
+  # SQS（Unit 3 レシート非同期）
+  # ─────────────────────────────────────────
+  ReceiptProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-receipt-queue"
+      VisibilityTimeout: 60
+      MessageRetentionPeriod: 3600
+      Tags:
+        - Key: Project
+          Value: auto-reward-service
+
+  # ─────────────────────────────────────────
   # Lambda Functions（Unit 1）
   # ─────────────────────────────────────────
   WebhookHandlerFunction:
@@ -179,6 +205,9 @@ Resources:
       MemorySize: 256
       Timeout: 29
       Role: !GetAtt ArsLambdaRole.Arn
+      Environment:
+        Variables:
+          RECEIPT_QUEUE_URL: !Ref ReceiptProcessingQueue
       Events:
         WebhookPost:
           Type: HttpApi
@@ -223,6 +252,10 @@ Resources:
                 Resource:
                   - !GetAtt WebhookHandlerFunction.Arn
                   - !GetAtt RewardPoolUpdaterFunction.Arn
+                  - !GetAtt PushSchedulerFunction.Arn
+                  - !GetAtt PushDispatcherFunction.Arn
+                  - !GetAtt MonthlyPushFunction.Arn
+                  - !GetAtt ReceiptProcessorFunction.Arn
 
   WarmupWebhookScheduler:
     Type: AWS::Scheduler::Schedule
@@ -235,6 +268,34 @@ Resources:
         Arn: !GetAtt WebhookHandlerFunction.Arn
         RoleArn: !GetAtt SchedulerExecutionRole.Arn
         Input: '{"source": "warmup"}'
+
+  # ─────────────────────────────────────────
+  # Lambda Functions（Unit 3 SQS レシート非同期処理）
+  # ─────────────────────────────────────────
+  ReceiptProcessorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ReceiptProcessorFunction
+      Handler: handlers.receipt_processor_handler.handler
+      CodeUri: src/
+      MemorySize: 512
+      Timeout: 60
+      Role: !GetAtt ArsLambdaRole.Arn
+      Events:
+        ReceiptQueue:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ReceiptProcessingQueue.Arn
+            BatchSize: 1
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  ReceiptProcessorFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ReceiptProcessorFunction}"
+      RetentionInDays: 30
 
   # ─────────────────────────────────────────
   # Lambda Functions（Unit 4）
@@ -287,6 +348,108 @@ Resources:
         Input: '{"source": "scheduler"}'
 
   # ─────────────────────────────────────────
+  # Lambda Functions（Unit 6: Push 通知）
+  # ─────────────────────────────────────────
+  PushSchedulerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PushSchedulerFunction
+      Handler: handlers.push_scheduler_handler.handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt ArsLambdaRole.Arn
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  PushDispatcherFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: PushDispatcherFunction
+      Handler: handlers.push_dispatcher_handler.handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 120
+      Role: !GetAtt ArsLambdaRole.Arn
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  MonthlyPushFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: MonthlyPushFunction
+      Handler: handlers.monthly_push_handler.handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 120
+      Role: !GetAtt ArsLambdaRole.Arn
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  # ─────────────────────────────────────────
+  # CloudWatch Logs（Unit 6）
+  # ─────────────────────────────────────────
+  PushSchedulerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PushSchedulerFunction}"
+      RetentionInDays: 30
+
+  PushDispatcherFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${PushDispatcherFunction}"
+      RetentionInDays: 30
+
+  MonthlyPushFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${MonthlyPushFunction}"
+      RetentionInDays: 30
+
+  # ─────────────────────────────────────────
+  # EventBridge Scheduler（Unit 6）
+  # ─────────────────────────────────────────
+  PushSchedulerSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: PushSchedulerSchedule
+      ScheduleExpression: "cron(0 1 ? * * *)"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt PushSchedulerFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"source": "scheduler"}'
+
+  PushDispatcherSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: PushDispatcherSchedule
+      ScheduleExpression: "rate(10 minutes)"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt PushDispatcherFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"source": "scheduler"}'
+
+  MonthlyPushSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: MonthlyPushSchedule
+      ScheduleExpression: "cron(0 0 1 * ? *)"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt MonthlyPushFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"source": "scheduler"}'
+
+  # ─────────────────────────────────────────
   # Lambda Functions（Unit 7）
   # ─────────────────────────────────────────
   LiffApiFunction:
@@ -314,6 +477,18 @@ Resources:
             ApiId: !Ref WebhookApi
             Path: /liff
             Method: GET
+        LiffOnboarding:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /liff/onboarding
+            Method: GET
+        CalendarCallback:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /api/calendar/callback
+            Method: GET
       Tags:
         Project: auto-reward-service
         Stage: prod
@@ -334,6 +509,9 @@ Outputs:
   ArsTableArn:
     Description: DynamoDB table ARN
     Value: !GetAtt ArsTable.Arn
+  ReceiptProcessingQueueArn:
+    Description: Receipt Processing SQS Queue ARN
+    Value: !GetAtt ReceiptProcessingQueue.Arn
   ArsCommonLayerArn:
     Description: Lambda Layer ARN
     Value: !Ref ArsCommonLayer
@@ -358,3 +536,12 @@ Outputs:
   LiffApiFunctionArn:
     Description: LIFF API Lambda ARN
     Value: !GetAtt LiffApiFunction.Arn
+  PushSchedulerFunctionArn:
+    Description: Push Scheduler Lambda ARN
+    Value: !GetAtt PushSchedulerFunction.Arn
+  PushDispatcherFunctionArn:
+    Description: Push Dispatcher Lambda ARN
+    Value: !GetAtt PushDispatcherFunction.Arn
+  MonthlyPushFunctionArn:
+    Description: Monthly Push Lambda ARN
+    Value: !GetAtt MonthlyPushFunction.Arn

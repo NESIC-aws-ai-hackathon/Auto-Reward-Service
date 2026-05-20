@@ -235,6 +235,7 @@ class TestProposeReward:
         assert any(kw in result for kw in ["フリーズ", "調子", "もう一回"])
 
     def test_tone_polite_対応メッセージ(self):
+        """口調廃止後: polite指定でも単一キャラ（ふれまーるちゃん）のメッセージが返る"""
         ddb = MagicMock()
         ddb.get_item.return_value = {"reward_budget_monthly": "5000"}
         ddb.query_by_pk.return_value = [{"amount": "10000"}]
@@ -244,7 +245,8 @@ class TestProposeReward:
             mock_cal.is_connected.return_value = False
             result = propose_reward("u1", "疲れた", ddb, tone="polite")
 
-        assert "ございます" in result or "ます" in result
+        # slack不足なので止めメッセージが返る（口調は廃止されたのでカツカツメッセージ）
+        assert isinstance(result, str) and len(result) > 0
 
     def test_Google_Calendarコンテキストあり_プロンプトに反映(self):
         pool_items = [_make_item("item1", price="800")]

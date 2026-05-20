@@ -97,7 +97,7 @@ class TestLoadRecentChats:
 class TestGenerateReply:
     @patch("character_reply._bedrock")
     def test_successful_reply_friendly(self, mock_bedrock):
-        mock_bedrock.invoke_text.return_value = "今日も頑張ったね！えらいよ〜😊"
+        mock_bedrock.invoke_converse.return_value = "今日も頑張ったね！えらいよ〜😊"
         mock_ddb = MagicMock()
         mock_ddb.query_by_pk.return_value = []
 
@@ -109,12 +109,12 @@ class TestGenerateReply:
             tone="friendly",
         )
         assert result == "今日も頑張ったね！えらいよ〜😊"
-        mock_bedrock.invoke_text.assert_called_once()
+        mock_bedrock.invoke_converse.assert_called_once()
 
     @patch("character_reply._bedrock")
     def test_bedrock_error_returns_fallback(self, mock_bedrock):
         from utils.exceptions import BedrockError
-        mock_bedrock.invoke_text.side_effect = BedrockError("Error")
+        mock_bedrock.invoke_converse.side_effect = BedrockError("Error")
         mock_ddb = MagicMock()
         mock_ddb.query_by_pk.return_value = []
 
@@ -128,8 +128,8 @@ class TestGenerateReply:
         assert result == FALLBACK_MESSAGES["friendly"]
 
     @patch("character_reply._bedrock")
-    def test_polite_tone_uses_polite_system_prompt(self, mock_bedrock):
-        mock_bedrock.invoke_text.return_value = "ありがとうございます。"
+    def test_polite_tone_uses_system_prompt(self, mock_bedrock):
+        mock_bedrock.invoke_converse.return_value = "ありがとうございます。"
         mock_ddb = MagicMock()
         mock_ddb.query_by_pk.return_value = []
 
@@ -140,13 +140,13 @@ class TestGenerateReply:
             ddb_service=mock_ddb,
             tone="polite",
         )
-        call_kwargs = mock_bedrock.invoke_text.call_args
+        call_kwargs = mock_bedrock.invoke_converse.call_args
         system_prompt = call_kwargs.kwargs.get("system_prompt") or ""
-        assert "polite" in system_prompt or "丁寧" in system_prompt or "敬語" in system_prompt
+        assert "ふれまーるちゃん" in system_prompt
 
     @patch("character_reply._bedrock")
-    def test_tired_emotion_injected_in_prompt(self, mock_bedrock):
-        mock_bedrock.invoke_text.return_value = "つらかったね…💖"
+    def test_tired_emotion_injected_in_system_prompt(self, mock_bedrock):
+        mock_bedrock.invoke_converse.return_value = "つらかったね…💖"
         mock_ddb = MagicMock()
         mock_ddb.query_by_pk.return_value = []
 
@@ -156,9 +156,9 @@ class TestGenerateReply:
             text="しんどい",
             ddb_service=mock_ddb,
         )
-        call_kwargs = mock_bedrock.invoke_text.call_args
-        prompt = call_kwargs.kwargs.get("prompt") or call_kwargs.args[0]
-        assert "tired" in prompt or "疲" in prompt  # 感情がプロンプトに注入されている
+        call_kwargs = mock_bedrock.invoke_converse.call_args
+        system_prompt = call_kwargs.kwargs.get("system_prompt") or ""
+        assert "tired" in system_prompt  # 感情がシステムプロンプトに注入されている
 
     @patch("character_reply._bedrock")
     def test_fallback_message_per_tone(self, mock_bedrock):
@@ -171,7 +171,7 @@ class TestGenerateReply:
 
     @patch("character_reply._bedrock")
     def test_reply_is_stripped(self, mock_bedrock):
-        mock_bedrock.invoke_text.return_value = "  こんにちは！  \n"
+        mock_bedrock.invoke_converse.return_value = "  こんにちは！  \n"
         mock_ddb = MagicMock()
         mock_ddb.query_by_pk.return_value = []
 

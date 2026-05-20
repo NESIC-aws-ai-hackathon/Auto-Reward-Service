@@ -32,10 +32,10 @@ logger = get_logger(__name__)
 # 定数
 # ─────────────────────────────────────────
 RAKUTEN_SEARCH_URL = (
-    "https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706"
+    "https://openapi.rakuten.co.jp/ichibams/api/IchibaItem/Search/20260401"
 )
 RAKUTEN_TRAVEL_URL = (
-    "https://app.rakuten.co.jp/services/api/Travel/KeywordHotelSearch/20170426"
+    "https://openapi.rakuten.co.jp/engine/api/Travel/KeywordHotelSearch/20170426"
 )
 MAX_RETRIES = 3
 BACKOFF_BASE = 1.0          # 秒
@@ -93,26 +93,33 @@ class RakutenHotel:
 # モジュールレベルキャッシュ（Secrets Manager）
 # ─────────────────────────────────────────
 _cached_app_id: Optional[str] = None
+_cached_access_key: Optional[str] = None
 
 
-def _get_app_id() -> str:
-    """楽天 AppID を Secrets Manager から取得し Lambda コンテキスト内でキャッシュする"""
-    global _cached_app_id
-    if _cached_app_id is not None:
-        return _cached_app_id
+def _get_credentials() -> tuple[str, str]:
+    """楽天 AppID + AccessKey を Secrets Manager から取得し Lambda コンテキスト内でキャッシュする"""
+    global _cached_app_id, _cached_access_key
+    if _cached_app_id is not None and _cached_access_key is not None:
+        return _cached_app_id, _cached_access_key
 
     secret_name = os.environ.get("RAKUTEN_SECRET_NAME", "ars/rakuten")
     try:
         secrets = get_secret(secret_name)
         app_id = secrets.get("RAKUTEN_APP_ID")
+        access_key = secrets.get("RAKUTEN_ACCESS_KEY")
         if not app_id:
             raise RakutenAPIError(
                 f"RAKUTEN_APP_ID が {secret_name} に存在しません"
             )
+        if not access_key:
+            raise RakutenAPIError(
+                f"RAKUTEN_ACCESS_KEY が {secret_name} に存在しません"
+            )
         _cached_app_id = app_id
-        return _cached_app_id
+        _cached_access_key = access_key
+        return _cached_app_id, _cached_access_key
     except SecretsError as exc:
-        raise RakutenAPIError("楽天 AppID の取得に失敗しました", exc) from exc
+        raise RakutenAPIError("楽天認証情報の取得に失敗しました", exc) from exc
 
 
 # ─────────────────────────────────────────
@@ -215,9 +222,10 @@ def search_products(
     Raises:
         RakutenAPIError: HTTP 通信が MAX_RETRIES 回失敗した場合
     """
-    app_id = _get_app_id()
+    app_id, access_key = _get_credentials()
     params: dict[str, Any] = {
         "applicationId": app_id,
+        "accessKey": access_key,
         "keyword": keyword,
         "hits": hits,
         "sort": "+reviewAverage",
@@ -299,9 +307,10 @@ def search_hotels(
     Raises:
         RakutenAPIError: HTTP 通信が MAX_RETRIES 回失敗した場合
     """
-    app_id = _get_app_id()
+    app_id, access_key = _get_credentials()
     params: dict[str, Any] = {
         "applicationId": app_id,
+        "accessKey": access_key,
         "keyword": keyword,
         "hits": hits,
         "formatVersion": 2,

@@ -20,6 +20,10 @@ Globals:
         BEDROCK_INTENT_MODEL_ID: amazon.nova-lite-v1:0
         DAILY_CHAT_LIMIT: '50'
         LIFF_URL: ''
+        CART_AUTOMATION_MODE: stub
+        ENABLE_REAL_PURCHASE: 'false'
+        NOVA_ACT_DEMO_MODE: 'true'
+        MAX_PURCHASE_AMOUNT: '1000'
     Layers:
     - Ref: ArsCommonLayer
     Tracing: PassThrough
@@ -69,7 +73,7 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: ArsCommonLayer
-      ContentUri: ..\..\layer
+      ContentUri: ..\..\layer.zip
       CompatibleRuntimes:
       - python3.13
       RetentionPolicy: Retain
@@ -86,6 +90,7 @@ Resources:
           Action: sts:AssumeRole
       ManagedPolicyArns:
       - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
       - PolicyName: ArsDynamoDBPolicy
         PolicyDocument:
@@ -123,6 +128,7 @@ Resources:
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/line*
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/google*
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/rakuten*
+            - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/hotpepper*
       - PolicyName: ArsSQSPolicy
         PolicyDocument:
           Version: '2012-10-17'
@@ -144,6 +150,7 @@ Resources:
       CorsConfiguration:
         AllowOrigins:
         - https://liff.line.me
+        - '*'
         AllowMethods:
         - GET
         - PUT
@@ -185,6 +192,8 @@ Resources:
         Variables:
           RECEIPT_QUEUE_URL:
             Ref: ReceiptProcessingQueue
+          USE_MOCK_LOCATION: 'false'
+          HOTPEPPER_SECRET_NAME: ars/hotpepper/api-key
       Events:
         WebhookPost:
           Type: HttpApi
@@ -230,16 +239,10 @@ Resources:
               - RewardPoolUpdaterFunction
               - Arn
             - Fn::GetAtt:
-              - PushSchedulerFunction
-              - Arn
-            - Fn::GetAtt:
-              - PushDispatcherFunction
-              - Arn
-            - Fn::GetAtt:
-              - MonthlyPushFunction
-              - Arn
-            - Fn::GetAtt:
               - ReceiptProcessorFunction
+              - Arn
+            - Fn::GetAtt:
+              - PwaTemptationFunction
               - Arn
   WarmupWebhookScheduler:
     Type: AWS::Scheduler::Schedule
@@ -302,6 +305,13 @@ Resources:
         Fn::GetAtt:
         - ArsLambdaRole
         - Arn
+      VpcConfig:
+        SubnetIds:
+        - subnet-05abb8037eca46a32
+        - subnet-0dfb67c2b0be42f60
+        - subnet-0dfdde586a91d0dc7
+        SecurityGroupIds:
+        - sg-070161197823ac4d3
       Environment:
         Variables:
           RAKUTEN_DEFAULT_KEYWORDS: "\u30B9\u30A4\u30FC\u30C4,\u30B3\u30B9\u30E1,\u672C\
@@ -311,7 +321,7 @@ Resources:
           HOTPEPPER_SECRET_NAME: ars/hotpepper/api-key
           ENABLE_HOTEL_SEARCH: 'true'
           HOTEL_HITS_PER_KEYWORD: '3'
-          ENABLE_RESTAURANT_SEARCH: 'false'
+          ENABLE_RESTAURANT_SEARCH: 'true'
           RESTAURANT_HITS_PER_KEYWORD: '3'
       Tags:
         Project: auto-reward-service
@@ -341,126 +351,70 @@ Resources:
           - SchedulerExecutionRole
           - Arn
         Input: '{"source": "scheduler"}'
-  PushSchedulerFunction:
+  PwaTemptationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: PushSchedulerFunction
-      Handler: handlers.push_scheduler_handler.handler
-      CodeUri: PushSchedulerFunction
-      MemorySize: 256
-      Timeout: 60
+      FunctionName: PwaTemptationFunction
+      Handler: handlers.pwa_temptation.handler
+      CodeUri: PwaTemptationFunction
+      MemorySize: 512
+      Timeout: 30
       Role:
         Fn::GetAtt:
         - ArsLambdaRole
         - Arn
+      Environment:
+        Variables:
+          USE_MOCK_LOCATION: 'false'
+          HOTPEPPER_SECRET_NAME: ars/hotpepper/api-key
+          PWA_ORIGIN: https://liff.line.me
+      Events:
+        StartTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /api/temptation/start
+            Method: POST
+        AcceptTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /api/temptation/accept
+            Method: POST
+        TemptationHistory:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /api/temptation/history
+            Method: GET
+        CompleteTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /api/temptation/complete
+            Method: POST
+        GeocodeTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /api/temptation/geocode
+            Method: POST
       Tags:
         Project: auto-reward-service
         Stage: prod
     Metadata:
-      SamResourceId: PushSchedulerFunction
-  PushDispatcherFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: PushDispatcherFunction
-      Handler: handlers.push_dispatcher_handler.handler
-      CodeUri: PushDispatcherFunction
-      MemorySize: 256
-      Timeout: 120
-      Role:
-        Fn::GetAtt:
-        - ArsLambdaRole
-        - Arn
-      Tags:
-        Project: auto-reward-service
-        Stage: prod
-    Metadata:
-      SamResourceId: PushDispatcherFunction
-  MonthlyPushFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: MonthlyPushFunction
-      Handler: handlers.monthly_push_handler.handler
-      CodeUri: MonthlyPushFunction
-      MemorySize: 256
-      Timeout: 120
-      Role:
-        Fn::GetAtt:
-        - ArsLambdaRole
-        - Arn
-      Tags:
-        Project: auto-reward-service
-        Stage: prod
-    Metadata:
-      SamResourceId: MonthlyPushFunction
-  PushSchedulerFunctionLogGroup:
+      SamResourceId: PwaTemptationFunction
+  PwaTemptationFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName:
-        Fn::Sub: /aws/lambda/${PushSchedulerFunction}
+        Fn::Sub: /aws/lambda/${PwaTemptationFunction}
       RetentionInDays: 30
-  PushDispatcherFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName:
-        Fn::Sub: /aws/lambda/${PushDispatcherFunction}
-      RetentionInDays: 30
-  MonthlyPushFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName:
-        Fn::Sub: /aws/lambda/${MonthlyPushFunction}
-      RetentionInDays: 30
-  PushSchedulerSchedule:
-    Type: AWS::Scheduler::Schedule
-    Properties:
-      Name: PushSchedulerSchedule
-      ScheduleExpression: cron(0 1 ? * * *)
-      FlexibleTimeWindow:
-        Mode: 'OFF'
-      Target:
-        Arn:
-          Fn::GetAtt:
-          - PushSchedulerFunction
-          - Arn
-        RoleArn:
-          Fn::GetAtt:
-          - SchedulerExecutionRole
-          - Arn
-        Input: '{"source": "scheduler"}'
-  PushDispatcherSchedule:
-    Type: AWS::Scheduler::Schedule
-    Properties:
-      Name: PushDispatcherSchedule
-      ScheduleExpression: rate(10 minutes)
-      FlexibleTimeWindow:
-        Mode: 'OFF'
-      Target:
-        Arn:
-          Fn::GetAtt:
-          - PushDispatcherFunction
-          - Arn
-        RoleArn:
-          Fn::GetAtt:
-          - SchedulerExecutionRole
-          - Arn
-        Input: '{"source": "scheduler"}'
-  MonthlyPushSchedule:
-    Type: AWS::Scheduler::Schedule
-    Properties:
-      Name: MonthlyPushSchedule
-      ScheduleExpression: cron(0 0 1 * ? *)
-      FlexibleTimeWindow:
-        Mode: 'OFF'
-      Target:
-        Arn:
-          Fn::GetAtt:
-          - MonthlyPushFunction
-          - Arn
-        RoleArn:
-          Fn::GetAtt:
-          - SchedulerExecutionRole
-          - Arn
-        Input: '{"source": "scheduler"}'
   LiffApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -468,7 +422,7 @@ Resources:
       Handler: handlers.liff_api.handler
       CodeUri: LiffApiFunction
       MemorySize: 256
-      Timeout: 10
+      Timeout: 30
       Role:
         Fn::GetAtt:
         - ArsLambdaRole
@@ -476,6 +430,8 @@ Resources:
       Environment:
         Variables:
           LIFF_CHANNEL_ID: '2010106872'
+          USE_MOCK_LOCATION: 'false'
+          HOTPEPPER_SECRET_NAME: ars/hotpepper/api-key
       Events:
         LiffApiProxy:
           Type: HttpApi
@@ -497,6 +453,13 @@ Resources:
             ApiId:
               Ref: WebhookApi
             Path: /liff/onboarding
+            Method: GET
+        LiffTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /liff/temptation
             Method: GET
         CalendarCallback:
           Type: HttpApi
@@ -573,21 +536,9 @@ Outputs:
       Fn::GetAtt:
       - LiffApiFunction
       - Arn
-  PushSchedulerFunctionArn:
-    Description: Push Scheduler Lambda ARN
+  PwaTemptationFunctionArn:
+    Description: PWA Temptation API Lambda ARN
     Value:
       Fn::GetAtt:
-      - PushSchedulerFunction
-      - Arn
-  PushDispatcherFunctionArn:
-    Description: Push Dispatcher Lambda ARN
-    Value:
-      Fn::GetAtt:
-      - PushDispatcherFunction
-      - Arn
-  MonthlyPushFunctionArn:
-    Description: Monthly Push Lambda ARN
-    Value:
-      Fn::GetAtt:
-      - MonthlyPushFunction
+      - PwaTemptationFunction
       - Arn

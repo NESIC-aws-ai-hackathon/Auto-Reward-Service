@@ -20,6 +20,11 @@ Globals:
         BEDROCK_INTENT_MODEL_ID: "amazon.nova-lite-v1:0"
         DAILY_CHAT_LIMIT: "50"
         LIFF_URL: ""
+        # カート搬送 / Nova Act 設定 (変更依頼書_2 §8, §14)
+        CART_AUTOMATION_MODE: "stub"
+        ENABLE_REAL_PURCHASE: "false"
+        NOVA_ACT_DEMO_MODE: "true"
+        MAX_PURCHASE_AMOUNT: "1000"
     Layers:
       - !Ref ArsCommonLayer
     Tracing: PassThrough
@@ -78,7 +83,7 @@ Resources:
     Type: AWS::Serverless::LayerVersion
     Properties:
       LayerName: ArsCommonLayer
-      ContentUri: layer/
+      ContentUri: layer.zip
       CompatibleRuntimes:
         - python3.13
       RetentionPolicy: Retain
@@ -99,6 +104,7 @@ Resources:
             Action: sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
       Policies:
         - PolicyName: ArsDynamoDBPolicy
           PolicyDocument:
@@ -134,6 +140,7 @@ Resources:
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/line*"
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/google*"
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/rakuten*"
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/hotpepper*"
         - PolicyName: ArsSQSPolicy
           PolicyDocument:
             Version: '2012-10-17'
@@ -164,6 +171,7 @@ Resources:
       CorsConfiguration:
         AllowOrigins:
           - "https://liff.line.me"
+          - "*"
         AllowMethods:
           - GET
           - PUT
@@ -208,6 +216,8 @@ Resources:
       Environment:
         Variables:
           RECEIPT_QUEUE_URL: !Ref ReceiptProcessingQueue
+          USE_MOCK_LOCATION: "false"
+          HOTPEPPER_SECRET_NAME: "ars/hotpepper/api-key"
       Events:
         WebhookPost:
           Type: HttpApi
@@ -252,10 +262,8 @@ Resources:
                 Resource:
                   - !GetAtt WebhookHandlerFunction.Arn
                   - !GetAtt RewardPoolUpdaterFunction.Arn
-                  - !GetAtt PushSchedulerFunction.Arn
-                  - !GetAtt PushDispatcherFunction.Arn
-                  - !GetAtt MonthlyPushFunction.Arn
                   - !GetAtt ReceiptProcessorFunction.Arn
+                  - !GetAtt PwaTemptationFunction.Arn
 
   WarmupWebhookScheduler:
     Type: AWS::Scheduler::Schedule
@@ -309,6 +317,13 @@ Resources:
       MemorySize: 256
       Timeout: 300
       Role: !GetAtt ArsLambdaRole.Arn
+      VpcConfig:
+        SubnetIds:
+          - subnet-05abb8037eca46a32  # private1 ap-northeast-1a
+          - subnet-0dfb67c2b0be42f60  # private2 ap-northeast-1c
+          - subnet-0dfdde586a91d0dc7  # private3 ap-northeast-1d
+        SecurityGroupIds:
+          - sg-070161197823ac4d3  # lambda-basic-sahred
       Environment:
         Variables:
           RAKUTEN_DEFAULT_KEYWORDS: "スイーツ,コスメ,本,入浴剤,アロマ"
@@ -317,7 +332,7 @@ Resources:
           HOTPEPPER_SECRET_NAME: "ars/hotpepper/api-key"
           ENABLE_HOTEL_SEARCH: "true"
           HOTEL_HITS_PER_KEYWORD: "3"
-          ENABLE_RESTAURANT_SEARCH: "false"
+          ENABLE_RESTAURANT_SEARCH: "true"
           RESTAURANT_HITS_PER_KEYWORD: "3"
       Tags:
         Project: auto-reward-service
@@ -348,106 +363,62 @@ Resources:
         Input: '{"source": "scheduler"}'
 
   # ─────────────────────────────────────────
-  # Lambda Functions（Unit 6: Push 通知）
+  # Lambda Functions（PWA 寄り道レーン API）
   # ─────────────────────────────────────────
-  PushSchedulerFunction:
+  PwaTemptationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: PushSchedulerFunction
-      Handler: handlers.push_scheduler_handler.handler
+      FunctionName: PwaTemptationFunction
+      Handler: handlers.pwa_temptation.handler
       CodeUri: src/
-      MemorySize: 256
-      Timeout: 60
+      MemorySize: 512
+      Timeout: 30
       Role: !GetAtt ArsLambdaRole.Arn
+      Environment:
+        Variables:
+          USE_MOCK_LOCATION: "false"
+          HOTPEPPER_SECRET_NAME: "ars/hotpepper/api-key"
+          PWA_ORIGIN: "https://liff.line.me"
+      Events:
+        StartTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /api/temptation/start
+            Method: POST
+        AcceptTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /api/temptation/accept
+            Method: POST
+        TemptationHistory:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /api/temptation/history
+            Method: GET
+        CompleteTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /api/temptation/complete
+            Method: POST
+        GeocodeTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /api/temptation/geocode
+            Method: POST
       Tags:
         Project: auto-reward-service
         Stage: prod
 
-  PushDispatcherFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: PushDispatcherFunction
-      Handler: handlers.push_dispatcher_handler.handler
-      CodeUri: src/
-      MemorySize: 256
-      Timeout: 120
-      Role: !GetAtt ArsLambdaRole.Arn
-      Tags:
-        Project: auto-reward-service
-        Stage: prod
-
-  MonthlyPushFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: MonthlyPushFunction
-      Handler: handlers.monthly_push_handler.handler
-      CodeUri: src/
-      MemorySize: 256
-      Timeout: 120
-      Role: !GetAtt ArsLambdaRole.Arn
-      Tags:
-        Project: auto-reward-service
-        Stage: prod
-
-  # ─────────────────────────────────────────
-  # CloudWatch Logs（Unit 6）
-  # ─────────────────────────────────────────
-  PushSchedulerFunctionLogGroup:
+  PwaTemptationFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub "/aws/lambda/${PushSchedulerFunction}"
+      LogGroupName: !Sub "/aws/lambda/${PwaTemptationFunction}"
       RetentionInDays: 30
-
-  PushDispatcherFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${PushDispatcherFunction}"
-      RetentionInDays: 30
-
-  MonthlyPushFunctionLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: !Sub "/aws/lambda/${MonthlyPushFunction}"
-      RetentionInDays: 30
-
-  # ─────────────────────────────────────────
-  # EventBridge Scheduler（Unit 6）
-  # ─────────────────────────────────────────
-  PushSchedulerSchedule:
-    Type: AWS::Scheduler::Schedule
-    Properties:
-      Name: PushSchedulerSchedule
-      ScheduleExpression: "cron(0 1 ? * * *)"
-      FlexibleTimeWindow:
-        Mode: "OFF"
-      Target:
-        Arn: !GetAtt PushSchedulerFunction.Arn
-        RoleArn: !GetAtt SchedulerExecutionRole.Arn
-        Input: '{"source": "scheduler"}'
-
-  PushDispatcherSchedule:
-    Type: AWS::Scheduler::Schedule
-    Properties:
-      Name: PushDispatcherSchedule
-      ScheduleExpression: "rate(10 minutes)"
-      FlexibleTimeWindow:
-        Mode: "OFF"
-      Target:
-        Arn: !GetAtt PushDispatcherFunction.Arn
-        RoleArn: !GetAtt SchedulerExecutionRole.Arn
-        Input: '{"source": "scheduler"}'
-
-  MonthlyPushSchedule:
-    Type: AWS::Scheduler::Schedule
-    Properties:
-      Name: MonthlyPushSchedule
-      ScheduleExpression: "cron(0 0 1 * ? *)"
-      FlexibleTimeWindow:
-        Mode: "OFF"
-      Target:
-        Arn: !GetAtt MonthlyPushFunction.Arn
-        RoleArn: !GetAtt SchedulerExecutionRole.Arn
-        Input: '{"source": "scheduler"}'
 
   # ─────────────────────────────────────────
   # Lambda Functions（Unit 7）
@@ -459,11 +430,13 @@ Resources:
       Handler: handlers.liff_api.handler
       CodeUri: src/
       MemorySize: 256
-      Timeout: 10
+      Timeout: 30
       Role: !GetAtt ArsLambdaRole.Arn
       Environment:
         Variables:
           LIFF_CHANNEL_ID: "2010106872"
+          USE_MOCK_LOCATION: "false"
+          HOTPEPPER_SECRET_NAME: "ars/hotpepper/api-key"
       Events:
         LiffApiProxy:
           Type: HttpApi
@@ -482,6 +455,12 @@ Resources:
           Properties:
             ApiId: !Ref WebhookApi
             Path: /liff/onboarding
+            Method: GET
+        LiffTemptation:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /liff/temptation
             Method: GET
         CalendarCallback:
           Type: HttpApi
@@ -536,12 +515,6 @@ Outputs:
   LiffApiFunctionArn:
     Description: LIFF API Lambda ARN
     Value: !GetAtt LiffApiFunction.Arn
-  PushSchedulerFunctionArn:
-    Description: Push Scheduler Lambda ARN
-    Value: !GetAtt PushSchedulerFunction.Arn
-  PushDispatcherFunctionArn:
-    Description: Push Dispatcher Lambda ARN
-    Value: !GetAtt PushDispatcherFunction.Arn
-  MonthlyPushFunctionArn:
-    Description: Monthly Push Lambda ARN
-    Value: !GetAtt MonthlyPushFunction.Arn
+  PwaTemptationFunctionArn:
+    Description: PWA Temptation API Lambda ARN
+    Value: !GetAtt PwaTemptationFunction.Arn

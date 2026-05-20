@@ -106,8 +106,8 @@ class TestParseResponse:
 class TestSearchProducts:
     @patch("services.rakuten_service.time.sleep", return_value=None)
     @patch("services.rakuten_service.requests.get")
-    @patch("services.rakuten_service._get_app_id", return_value="TEST_APP_ID")
-    def test_正常系_商品リストを返す(self, mock_app_id, mock_get, mock_sleep):
+    @patch("services.rakuten_service._get_credentials", return_value=("TEST_APP_ID", "TEST_ACCESS_KEY"))
+    def test_正常系_商品リストを返す(self, mock_creds, mock_get, mock_sleep):
         mock_response = MagicMock()
         mock_response.json.return_value = MOCK_RAKUTEN_RESPONSE
         mock_response.raise_for_status.return_value = None
@@ -121,8 +121,8 @@ class TestSearchProducts:
 
     @patch("services.rakuten_service.time.sleep", return_value=None)
     @patch("services.rakuten_service.requests.get")
-    @patch("services.rakuten_service._get_app_id", return_value="TEST_APP_ID")
-    def test_リトライ3回失敗でRakutenAPIError(self, mock_app_id, mock_get, mock_sleep):
+    @patch("services.rakuten_service._get_credentials", return_value=("TEST_APP_ID", "TEST_ACCESS_KEY"))
+    def test_リトライ3回失敗でRakutenAPIError(self, mock_creds, mock_get, mock_sleep):
         from requests.exceptions import ConnectionError as RequestsConnectionError
         mock_get.side_effect = RequestsConnectionError("接続失敗")
 
@@ -134,8 +134,8 @@ class TestSearchProducts:
 
     @patch("services.rakuten_service.time.sleep", return_value=None)
     @patch("services.rakuten_service.requests.get")
-    @patch("services.rakuten_service._get_app_id", return_value="TEST_APP_ID")
-    def test_1回失敗後2回目成功(self, mock_app_id, mock_get, mock_sleep):
+    @patch("services.rakuten_service._get_credentials", return_value=("TEST_APP_ID", "TEST_ACCESS_KEY"))
+    def test_1回失敗後2回目成功(self, mock_creds, mock_get, mock_sleep):
         from requests.exceptions import Timeout
         success_response = MagicMock()
         success_response.json.return_value = MOCK_RAKUTEN_RESPONSE
@@ -150,8 +150,8 @@ class TestSearchProducts:
 
     @patch("services.rakuten_service.time.sleep", return_value=None)
     @patch("services.rakuten_service.requests.get")
-    @patch("services.rakuten_service._get_app_id", return_value="TEST_APP_ID")
-    def test_価格パラメータが送信される(self, mock_app_id, mock_get, mock_sleep):
+    @patch("services.rakuten_service._get_credentials", return_value=("TEST_APP_ID", "TEST_ACCESS_KEY"))
+    def test_価格パラメータが送信される(self, mock_creds, mock_get, mock_sleep):
         mock_response = MagicMock()
         mock_response.json.return_value = {"Items": []}
         mock_response.raise_for_status.return_value = None
@@ -245,8 +245,8 @@ class TestParseHotelResponse:
 class TestSearchHotels:
     @patch("services.rakuten_service.time.sleep", return_value=None)
     @patch("services.rakuten_service.requests.get")
-    @patch("services.rakuten_service._get_app_id", return_value="TEST_APP_ID")
-    def test_正常系_ホテルリストを返す(self, mock_app_id, mock_get, mock_sleep):
+    @patch("services.rakuten_service._get_credentials", return_value=("TEST_APP_ID", "TEST_ACCESS_KEY"))
+    def test_正常系_ホテルリストを返す(self, mock_creds, mock_get, mock_sleep):
         mock_response = MagicMock()
         mock_response.json.return_value = MOCK_HOTEL_RESPONSE
         mock_response.raise_for_status.return_value = None
@@ -262,8 +262,8 @@ class TestSearchHotels:
 
     @patch("services.rakuten_service.time.sleep", return_value=None)
     @patch("services.rakuten_service.requests.get")
-    @patch("services.rakuten_service._get_app_id", return_value="TEST_APP_ID")
-    def test_全失敗_RakutenAPIError(self, mock_app_id, mock_get, mock_sleep):
+    @patch("services.rakuten_service._get_credentials", return_value=("TEST_APP_ID", "TEST_ACCESS_KEY"))
+    def test_全失敗_RakutenAPIError(self, mock_creds, mock_get, mock_sleep):
         from requests.exceptions import ConnectionError
         mock_get.side_effect = ConnectionError("接続失敗")
 

@@ -35,6 +35,14 @@ SK_PREFIX_PUSH_LOG = "PUSH_LOG#"
 SK_PUSH_SETTINGS = "PUSH_SETTINGS#"
 SK_PREFIX_PUSH_QUEUE = "PUSH_QUEUE#"
 
+# 変更依頼書_2 追加分
+SK_PREFIX_WISHLIST_SOURCE = "WISHLIST_SOURCE#"
+SK_PREFIX_WISHLIST_ITEM = "WISHLIST_ITEM#"
+SK_PREFIX_RECOMMENDATION = "RECOMMENDATION#"
+SK_PREFIX_NOTIFICATION = "NOTIFICATION#"
+SK_PREFIX_CART_AUTOMATION_JOB = "CART_AUTOMATION_JOB#"
+SK_PREFIX_BROWSER_SESSION = "BROWSER_SESSION#"
+
 # entityType GSI 値
 ENTITY_PROFILE = "PROFILE"
 ENTITY_PREF_MEMORY = "PREF_MEMORY"
@@ -332,3 +340,148 @@ class RewardSuggestion(_ArsBase):
     price: Optional[Decimal] = None
     proposed_at: str
     outcome: Optional[str] = None           # "bought" | "skip" | None
+
+
+# ─────────────────────────────────────────
+# 公開ほしい物リスト / 欲望在庫
+# ─────────────────────────────────────────
+class WishlistSource(_ArsBase):
+    """DynamoDB: PK=USER#{id}  SK=WISHLIST_SOURCE#{wishlistSourceId}"""
+
+    pk: str
+    sk: str
+    wishlist_source_id: str
+    user_id: str
+    source_type: str = "AMAZON_PUBLIC_WISHLIST"
+    wishlist_url: str
+    display_name: Optional[str] = None
+    status: str = "ACTIVE"  # ACTIVE | SYNC_FAILED | DISABLED
+    last_synced_at: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class WishlistItem(_ArsBase):
+    """DynamoDB: PK=USER#{id}  SK=WISHLIST_ITEM#{wishlistItemId}"""
+
+    pk: str
+    sk: str
+    wishlist_item_id: str
+    wishlist_source_id: str
+    user_id: str
+    product_id: Optional[str] = None
+    product_title: str
+    product_url: str
+    product_image_url: Optional[str] = None
+    price: Optional[Decimal] = None
+    currency: str = "JPY"
+    category: Optional[str] = None
+    availability: Optional[str] = None
+    first_seen_at: str
+    last_seen_at: str
+    desire_aging_days: int = 0
+    recommendation_score: Optional[float] = None
+    status: str = "ACTIVE"  # ACTIVE | RECOMMENDED | CART_ADDED | DECLINED | PURCHASED | UNAVAILABLE
+    created_at: str
+    updated_at: str
+
+
+# ─────────────────────────────────────────
+# レコメンド
+# ─────────────────────────────────────────
+class Recommendation(_ArsBase):
+    """DynamoDB: PK=USER#{id}  SK=RECOMMENDATION#{recommendationId}"""
+
+    pk: str
+    sk: str
+    recommendation_id: str
+    user_id: str
+    type: str = "WISHLIST_PRODUCT"  # WISHLIST_PRODUCT | LOCATION_STORE | MANUAL_DEMO
+    title: str
+    description: Optional[str] = None
+    reason_text: str = ""
+    product_url: Optional[str] = None
+    product_image_url: Optional[str] = None
+    store_id: Optional[str] = None
+    price: Optional[Decimal] = None
+    status: str = "RECOMMENDED"
+    # RECOMMENDED | NOTIFICATION_SENT | CART_ADDING | CART_ADDED |
+    # WAITING_USER_DECISION | DECLINED | CART_REMOVING | REMOVED_FROM_CART |
+    # PURCHASE_CONFIRMATION_REQUIRED | PURCHASE_APPROVED | PURCHASING |
+    # PURCHASED | PURCHASE_SIMULATED | PURCHASE_FAILED | ERROR
+    created_at: str
+    updated_at: str
+
+
+# ─────────────────────────────────────────
+# ふれまーるちゃん通知
+# ─────────────────────────────────────────
+class FuremaruNotification(_ArsBase):
+    """DynamoDB: PK=USER#{id}  SK=NOTIFICATION#{notificationId}"""
+
+    pk: str
+    sk: str
+    notification_id: str
+    user_id: str
+    recommendation_id: Optional[str] = None
+    type: str = "RECOMMENDATION"
+    # RECOMMENDATION | CART_ADDED | LOCATION_RECOMMENDATION |
+    # MONTHLY_REMAINING | SYSTEM | LOGIN_REQUIRED | PURCHASE_READY
+    title: str
+    message_text: str
+    status: str = "CREATED"  # CREATED | SENT | OPENED | EXPIRED
+    created_at: str
+    expires_at: Optional[str] = None
+
+
+# ─────────────────────────────────────────
+# カート搬送ジョブ
+# ─────────────────────────────────────────
+class CartAutomationJob(_ArsBase):
+    """DynamoDB: PK=USER#{id}  SK=CART_AUTOMATION_JOB#{jobId}"""
+
+    pk: str
+    sk: str
+    job_id: str
+    user_id: str
+    recommendation_id: str
+    action: str = "ADD_TO_CART"  # ADD_TO_CART | REMOVE_FROM_CART | PURCHASE
+    provider: str = "STUB"  # STUB | NOVA_ACT
+    mode: str = "stub"  # stub | nova_act | hybrid
+    status: str = "QUEUED"
+    # QUEUED | RUNNING | LOGIN_REQUIRED | MFA_REQUIRED | CAPTCHA_REQUIRED |
+    # USER_TAKEOVER_REQUIRED | READY_TO_PURCHASE | SUCCEEDED | FAILED | CANCELLED
+    product_url: Optional[str] = None
+    expected_product_title: Optional[str] = None
+    expected_price: Optional[Decimal] = None
+    quantity: int = 1
+    max_allowed_price: Decimal = Decimal("1000")
+    explicit_approval_text: Optional[str] = None
+    fallback_reason: Optional[str] = None
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    evidence_screenshot_key: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+# ─────────────────────────────────────────
+# ブラウザセッション
+# ─────────────────────────────────────────
+class BrowserSession(_ArsBase):
+    """DynamoDB: PK=USER#{id}  SK=BROWSER_SESSION#{browserSessionId}"""
+
+    pk: str
+    sk: str
+    browser_session_id: str
+    user_id: str
+    provider: str = "NOVA_ACT"
+    status: str = "NOT_CONNECTED"
+    # NOT_CONNECTED | LOGIN_REQUIRED | ACTIVE | EXPIRED | REVOKED | ERROR
+    session_storage_key: Optional[str] = None
+    last_used_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    created_at: str
+    updated_at: str

@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>寄り道レーン | ふれまーるちゃん</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif; background: #f8f9fa; color: #333; min-height: 100vh; }
+.header { background: linear-gradient(135deg, #ff6b9d, #c44dff); color: #fff; padding: 16px 20px; text-align: center; position: sticky; top: 0; z-index: 100; }
+.header h1 { font-size: 18px; font-weight: 700; }
+.container { padding: 20px; max-width: 480px; margin: 0 auto; }
+
+/* 初期画面 */
+.phase { display: none; }
+.phase.active { display: block; }
+
+.intro-text { text-align: center; margin: 40px 0 30px; font-size: 16px; line-height: 1.8; color: #555; }
+.intro-text .emoji { font-size: 48px; display: block; margin-bottom: 16px; }
+
+.btn-primary { display: block; width: 100%; padding: 16px; background: linear-gradient(135deg, #ff6b9d, #c44dff); color: #fff; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; text-align: center; }
+.btn-primary:active { opacity: 0.8; }
+.btn-secondary { display: block; width: 100%; padding: 14px; background: #fff; color: #c44dff; border: 2px solid #c44dff; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; text-align: center; margin-top: 12px; }
+
+/* ローディング */
+.loading-text { text-align: center; margin: 60px 0; font-size: 15px; color: #888; line-height: 2; }
+.spinner { width: 40px; height: 40px; border: 4px solid #eee; border-top-color: #c44dff; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 20px auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* レーンカード */
+.lane-card { background: #fff; border-radius: 16px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 2px solid transparent; transition: border-color 0.2s; }
+.lane-card.recommended { border-color: #ff6b9d; }
+.lane-card .badge { display: inline-block; background: linear-gradient(135deg, #ff6b9d, #c44dff); color: #fff; font-size: 11px; padding: 3px 8px; border-radius: 8px; margin-bottom: 8px; }
+.lane-title { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+.lane-place { font-size: 14px; color: #666; margin-bottom: 4px; }
+.lane-price { font-size: 13px; color: #999; margin-bottom: 12px; }
+.lane-btn { display: block; width: 100%; padding: 12px; background: #f0e6ff; color: #7c3aed; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.lane-btn:active { background: #e0d0ff; }
+.lane-link { display: inline-block; margin-top: 6px; padding: 6px 14px; background: #ff6b9d; color: #fff; text-decoration: none; border-radius: 8px; font-size: 12px; font-weight: 600; }
+.lane-link:hover { opacity: 0.85; }
+.lane-meta { font-size: 12px; color: #999; margin-bottom: 4px; }
+.lane-image { width: 100%; height: 120px; object-fit: cover; border-radius: 10px; margin-bottom: 10px; }
+
+/* おすすめ理由 */
+.reason-box { background: #fff; border-radius: 16px; padding: 16px 20px; margin: 20px 0; border-left: 4px solid #ff6b9d; }
+.reason-box .label { font-size: 12px; color: #ff6b9d; font-weight: 700; margin-bottom: 6px; }
+.reason-box .text { font-size: 14px; line-height: 1.7; }
+
+/* 予算情報 */
+.budget-info { background: #fff; border-radius: 12px; padding: 14px 18px; margin-top: 16px; display: flex; justify-content: space-between; font-size: 13px; color: #666; }
+.budget-info .amount { font-weight: 700; color: #333; }
+
+/* ジャンル選択ボタン */
+.genre-btn { padding: 14px 8px; background: #fff; border: 2px solid #eee; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+.genre-btn:active { transform: scale(0.95); }
+.genre-btn.selected { border-color: #c44dff; background: #f8f0ff; color: #7c3aed; }
+
+/* 完了画面 */
+.done-box { text-align: center; margin: 60px 0; }
+.done-box .emoji { font-size: 56px; margin-bottom: 16px; }
+.done-box .msg { font-size: 16px; line-height: 1.8; color: #555; }
+
+/* フォールバック入力 */
+.fallback-input { width: 100%; padding: 14px; border: 2px solid #ddd; border-radius: 10px; font-size: 15px; margin: 12px 0; }
+.fallback-input:focus { outline: none; border-color: #c44dff; }
+.fallback-hint { font-size: 12px; color: #999; margin-bottom: 16px; }
+</style>
+</head>
+<body>
+<div class="header"><h1>🎀 寄り道レーン</h1></div>
+<div class="container">
+
+  <!-- Phase 1: 初期画面（ジャンル選択 + 位置取得） -->
+  <div id="phase-intro" class="phase active">
+    <div class="intro-text">
+      <span class="emoji">🗺️</span>
+      今日はどんな寄り道がしたい？<br>
+      気分を選んだら探すよ！🌿
+    </div>
+    <div id="genre-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px;">
+      <button class="genre-btn" data-genre="カフェ" onclick="selectGenre(this)">☕ カフェ</button>
+      <button class="genre-btn" data-genre="スイーツ" onclick="selectGenre(this)">🍰 スイーツ</button>
+      <button class="genre-btn" data-genre="ラーメン" onclick="selectGenre(this)">🍜 ラーメン</button>
+      <button class="genre-btn" data-genre="定食" onclick="selectGenre(this)">🍱 定食・ごはん</button>
+      <button class="genre-btn" data-genre="パン" onclick="selectGenre(this)">🥐 パン屋</button>
+      <button class="genre-btn" data-genre="居酒屋" onclick="selectGenre(this)">🍺 飲み</button>
+      <button class="genre-btn" data-genre="おまかせ" onclick="selectGenre(this)">🌿 おまかせ</button>
+      <button class="genre-btn" data-genre="コンビニ" onclick="selectGenre(this)">🏪 コンビニ</button>
+    </div>
+    <button class="btn-primary" onclick="getLocation()" id="btn-start-search" disabled style="opacity:0.5;">📍 この気分で探す</button>
+    <div style="font-size:11px;color:#999;text-align:center;margin-top:8px;">位置情報を使って近くのお店を探します</div>
+  </div>
+
+  <!-- Phase 1b: 位置情報拒否時 -->
+  <div id="phase-fallback" class="phase">
+    <div class="intro-text">
+      現在地がわからなかったから、<br>駅名やエリア名で探すね！
+    </div>
+    <input id="area-input" class="fallback-input" type="text" placeholder="駅名・エリア名を入力">
+    <div class="fallback-hint">例: 東京駅、流山おおたかの森、渋谷</div>
+    <button class="btn-primary" onclick="searchByText()">この場所で探す</button>
+  </div>
+
+  <!-- Phase 2: ローディング -->
+  <div id="phase-loading" class="phase">
+    <div class="loading-text">
+      ふれまーるちゃんが近くの<br>甘やかしスポットを探してるよ...🔍🌿
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <!-- Phase 3: 結果表示 -->
+  <div id="phase-result" class="phase">
+    <div id="lanes-container"></div>
+    <div id="reason-container"></div>
+    <div id="budget-container"></div>
+  </div>
+
+  <!-- Phase 4: 完了（accept直後） -->
+  <div id="phase-done" class="phase">
+    <div class="done-box">
+      <div class="emoji">🎉</div>
+      <div class="msg">
+        寄り道レーン、セットしたよ！🎀
+      </div>
+    </div>
+    <div id="spot-detail-section" style="margin-top:16px;"></div>
+    <div id="quick-record-section" style="margin-top:24px;">
+      <div style="text-align:center;font-size:14px;color:#666;margin-bottom:12px;">
+        帰ってきたら支出を記録しよう👇
+      </div>
+      <div style="background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,0.06);">
+        <div id="record-place-name" style="font-size:13px;color:#999;margin-bottom:8px;"></div>
+        <input id="record-item" class="fallback-input" type="text" placeholder="何を買った？（例: カフェラテ）" style="margin-bottom:8px;">
+        <input id="record-amount" class="fallback-input" type="number" placeholder="金額（円）" inputmode="numeric" style="margin-bottom:12px;">
+        <button class="btn-primary" onclick="submitQuickRecord()">📝 ワンタップ記録</button>
+      </div>
+      <div id="record-result" style="display:none;text-align:center;margin-top:16px;font-size:14px;color:#7c3aed;"></div>
+    </div>
+    <button class="btn-secondary" onclick="closeLiff()" style="margin-top:16px;">閉じる</button>
+  </div>
+
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+const API_BASE = 'https://6seky2k0ge.execute-api.ap-northeast-1.amazonaws.com';
+let accessToken = '';
+let sessionId = '';
+let lanesData = [];
+let selectedGenre = '';
+
+function showPhase(id) {
+  document.querySelectorAll('.phase').forEach(p => p.classList.remove('active'));
+  document.getElementById('phase-' + id).classList.add('active');
+}
+
+function escHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function selectGenre(btn) {
+  document.querySelectorAll('.genre-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedGenre = btn.dataset.genre;
+  const startBtn = document.getElementById('btn-start-search');
+  startBtn.disabled = false;
+  startBtn.style.opacity = '1';
+}
+
+async function initLiff() {
+  try {
+    await liff.init({ liffId: '2010106872-9t0gN1D6' });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+    accessToken = liff.getIDToken();
+  } catch (e) {
+    console.error('LIFF init failed', e);
+  }
+}
+
+function getLocation() {
+  if (!navigator.geolocation) {
+    showPhase('fallback');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => startTemptation(pos.coords.latitude, pos.coords.longitude),
+    () => showPhase('fallback'),
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+async function searchByText() {
+  const area = document.getElementById('area-input').value.trim();
+  if (!area) return;
+  showPhase('loading');
+  try {
+    // Nominatim ジオコーディングでテキスト→座標変換
+    const geoRes = await fetch(API_BASE + '/api/temptation/geocode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query: area }),
+    });
+    if (!geoRes.ok) {
+      const err = await geoRes.json().catch(() => ({}));
+      if (err.error === 'location_not_found') {
+        alert('「' + area + '」の場所が見つかりませんでした。\n別の駅名やエリア名を試してみてください。');
+        showPhase('fallback');
+        return;
+      }
+      throw new Error('Geocode error: ' + geoRes.status);
+    }
+    const geo = await geoRes.json();
+    startTemptation(geo.lat, geo.lng, area);
+  } catch (e) {
+    console.error(e);
+    alert('場所の検索に失敗しました。もう一度お試しください。');
+    showPhase('fallback');
+  }
+}
+
+async function startTemptation(lat, lng, areaText) {
+  showPhase('loading');
+  // ジャンル指定がある場合はメッセージに含める
+  const genre = selectedGenre || '';
+  const msg = genre && genre !== 'おまかせ'
+    ? genre + 'が食べたい'
+    : (areaText || '寄り道したい');
+  try {
+    const res = await fetch(API_BASE + '/api/temptation/start', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat, lng, message: msg, genre: genre }),
+    });
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    const data = await res.json();
+    sessionId = data.session_id;
+    lanesData = data.lanes || [];
+    renderLanes(data);
+  } catch (e) {
+    console.error(e);
+    showPhase('intro');
+    alert('エラーが発生しました。もう一度お試しください。');
+  }
+}
+
+function renderLanes(data) {
+  const container = document.getElementById('lanes-container');
+  container.innerHTML = data.lanes.map((lane, i) => {
+    const isRecommended = lane.lane_id === data.recommended_lane_id;
+    const topPlace = lane.places && lane.places[0];
+    const walkMin = topPlace ? Math.max(1, Math.round(topPlace.distance_m / 80)) : '?';
+    const placeName = topPlace ? escHtml(topPlace.name) : '';
+    const shopUrl = topPlace && topPlace.shop_url ? topPlace.shop_url : '';
+    const imageUrl = topPlace && topPlace.image_url ? topPlace.image_url : '';
+    const genre = topPlace && topPlace.genre ? escHtml(topPlace.genre) : '';
+    const budgetText = topPlace && topPlace.budget_text ? escHtml(topPlace.budget_text) : '';
+
+    let html = '<div class="lane-card' + (isRecommended ? ' recommended' : '') + '">';
+    html += isRecommended ? '<span class="badge">⭐ おすすめ</span>' : '';
+    html += '<div class="lane-title">' + escHtml(lane.title) + '</div>';
+    if (imageUrl) {
+      html += '<img class="lane-image" src="' + escHtml(imageUrl) + '" alt="' + placeName + '" onerror="this.style.display=\'none\'">';
+    }
+    if (placeName) {
+      html += '<div class="lane-place">' + placeName + '（徒歩' + walkMin + '分）</div>';
+    }
+    if (genre || budgetText) {
+      html += '<div class="lane-meta">';
+      if (genre) html += '🍽️ ' + genre;
+      if (genre && budgetText) html += ' | ';
+      if (budgetText) html += '💰 ' + budgetText;
+      html += '</div>';
+    }
+    html += '<div class="lane-price">想定 ' + lane.estimated_min.toLocaleString() + '〜' + lane.estimated_max.toLocaleString() + '円</div>';
+
+    // 他の候補スポットも表示
+    if (lane.places && lane.places.length > 1) {
+      html += '<div style="font-size:12px;color:#999;margin-bottom:8px">';
+      for (let j = 1; j < Math.min(lane.places.length, 3); j++) {
+        const p = lane.places[j];
+        const w = Math.max(1, Math.round(p.distance_m / 80));
+        html += '　' + escHtml(p.name) + '（徒歩' + w + '分）';
+        if (p.shop_url) html += ' <a href="' + escHtml(p.shop_url) + '" target="_blank" style="color:#c44dff;font-size:11px">詳細</a>';
+        html += '<br>';
+      }
+      html += '</div>';
+    }
+
+    if (shopUrl) {
+      html += '<a class="lane-link" href="' + escHtml(shopUrl) + '" target="_blank">🔗 お店の詳細を見る</a><br>';
+    }
+    html += '<button class="lane-btn" onclick="acceptLane(\'' + lane.lane_id + '\')">この寄り道で帰る 🚶</button>';
+    html += '</div>';
+    return html;
+  }).join('');
+
+  // おすすめ理由
+  const reasonEl = document.getElementById('reason-container');
+  if (data.reason) {
+    reasonEl.innerHTML = '<div class="reason-box"><div class="label">💬 ふれまーるちゃんのおすすめ</div><div class="text">' + escHtml(data.reason) + '</div></div>';
+  }
+
+  // 予算情報
+  const budgetEl = document.getElementById('budget-container');
+  const pct = data.budget_total > 0 ? Math.round((1 - data.budget_remaining / data.budget_total) * 100) : 0;
+  budgetEl.innerHTML = '<div class="budget-info"><span>今月の残り: <span class="amount">' + data.budget_remaining.toLocaleString() + '円</span></span><span>ご褒美枠の消化: <span class="amount">' + pct + '%</span></span></div>';
+
+  showPhase('result');
+}
+
+// 受理中のレーン情報を保持
+let acceptedLaneId = '';
+let acceptedLanePlaces = [];
+
+async function acceptLane(laneId) {
+  try {
+    const res = await fetch(API_BASE + '/api/temptation/accept', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId, lane_id: laneId }),
+    });
+    if (!res.ok) throw new Error('Accept failed');
+    acceptedLaneId = laneId;
+    // lanesData からspot情報を取得
+    const lane = lanesData.find(l => l.lane_id === laneId);
+    acceptedLanePlaces = lane ? (lane.places || []) : [];
+    showPhase('done');
+    // お店情報を完了画面に直接表示
+    renderSpotDetails(acceptedLanePlaces);
+    // ワンタップ記録セクションにプレースホルダ表示
+    if (acceptedLanePlaces.length > 0) {
+      const firstName = acceptedLanePlaces[0].name || '';
+      document.getElementById('record-place-name').textContent = '📍 ' + firstName;
+    }
+  } catch (e) {
+    console.error(e);
+    alert('エラーが発生しました');
+  }
+}
+
+function renderSpotDetails(places) {
+  const container = document.getElementById('spot-detail-section');
+  if (!places || places.length === 0) { container.innerHTML = ''; return; }
+  let html = '';
+  places.slice(0, 3).forEach((p, i) => {
+    const walk = Math.max(1, Math.round((p.distance_m || 0) / 80));
+    html += '<div style="background:#fff;border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.06);">';
+    if (p.image_url) {
+      html += '<img src="' + escHtml(p.image_url) + '" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:8px;" alt="">';
+    }
+    html += '<div style="font-weight:bold;font-size:15px;color:#333;">' + (i === 0 ? '⭐ ' : '') + escHtml(p.name || '') + '</div>';
+    if (p.description) {
+      html += '<div style="font-size:12px;color:#5a7a5a;margin-top:3px;font-style:italic;">🇫🇷 ' + escHtml(p.description) + '</div>';
+    }
+    html += '<div style="font-size:13px;color:#666;margin-top:4px;">';
+    if (p.genre || p.category) html += '🍽️ ' + escHtml(p.genre || p.category || '');
+    html += ' | 📍 徒歩' + walk + '分';
+    if (p.budget_text) html += ' | 💰 ' + escHtml(p.budget_text);
+    html += '</div>';
+    html += '<div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">';
+    if (p.lat && p.lng) {
+      html += '<a href="https://www.google.com/maps/search/?api=1&query=' + p.lat + ',' + p.lng + '" target="_blank" style="color:#4a9c5e;font-size:13px;text-decoration:none;padding:4px 10px;background:rgba(74,156,94,0.1);border-radius:6px;">🗺️ 地図を開く</a>';
+    }
+    if (p.shop_url) {
+      html += '<a href="' + escHtml(p.shop_url) + '" target="_blank" style="color:#7c3aed;font-size:13px;text-decoration:none;padding:4px 10px;background:rgba(124,58,237,0.1);border-radius:6px;">🔗 お店の詳細</a>';
+    }
+    html += '</div>';
+    html += '</div>';
+  });
+  container.innerHTML = html;
+}
+
+async function submitQuickRecord() {
+  const item = document.getElementById('record-item').value.trim();
+  const amountStr = document.getElementById('record-amount').value.trim();
+  if (!item) { alert('何を買ったか入力してね'); return; }
+  if (!amountStr) { alert('金額を入力してね'); return; }
+  const amount = parseInt(amountStr, 10);
+  if (isNaN(amount) || amount <= 0 || amount > 1000000) {
+    alert('金額は1〜1,000,000円で入力してね'); return;
+  }
+  const placeName = acceptedLanePlaces.length > 0 ? acceptedLanePlaces[0].name : '';
+  try {
+    const res = await fetch(API_BASE + '/api/temptation/complete', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: sessionId,
+        lane_id: acceptedLaneId,
+        amount: amount,
+        item_name: item,
+        place_name: placeName,
+      }),
+    });
+    if (!res.ok) throw new Error('Complete failed: ' + res.status);
+    const data = await res.json();
+    const resultEl = document.getElementById('record-result');
+    resultEl.innerHTML = '✅ 記録完了！<br>' + (data.message || '支出を記録したよ📝');
+    resultEl.style.display = 'block';
+    document.getElementById('quick-record-section').querySelector('.btn-primary').style.display = 'none';
+  } catch (e) {
+    console.error(e);
+    alert('記録に失敗しました…もう一度試してね');
+  }
+}
+
+function closeLiff() {
+  if (liff.isInClient()) { liff.closeWindow(); }
+  else { window.close(); }
+}
+
+initLiff();
+</script>
+</body>
+</html>

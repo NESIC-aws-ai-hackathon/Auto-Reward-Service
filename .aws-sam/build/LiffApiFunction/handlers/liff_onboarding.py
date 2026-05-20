@@ -157,20 +157,26 @@ def _handle_onboarding(user_id: str, event: dict) -> dict:
         "updatedAt": now,
     })
 
-    # Push 通知（初回完了通知）
+    # PWA 通知（初回完了通知）
     income_man = monthly_income // 10000
     fixed_man = total_fixed // 10000
     budget_man = reward_budget // 10000
     push_text = (
-        f"おっけー！覚えた〜🎀\n"
+        f"おっけー！覚えたよ～🌿\n"
         f"月収{income_man}万、固定費{fixed_man}万だから…\n"
-        f"ごほうび枠は {budget_man}万円くらいから始めよっか！\n\n"
+        f"ごほうび枠は {budget_man}万円くらいから始めよっか～！\n\n"
         f"いつでもメニューからダッシュボード見れるからね✨"
     )
     try:
-        get_line_service().push_message(user_id, [{"type": "text", "text": push_text}])
+        from services.notification_service import create_notification
+        create_notification(
+            user_id, ddb,
+            notification_type="SYSTEM",
+            title="オンボーディング完了",
+            message_text=push_text,
+        )
     except Exception as e:
-        logger.warning("onboarding_push_failed", error=str(e))
+        logger.warning("onboarding_notification_failed", error=str(e))
 
     return _make_response(200, {
         "success": True,

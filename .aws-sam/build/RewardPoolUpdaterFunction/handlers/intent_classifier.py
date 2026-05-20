@@ -50,6 +50,9 @@ def classify_intent(text: str) -> dict:
     except BedrockError as e:
         logger.warning("classify_intent bedrock error, fallback to UNKNOWN", error=str(e))
         return dict(_FALLBACK)
+    except Exception as e:
+        logger.error("classify_intent unexpected error, fallback to UNKNOWN", error=str(e), error_type=type(e).__name__)
+        return dict(_FALLBACK)
 
     # Bedrock の出力から JSON を抽出
     result = _parse_intent_response(raw)

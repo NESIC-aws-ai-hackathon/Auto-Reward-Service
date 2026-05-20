@@ -26,7 +26,10 @@ from services.dynamodb_service import DynamoDBService
 from prompts.expense_prompt import (
     build_expense_prompt,
     build_clarification_prompt,
+    build_excuse_prompt,
     _SYSTEM_PROMPT,
+    _EXCUSE_SYSTEM_PROMPT,
+    _CATEGORY_EXCUSE,
 )
 from utils.logger import get_logger
 
@@ -151,7 +154,7 @@ def extract(
     new_total = current_total + added_total
     remaining = max(0, reward_budget - new_total)
 
-    reply = _build_saved_reply(items_to_save, new_total, remaining)
+    reply = _build_saved_reply(items_to_save, new_total, remaining, reward_budget)
     return reply, items_to_save
 
 
@@ -240,7 +243,7 @@ def handle_clarification(
     new_total = current_total + (amount or 0)
     remaining = max(0, reward_budget - new_total)
 
-    return _build_saved_reply([recovered], new_total, remaining), [recovered]
+    return _build_saved_reply([recovered], new_total, remaining, reward_budget), [recovered]
 
 
 def confirm_pending_expense(
@@ -263,7 +266,7 @@ def confirm_pending_expense(
     new_total = current_total + int(amount)
     remaining = max(0, reward_budget - new_total)
 
-    return _build_saved_reply([item], new_total, remaining), [item]
+    return _build_saved_reply([item], new_total, remaining, reward_budget), [item]
 
 
 def reject_pending_expense(
@@ -346,25 +349,62 @@ def _save_pending_expense(pk: str, item: dict, raw_text: str, ddb: DynamoDBServi
     })
 
 
-def _build_saved_reply(items: list[dict], new_total: int, remaining: int) -> str:
-    """保存確認メッセージを構築する。"""
+def _build_saved_reply(items: list[dict], new_total: int, remaining: int, reward_budget: int = _DEFAULT_REWARD_BUDGET) -> str:
+    """保存確認メッセージを構築する。Bedrock で言い訳（免罪符）を生成する。"""
     if len(items) == 1:
         item = items[0]
         item_label = item.get("item_name") or item.get("category") or "お買い物"
         amount = item.get("amount", 0)
+        category = item.get("category", "その他")
         first_line = f"「{item_label}」{amount:,}円ね、覚えた〜🍮"
+        excuse = _generate_excuse(item_label, amount, category, remaining, reward_budget)
     else:
         lines = []
+        total_amount = 0
         for it in items:
             label = it.get("item_name") or it.get("category") or "お買い物"
-            lines.append(f"・{label} {it.get('amount', 0):,}円")
+            amt = it.get("amount", 0)
+            total_amount += amt
+            lines.append(f"・{label} {amt:,}円")
         first_line = "\n".join(lines) + "\n全部覚えたよ〜🍮"
+        # 複数アイテムの場合は最初のアイテムで言い訳生成
+        item0 = items[0]
+        excuse = _generate_excuse(
+            item0.get("item_name") or item0.get("category") or "お買い物",
+            item0.get("amount", 0),
+            item0.get("category", "その他"),
+            remaining,
+            reward_budget,
+        )
 
     return (
         f"{first_line}\n"
+        f"{excuse}\n"
         f"今月のご褒美は合計 {new_total:,}円。"
         f"まだ {remaining:,}円使えるよ！"
     )
+
+
+def _generate_excuse(
+    item_name: str,
+    amount: int,
+    category: str,
+    remaining: int,
+    reward_budget: int,
+) -> str:
+    """Bedrock で支出の言い訳（免罪符）を 1〜2 文生成する。失敗時はテンプレートを返す。"""
+    try:
+        prompt = build_excuse_prompt(item_name, amount, category, remaining, reward_budget)
+        excuse = get_bedrock_service().invoke_text(
+            prompt,
+            system_prompt=_EXCUSE_SYSTEM_PROMPT,
+            temperature=0.7,
+            max_tokens=150,
+        )
+        return excuse.strip()
+    except Exception as e:
+        logger.warning("excuse_generation_failed", error=str(e))
+        return _CATEGORY_EXCUSE.get(category, _CATEGORY_EXCUSE["その他"])
 
 
 def _non_expense_reply() -> str:

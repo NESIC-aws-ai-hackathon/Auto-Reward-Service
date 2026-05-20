@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#E63946">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.json">
+<title>フレマール・寄り道レーン</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', sans-serif;
+  background: #FFF5F5; color: #333; min-height: 100vh;
+}
+.header {
+  background: linear-gradient(135deg, #E63946, #D62828);
+  color: #fff; padding: 16px 20px; text-align: center;
+  position: sticky; top: 0; z-index: 100;
+  font-size: 18px; font-weight: 700;
+}
+.container { max-width: 480px; margin: 0 auto; padding: 16px; }
+
+/* フェーズ表示切替 */
+.phase { display: none; }
+.phase.active { display: block; }
+
+/* ログイン画面 */
+.login-screen { text-align: center; padding: 60px 20px; }
+.login-screen h2 { font-size: 20px; margin-bottom: 12px; color: #E63946; }
+.login-screen p { color: #666; margin-bottom: 32px; line-height: 1.6; }
+.btn-line {
+  display: inline-block; background: #06C755; color: #fff;
+  padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 700;
+  text-decoration: none; border: none; cursor: pointer;
+}
+.btn-line:hover { background: #05b04c; }
+
+/* 位置取得画面 */
+.location-screen { text-align: center; padding: 40px 20px; }
+.location-screen p { color: #666; margin-bottom: 24px; line-height: 1.6; }
+.btn-location {
+  display: inline-block; background: #E63946; color: #fff;
+  padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 700;
+  border: none; cursor: pointer; width: 100%; max-width: 300px;
+}
+.btn-location:hover { background: #d62828; }
+
+/* フォールバック */
+.fallback-input { margin-top: 24px; }
+.fallback-input input {
+  width: 100%; max-width: 300px; padding: 12px 16px;
+  border: 2px solid #ddd; border-radius: 8px; font-size: 16px;
+  margin-bottom: 12px;
+}
+.btn-search {
+  background: #457B9D; color: #fff; padding: 12px 24px;
+  border-radius: 8px; font-size: 14px; font-weight: 700;
+  border: none; cursor: pointer;
+}
+
+/* ローディング */
+.loading-screen { text-align: center; padding: 80px 20px; }
+.spinner {
+  width: 48px; height: 48px; border: 4px solid #eee;
+  border-top-color: #E63946; border-radius: 50%;
+  animation: spin 0.8s linear infinite; margin: 24px auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-screen p { color: #888; font-size: 14px; }
+
+/* レーンカード */
+.lane-card {
+  background: #fff; border-radius: 12px; padding: 16px;
+  margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  border: 2px solid transparent; transition: border-color 0.2s;
+}
+.lane-card.recommended { border-color: #E63946; }
+.lane-card .badge {
+  display: inline-block; background: #E63946; color: #fff;
+  font-size: 11px; padding: 2px 8px; border-radius: 4px;
+  margin-bottom: 8px; font-weight: 700;
+}
+.lane-card h3 { font-size: 16px; margin-bottom: 4px; }
+.lane-card .place-info { color: #666; font-size: 13px; margin-bottom: 4px; }
+.lane-card .price-range { color: #E63946; font-weight: 700; font-size: 14px; margin-bottom: 12px; }
+
+/* ご褒美リスト */
+.rewards-section { margin-bottom: 12px; }
+.rewards-section .label { font-size: 12px; color: #888; margin-bottom: 8px; font-weight: 700; }
+.reward-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: #FFF5F5; border-radius: 8px;
+  margin-bottom: 6px; font-size: 13px;
+}
+.reward-item .emoji { font-size: 20px; }
+.reward-item .name { flex: 1; }
+.reward-item .price { color: #E63946; font-weight: 700; }
+.reward-item .reason { font-size: 11px; color: #888; display: block; }
+
+.btn-accept {
+  width: 100%; padding: 12px; background: #E63946; color: #fff;
+  border: none; border-radius: 8px; font-size: 15px; font-weight: 700;
+  cursor: pointer;
+}
+.btn-accept:hover { background: #d62828; }
+
+/* おすすめ理由 */
+.reason-box {
+  background: #fff; border-radius: 12px; padding: 16px;
+  margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.reason-box .label { font-size: 12px; color: #888; margin-bottom: 8px; font-weight: 700; }
+.reason-box .text { font-size: 14px; line-height: 1.6; }
+
+/* 予算情報 */
+.budget-info {
+  background: #fff; border-radius: 12px; padding: 16px;
+  margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  text-align: center;
+}
+.budget-info .label { font-size: 12px; color: #888; margin-bottom: 4px; }
+.budget-info .amount { font-size: 24px; font-weight: 700; color: #E63946; }
+
+/* 完了画面 */
+.complete-screen { text-align: center; padding: 40px 20px; }
+.complete-screen .emoji-big { font-size: 64px; margin-bottom: 16px; }
+.complete-screen .message { font-size: 15px; line-height: 1.8; margin-bottom: 24px; }
+
+/* 寄り道中画面 */
+.navigating-screen { padding: 20px; }
+.btn-bought {
+  width: 100%; padding: 12px; margin-bottom: 8px;
+  background: #fff; border: 2px solid #E63946; color: #E63946;
+  border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.btn-bought:hover { background: #FFF5F5; }
+.btn-home {
+  width: 100%; padding: 12px; margin-top: 12px;
+  background: #eee; color: #666; border: none;
+  border-radius: 8px; font-size: 14px; cursor: pointer;
+}
+
+/* インストールバナー */
+.install-banner {
+  display: none; background: #457B9D; color: #fff;
+  padding: 12px 16px; text-align: center; font-size: 13px;
+  cursor: pointer;
+}
+.install-banner.show { display: block; }
+</style>
+</head>
+<body>
+
+<div class="header">🇫🇷 フレマール・寄り道レーン</div>
+<div class="install-banner" id="installBanner" onclick="installApp()">
+  💡 ホーム画面に追加するともっと便利に使えます！ タップして追加
+</div>
+
+<div class="container">
+  <!-- Phase 1: ログイン -->
+  <div class="phase active" id="phase-login">
+    <div class="login-screen">
+      <h2>🇫🇷 Bonjour！</h2>
+      <p>今日はまっすぐ帰る日じゃ<br>ないかもしれません。</p>
+      <p>現在地から寄り道できる<br>甘やかしスポットを探します。</p>
+      <button class="btn-line" onclick="loginWithLine()">LINE でログイン</button>
+    </div>
+  </div>
+
+  <!-- Phase 2: 位置取得 -->
+  <div class="phase" id="phase-location">
+    <div class="location-screen">
+      <p>現在地から、今日の甘やかしスポット<br>を探しますね！🇫🇷</p>
+      <button class="btn-location" onclick="getLocation()">📍 現在地から探す</button>
+      <div class="fallback-input" id="fallbackInput" style="display:none;">
+        <p style="font-size:13px; color:#888; margin-bottom:8px;">現在地がわからなかったので、<br>駅名やエリア名で探しますね！</p>
+        <input type="text" id="areaInput" placeholder="例: 東京駅、流山おおたかの森">
+        <br>
+        <button class="btn-search" onclick="searchByArea()">この場所で探す</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 3: ローディング -->
+  <div class="phase" id="phase-loading">
+    <div class="loading-screen">
+      <p>フレマールちゃんが近くの<br>甘やかしスポットを探しています...🔍🇫🇷</p>
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <!-- Phase 4: 結果表示 -->
+  <div class="phase" id="phase-results">
+    <div id="reasonContainer"></div>
+    <div id="lanesContainer"></div>
+    <div id="budgetContainer"></div>
+  </div>
+
+  <!-- Phase 5: 寄り道中 -->
+  <div class="phase" id="phase-navigating">
+    <div class="navigating-screen" id="navigatingContent"></div>
+  </div>
+
+  <!-- Phase 6: 完了 -->
+  <div class="phase" id="phase-complete">
+    <div class="complete-screen" id="completeContent"></div>
+  </div>
+</div>
+
+<script>
+// ─── 状態管理 ───
+const API_BASE = 'https://6seky2k0ge.execute-api.ap-northeast-1.amazonaws.com';
+let accessToken = localStorage.getItem('ars_token') || '';
+let userId = localStorage.getItem('ars_user_id') || '';
+let currentSession = null;
+let deferredPrompt = null;
+
+// ─── 初期化 ───
+window.addEventListener('load', () => {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/service-worker.js');
+  }
+  if (accessToken && userId) {
+    showPhase('phase-location');
+  }
+  // URL パラメータチェック（LINE Login コールバック）
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get('code');
+  if (code) {
+    handleLineCallback(code);
+  }
+});
+
+// PWA インストール
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBanner').classList.add('show');
+});
+
+function installApp() {
+  if (!deferredPrompt) return;
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(() => {
+    deferredPrompt = null;
+    document.getElementById('installBanner').classList.remove('show');
+  });
+}
+
+// ─── フェーズ切替 ───
+function showPhase(id) {
+  document.querySelectorAll('.phase').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+// ─── LINE Login ───
+function loginWithLine() {
+  const channelId = '2010106872';
+  const redirectUri = encodeURIComponent(window.location.origin + '/');
+  const state = crypto.randomUUID();
+  sessionStorage.setItem('line_login_state', state);
+  window.location.href =
+    'https://access.line.me/oauth2/v2.1/authorize' +
+    '?response_type=code' +
+    '&client_id=' + channelId +
+    '&redirect_uri=' + redirectUri +
+    '&state=' + state +
+    '&scope=profile%20openid';
+}
+
+async function handleLineCallback(code) {
+  try {
+    const res = await fetch(API_BASE + '/api/auth/line-callback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+    if (data.access_token && data.user_id) {
+      accessToken = data.access_token;
+      userId = data.user_id;
+      localStorage.setItem('ars_token', accessToken);
+      localStorage.setItem('ars_user_id', userId);
+    }
+  } catch (e) {
+    console.error('Login failed:', e);
+  }
+  // URL からコードを消す
+  window.history.replaceState({}, '', '/');
+  showPhase('phase-location');
+}
+
+// ─── 位置取得 ───
+function getLocation() {
+  if (!navigator.geolocation) {
+    document.getElementById('fallbackInput').style.display = 'block';
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    (pos) => startDetour(pos.coords.latitude, pos.coords.longitude),
+    () => {
+      document.getElementById('fallbackInput').style.display = 'block';
+    },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+function searchByArea() {
+  const area = document.getElementById('areaInput').value.trim();
+  if (!area) return;
+  // フォールバック: デフォルト座標（東京駅）+ メッセージにエリア名
+  startDetour(35.681236, 139.767125, area);
+}
+
+// ─── 寄り道レーン生成 ───
+async function startDetour(lat, lng, message) {
+  showPhase('phase-loading');
+  try {
+    const res = await fetch(API_BASE + '/api/temptation/start', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + accessToken,
+      },
+      body: JSON.stringify({ lat, lng, message: message || '寄り道したい' }),
+    });
+    const data = await res.json();
+    currentSession = data;
+    renderResults(data);
+    showPhase('phase-results');
+  } catch (e) {
+    console.error('Start failed:', e);
+    alert('エラーが発生しました。もう一度お試しください。');
+    showPhase('phase-location');
+  }
+}
+
+// ─── 結果表示 ───
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function renderResults(data) {
+  // おすすめ理由
+  const reasonEl = document.getElementById('reasonContainer');
+  if (data.reason) {
+    reasonEl.innerHTML =
+      '<div class="reason-box">' +
+      '<div class="label">💬 フレマールちゃんのおすすめ</div>' +
+      '<div class="text">' + esc(data.reason) + '</div>' +
+      '</div>';
+  }
+
+  // レーンカード
+  const lanesEl = document.getElementById('lanesContainer');
+  lanesEl.innerHTML = '';
+  const lanes = data.lanes || [];
+  lanes.forEach((lane, i) => {
+    const isRec = lane.lane_id === data.recommended_lane_id;
+    const topPlace = lane.places?.[0];
+    const walk = topPlace ? Math.max(1, Math.floor((topPlace.distance_m || 0) / 80)) : '?';
+    const placeName = topPlace ? esc(topPlace.name) : '周辺スポット';
+
+    let rewardsHtml = '';
+    if (lane.rewards && lane.rewards.length > 0) {
+      rewardsHtml = '<div class="rewards-section"><div class="label">🎁 フレマールちゃんのおすすめ:</div>';
+      lane.rewards.forEach(r => {
+        rewardsHtml +=
+          '<div class="reward-item">' +
+          '<span class="emoji">' + esc(r.emoji || '🎁') + '</span>' +
+          '<span class="name">' + esc(r.name) +
+            (r.match_reason ? '<span class="reason">💬 ' + esc(r.match_reason) + '</span>' : '') +
+          '</span>' +
+          '<span class="price">' + (r.price || 0).toLocaleString() + '円</span>' +
+          '</div>';
+      });
+      rewardsHtml += '</div>';
+    }
+
+    lanesEl.innerHTML +=
+      '<div class="lane-card' + (isRec ? ' recommended' : '') + '">' +
+      (isRec ? '<span class="badge">⭐ おすすめ</span>' : '') +
+      '<h3>' + esc(lane.title) + '</h3>' +
+      '<div class="place-info">' + placeName + '（徒歩' + walk + '分）</div>' +
+      '<div class="price-range">想定 ' + lane.estimated_min.toLocaleString() + '〜' + lane.estimated_max.toLocaleString() + '円</div>' +
+      rewardsHtml +
+      '<button class="btn-accept" onclick="acceptLane(\'' + lane.lane_id + '\')">この寄り道で帰る</button>' +
+      '</div>';
+  });
+
+  // 予算情報
+  const budgetEl = document.getElementById('budgetContainer');
+  if (data.budget_remaining != null) {
+    budgetEl.innerHTML =
+      '<div class="budget-info">' +
+      '<div class="label">今月の残り予算</div>' +
+      '<div class="amount">' + data.budget_remaining.toLocaleString() + '円</div>' +
+      '</div>';
+  }
+}
+
+// ─── レーン選択 ───
+async function acceptLane(laneId) {
+  if (!currentSession) return;
+  try {
+    await fetch(API_BASE + '/api/temptation/accept', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + accessToken,
+      },
+      body: JSON.stringify({
+        session_id: currentSession.session_id,
+        lane_id: laneId,
+      }),
+    });
+    renderNavigating(laneId);
+    showPhase('phase-navigating');
+  } catch (e) {
+    console.error('Accept failed:', e);
+  }
+}
+
+// ─── 寄り道中画面 ───
+function renderNavigating(laneId) {
+  const lane = (currentSession.lanes || []).find(l => l.lane_id === laneId);
+  if (!lane) return;
+
+  let html = '<h3 style="margin-bottom:16px;">🇫🇷 寄り道中...</h3>';
+  html += '<div class="lane-card"><h3>' + esc(lane.title) + '</h3>';
+  if (lane.places?.[0]) {
+    html += '<div class="place-info">' + esc(lane.places[0].name) + '</div>';
+  }
+  html += '</div>';
+
+  // ご褒美ワンタップボタン
+  if (lane.rewards && lane.rewards.length > 0) {
+    html += '<p style="font-size:13px; color:#888; margin-bottom:12px;">── 何を買った？ ──</p>';
+    lane.rewards.forEach(r => {
+      html +=
+        '<button class="btn-bought" onclick="completePurchase(\'' + laneId + '\', ' +
+        '\'' + esc(r.name).replace(/'/g, "\\'") + '\', ' +
+        (r.price || 0) + ', ' +
+        '\'' + (r.reward_id || '').replace(/'/g, "\\'") + '\', ' +
+        '\'' + esc(lane.places?.[0]?.name || '').replace(/'/g, "\\'") + '\')">' +
+        (r.emoji || '🎁') + ' ' + esc(r.name) + ' 買った！ ' + (r.price || 0).toLocaleString() + '円' +
+        '</button>';
+    });
+    html += '<button class="btn-bought" onclick="showCustomInput(\'' + laneId + '\')">✏️ 別のものを記録する</button>';
+  }
+
+  html += '<button class="btn-home" onclick="goHome()">🏠 まっすぐ帰った</button>';
+
+  // カスタム入力（非表示）
+  html += '<div id="customInput" style="display:none; margin-top:16px;">';
+  html += '<input type="text" id="customItem" placeholder="商品名" style="width:100%; padding:10px; margin-bottom:8px; border:2px solid #ddd; border-radius:8px;">';
+  html += '<input type="number" id="customAmount" placeholder="金額" style="width:100%; padding:10px; margin-bottom:8px; border:2px solid #ddd; border-radius:8px;">';
+  html += '<button class="btn-accept" onclick="completeCustom(\'' + laneId + '\')">記録する</button>';
+  html += '</div>';
+
+  document.getElementById('navigatingContent').innerHTML = html;
+}
+
+function showCustomInput(laneId) {
+  document.getElementById('customInput').style.display = 'block';
+}
+
+// ─── ワンタップ購入完了 ───
+async function completePurchase(laneId, itemName, amount, rewardId, placeName) {
+  showPhase('phase-loading');
+  try {
+    const res = await fetch(API_BASE + '/api/temptation/complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + accessToken,
+      },
+      body: JSON.stringify({
+        session_id: currentSession.session_id,
+        lane_id: laneId,
+        amount: amount,
+        item_name: itemName,
+        place_name: placeName,
+        reward_id: rewardId || null,
+      }),
+    });
+    const data = await res.json();
+    renderComplete(data);
+    showPhase('phase-complete');
+  } catch (e) {
+    console.error('Complete failed:', e);
+    alert('記録に失敗しました');
+    showPhase('phase-navigating');
+  }
+}
+
+async function completeCustom(laneId) {
+  const item = document.getElementById('customItem').value.trim();
+  const amount = parseInt(document.getElementById('customAmount').value);
+  if (!item || !amount) { alert('商品名と金額を入力してください'); return; }
+  const lane = (currentSession.lanes || []).find(l => l.lane_id === laneId);
+  const placeName = lane?.places?.[0]?.name || '';
+  await completePurchase(laneId, item, amount, null, placeName);
+}
+
+// ─── 完了画面 ───
+function renderComplete(data) {
+  document.getElementById('completeContent').innerHTML =
+    '<div class="emoji-big">🇫🇷✨</div>' +
+    '<div class="message">' + esc(data.message || 'Bon choix！記録しました✨') + '</div>' +
+    (data.budget_remaining != null ?
+      '<div class="budget-info"><div class="label">今月の残り予算</div>' +
+      '<div class="amount">' + data.budget_remaining.toLocaleString() + '円</div></div>' : '') +
+    '<button class="btn-location" onclick="goHome()" style="margin-top:24px;">🏠 ホームに戻る</button>';
+}
+
+function goHome() {
+  currentSession = null;
+  showPhase('phase-location');
+}
+</script>
+</body>
+</html>

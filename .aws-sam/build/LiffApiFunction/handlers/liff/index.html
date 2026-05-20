@@ -3,18 +3,22 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>リワードちゃん</title>
+<title>ふれまーるちゃん</title>
 <style>
 :root {
-  --primary: #06C755;
-  --primary-dark: #05a348;
-  --bg: #f5f5f5;
+  --primary: #4a9c5e;
+  --primary-dark: #357a44;
+  --primary-light: #e8f5e9;
+  --accent: #7c3aed;
+  --accent-light: #ede9fe;
+  --bg: #f0f7f2;
   --card-bg: #ffffff;
-  --text: #333333;
-  --text-sub: #888888;
-  --border: #e0e0e0;
-  --danger: #ff4444;
-  --warning: #ffaa00;
+  --text: #2d3b2d;
+  --text-sub: #6b8068;
+  --border: #d4e5d7;
+  --danger: #d84315;
+  --warning: #f9a825;
+  --forest-gradient: linear-gradient(135deg, #2d6a4f, #40916c);
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
@@ -25,7 +29,7 @@ body {
   padding-bottom: 70px;
 }
 .header {
-  background: var(--primary);
+  background: var(--forest-gradient);
   color: #fff;
   padding: 16px 20px;
   text-align: center;
@@ -34,6 +38,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
+  letter-spacing: 0.5px;
 }
 .tab-bar {
   display: flex;
@@ -61,10 +66,11 @@ body {
 .page.active { display: block; }
 .card {
   background: var(--card-bg);
-  border-radius: 12px;
+  border-radius: 14px;
   padding: 16px;
   margin-bottom: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  box-shadow: 0 2px 8px rgba(45,106,79,0.08);
+  border: 1px solid var(--border);
 }
 .card-title { font-size: 14px; color: var(--text-sub); margin-bottom: 8px; }
 .budget-amount { font-size: 28px; font-weight: bold; color: var(--primary); }
@@ -104,8 +110,25 @@ body {
   font-size: 11px;
   font-weight: bold;
 }
-.badge-bought { background: #e8f5e9; color: #2e7d32; }
+.badge-bought { background: var(--primary-light); color: var(--primary-dark); }
 .badge-skip { background: #fce4ec; color: #c62828; }
+.badge-done { background: var(--primary-light); color: var(--primary-dark); }
+.badge-active { background: var(--accent-light); color: var(--accent); }
+.badge-proposed { background: #e3f2fd; color: #1565c0; }
+.spot-clickable { cursor: pointer; }
+.spot-clickable:active { opacity: 0.7; }
+.spot-detail-link {
+  display: block;
+  padding: 10px 14px;
+  background: var(--card-inner, #f0f7f2);
+  border-radius: 8px;
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: bold;
+  text-align: center;
+}
+.spot-detail-link:active { opacity: 0.7; }
 .pool-item {
   display: flex;
   align-items: center;
@@ -174,7 +197,6 @@ body {
 .loading { text-align: center; padding: 40px; color: var(--text-sub); }
 .error-msg { text-align: center; padding: 20px; color: var(--danger); }
 .empty-msg { text-align: center; padding: 30px; color: var(--text-sub); font-size: 14px; }
-/* 編集ボタン */
 .btn-edit {
   background: none;
   border: 1px solid var(--border);
@@ -187,7 +209,6 @@ body {
   margin-left: 8px;
 }
 .btn-edit:active { opacity: 0.7; }
-/* スワイプ削除 */
 .swipe-row {
   position: relative;
   overflow: hidden;
@@ -224,8 +245,6 @@ body {
   justify-content: center;
   z-index: 0;
 }
-/* list-item のスワイプ行内オーバーライドは上部に記載済み */
-/* 編集モーダル */
 .modal-overlay {
   display: none;
   position: fixed;
@@ -246,9 +265,176 @@ body {
 .modal-title { font-size: 16px; font-weight: bold; margin-bottom: 16px; }
 .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
 .modal-actions .btn { flex: 1; }
-/* 月次グラフ */
 .chart-container { position: relative; height: 180px; margin: 8px 0; }
-/* 月選択 */
+.detour-hero {
+  text-align: center;
+  padding: 16px 0 8px;
+}
+.detour-count {
+  font-size: 48px;
+  font-weight: bold;
+  color: var(--accent);
+  line-height: 1;
+}
+.detour-count-label {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 4px;
+}
+.detour-lane-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.detour-lane-row:last-child { border-bottom: none; }
+.detour-lane-name { font-weight: bold; }
+.detour-lane-stat { color: var(--text-sub); font-size: 12px; }
+.detour-place-chip {
+  display: inline-block;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
+  margin: 3px;
+}
+.btn-detour-start {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  background: var(--forest-gradient);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.btn-detour-start:active { opacity: 0.85; }
+.session-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.session-title { font-size: 14px; font-weight: bold; color: var(--text); }
+.session-date { font-size: 11px; color: var(--text-sub); margin-bottom: 6px; }
+.session-place {
+  display: flex;
+  gap: 10px;
+  background: var(--card-inner, #f0f7f2);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.place-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.place-info {
+  flex: 1;
+  min-width: 0;
+}
+.place-name {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.place-desc {
+  font-size: 11px;
+  color: #5a7a5a;
+  margin-bottom: 3px;
+  font-style: italic;
+}
+.place-genre {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-right: 6px;
+}
+.place-budget {
+  font-size: 11px;
+  color: var(--accent);
+  margin-right: 6px;
+}
+.place-walk {
+  font-size: 11px;
+  color: var(--text-sub);
+}
+.place-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.place-link {
+  font-size: 12px;
+  color: var(--primary);
+  text-decoration: none;
+  padding: 2px 8px;
+  background: rgba(74, 156, 94, 0.1);
+  border-radius: 4px;
+}
+.place-link:active { opacity: 0.6; }
+.session-place a { color: var(--accent); text-decoration: none; font-size: 12px; }
+.session-actions { margin-top: 10px; }
+.btn-record-expense {
+  display: inline-block;
+  padding: 8px 14px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.btn-record-expense:active { opacity: 0.7; }
+.expense-group {
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.expense-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--card-inner, #f0f7f2);
+  cursor: pointer;
+}
+.expense-group-header:active { opacity: 0.8; }
+.expense-group-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.expense-group-icon { font-size: 16px; }
+.expense-group-name { font-size: 13px; font-weight: bold; color: var(--text); }
+.expense-group-count { font-size: 11px; color: var(--text-sub); }
+.expense-group-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.expense-group-amount { font-size: 13px; font-weight: bold; color: var(--primary); }
+.expense-group-pct { font-size: 11px; color: var(--text-sub); }
+.expense-group-arrow { font-size: 10px; color: var(--text-sub); transition: transform 0.2s; }
+.expense-group-body { padding: 0 10px 8px; }
 .month-nav {
   display: flex;
   align-items: center;
@@ -266,31 +452,85 @@ body {
 }
 .month-nav-btn:active { opacity: 0.7; }
 .month-label { font-size: 14px; font-weight: bold; }
+.forest-banner {
+  text-align: center;
+  padding: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-sub);
+  opacity: 0.8;
+}
+/* ─── 通知チャット風UI (変更依頼書_2 §3) ─── */
+.chat-notifications { display: flex; flex-direction: column; gap: 12px; }
+.notif-bubble {
+  background: var(--primary-light);
+  border-radius: 16px 16px 16px 4px;
+  padding: 14px 16px;
+  position: relative;
+  max-width: 90%;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.notif-bubble .notif-type {
+  font-size: 11px;
+  color: var(--primary-dark);
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.notif-bubble .notif-time {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-top: 6px;
+  text-align: right;
+}
+.notif-bubble .notif-actions {
+  display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+}
+.notif-bubble .notif-actions button {
+  padding: 6px 12px; border-radius: 8px; border: 1px solid var(--primary);
+  background: #fff; color: var(--primary); font-size: 12px; cursor: pointer;
+}
+.notif-bubble .notif-actions button:hover { background: var(--primary-light); }
+/* ─── 欲望在庫カード ─── */
+.wishlist-card {
+  display: flex; gap: 12px; padding: 12px; border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 10px; align-items: center;
+}
+.wishlist-card img {
+  width: 60px; height: 60px; object-fit: cover; border-radius: 8px; flex-shrink: 0;
+}
+.wishlist-card .wishlist-info { flex: 1; }
+.wishlist-card .wishlist-title { font-size: 13px; font-weight: bold; margin-bottom: 4px; }
+.wishlist-card .wishlist-meta { font-size: 11px; color: var(--text-sub); }
+.wishlist-card .wishlist-aging {
+  font-size: 11px; color: var(--accent); font-weight: bold;
+}
 </style>
 </head>
 <body>
 
-<div class="header" id="header">🎁 リワードちゃん</div>
+<div class="header" id="header">🌿 ふれまーるちゃん</div>
 
 <div class="content">
   <!-- ホーム -->
   <div class="page active" id="page-home">
     <div class="card">
-      <div class="card-title">今月のご褒美枠</div>
+      <div class="card-title">🌳 今月のご褒美枠</div>
       <div class="budget-amount" id="home-remaining">-</div>
       <div class="budget-sub" id="home-budget-detail"></div>
       <div class="progress-bar"><div class="progress-fill" id="home-progress"></div></div>
     </div>
     <div class="card">
-      <div class="card-title">最近のご褒美提案</div>
+      <div class="card-title">🍃 最近のご褒美提案</div>
       <div id="home-suggestions"><div class="empty-msg">まだ提案がありません</div></div>
     </div>
+    <div class="forest-banner">🌿 ふれまーるちゃんがあなたの「甘やかし」を見守ってるよ</div>
   </div>
 
   <!-- 支出 -->
+  <!-- 支出 -->
   <div class="page" id="page-expenses">
     <div class="card">
-      <div class="card-title">月次支出グラフ</div>
+      <div class="card-title">📊 月次支出グラフ</div>
       <div class="chart-container"><canvas id="monthly-chart"></canvas></div>
     </div>
     <div class="card">
@@ -306,22 +546,46 @@ body {
   <!-- ご褒美 -->
   <div class="page" id="page-rewards">
     <div class="card">
-      <div class="card-title">提案履歴</div>
+      <div class="card-title">🎁 提案履歴</div>
       <div id="reward-history"><div class="loading">読み込み中...</div></div>
     </div>
     <div class="card">
-      <div class="card-title">ご褒美候補</div>
+      <div class="card-title">🌸 ご褒美候補</div>
       <div id="reward-pool"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <!-- 寄り道レーン -->
+  <div class="page" id="page-detour">
+    <div class="card">
+      <button class="btn-detour-start" id="btn-detour-start">🗺️ 今すぐ寄り道レーンを作る</button>
+      <div style="font-size:11px;color:var(--text-sub);text-align:center;margin-top:6px;">現在地から帰り道の寄り道スポットを提案するよ 🌿</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🌿 今月の寄り道まとめ</div>
+      <div class="detour-hero">
+        <div class="detour-count" id="detour-count">—</div>
+        <div class="detour-count-label">まっすぐ帰れなかった回数</div>
+      </div>
+      <div id="detour-lanes"><div class="loading">読み込み中...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 寄り道リスト</div>
+      <div id="detour-sessions"><div class="loading">読み込み中...</div></div>
+    </div>
+    <div class="card" id="detour-places-card" style="display:none">
+      <div class="card-title">🏠 よく寄るスポット</div>
+      <div id="detour-places"></div>
     </div>
   </div>
 
   <!-- 設定 -->
   <div class="page" id="page-settings">
     <div class="card">
-      <div class="card-title">基本設定</div>
+      <div class="card-title">⚙️ 基本設定</div>
       <div class="form-group">
         <label class="form-label">ニックネーム</label>
-        <input type="text" class="form-input" id="set-nickname" maxlength="20" placeholder="リワードちゃんからの呼び名">
+        <input type="text" class="form-input" id="set-nickname" maxlength="20" placeholder="ふれまーるちゃんからの呼び名">
       </div>
       <div class="form-group">
         <label class="form-label">口調</label>
@@ -342,9 +606,34 @@ body {
       <button class="btn btn-primary" id="btn-save-settings">保存する</button>
     </div>
     <div class="card">
-      <div class="card-title">Googleカレンダー連携</div>
+      <div class="card-title">📅 Googleカレンダー連携</div>
       <div class="calendar-status" id="calendar-section">
         <div class="loading">確認中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通知 (変更依頼書_2 §3) -->
+  <div class="page" id="page-notifications">
+    <div class="card">
+      <div class="card-title">💬 ふれまーるちゃんからのおしらせ</div>
+      <div id="notifications-list" class="chat-notifications">
+        <div class="loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 欲望在庫 (変更依頼書_2 §5) -->
+  <div class="page" id="page-wishlist">
+    <div class="card">
+      <div class="card-title">💎 欲望在庫</div>
+      <div class="form-group">
+        <label class="form-label">公開ほしい物リストURL</label>
+        <input type="url" class="form-input" id="wishlist-url-input" placeholder="https://www.amazon.co.jp/hz/wishlist/ls/...">
+      </div>
+      <button class="btn btn-primary" id="btn-register-wishlist" style="margin-bottom:16px;">登録して同期する</button>
+      <div id="wishlist-items-list">
+        <div class="empty-state">まだ欲望在庫がありません</div>
       </div>
     </div>
   </div>
@@ -352,8 +641,10 @@ body {
 
 <div class="tab-bar">
   <div class="tab active" data-page="home"><span class="tab-icon">🏠</span>ホーム</div>
+  <div class="tab" data-page="notifications"><span class="tab-icon">💬</span>通知</div>
   <div class="tab" data-page="expenses"><span class="tab-icon">💰</span>支出</div>
-  <div class="tab" data-page="rewards"><span class="tab-icon">🎁</span>ご褒美</div>
+  <div class="tab" data-page="wishlist"><span class="tab-icon">💎</span>在庫</div>
+  <div class="tab" data-page="detour"><span class="tab-icon">🌿</span>寄り道</div>
   <div class="tab" data-page="settings"><span class="tab-icon">⚙️</span>設定</div>
 </div>
 
@@ -376,28 +667,62 @@ body {
   </div>
 </div>
 
+<!-- 寄り道支出記録モーダル -->
+<div class="modal-overlay" id="detour-record-modal">
+  <div class="modal-box">
+    <div class="modal-title">🌿 寄り道の支出を記録</div>
+    <div id="detour-record-place" style="font-size:13px;color:var(--text-sub);margin-bottom:12px;"></div>
+    <div class="form-group">
+      <label class="form-label">何を買った？</label>
+      <input type="text" class="form-input" id="detour-record-item" maxlength="100" placeholder="例: カフェラテ">
+    </div>
+    <div class="form-group">
+      <label class="form-label">金額（円）</label>
+      <input type="number" class="form-input" id="detour-record-amount" min="1" max="1000000" inputmode="numeric" placeholder="680">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btn-detour-record-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="btn-detour-record-save">記録する</button>
+    </div>
+  </div>
+</div>
+
+<!-- スポット詳細モーダル -->
+<div class="modal-overlay" id="spot-detail-modal">
+  <div class="modal-box" style="max-height:85vh;overflow-y:auto;">
+    <div id="spot-detail-content"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-primary" id="btn-spot-detail-close" style="width:100%;">閉じる</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 (function() {
   'use strict';
 
-  // ─── 定数 ───
-  const LIFF_ID = '2010106872-9t0gN1D6'; // デプロイ時に置換
+  const LIFF_ID = '2010106872-9t0gN1D6';
   let idToken = null;
   let currentPage = 'home';
-  let currentExpenseMonth = null;  // 表示中の月 "YYYY-MM"
-  let editTargetSk = null;         // 編集対象の支出 SK
-  let monthlyChart = null;         // Chart.js インスタンス
+  let currentExpenseMonth = null;
+  let editTargetSk = null;
+  let monthlyChart = null;
+  let detourRecordSession = null;
 
-  // ─── ユーティリティ ───
   function fmt(n) {
-    return '¥' + Number(n || 0).toLocaleString('ja-JP');
+    return '\u00a5' + Number(n || 0).toLocaleString('ja-JP');
   }
   function fmtDate(iso) {
     if (!iso) return '';
     const d = new Date(iso);
     return (d.getMonth()+1) + '/' + d.getDate();
+  }
+  function fmtDateTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return (d.getMonth()+1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
   }
   function escHtml(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -416,7 +741,7 @@ body {
     return res.json();
   }
 
-  // ─── タブ切り替え ───
+  // タブ切り替え
   document.querySelectorAll('.tab').forEach(function(tab) {
     tab.addEventListener('click', function() {
       const page = this.dataset.page;
@@ -430,13 +755,15 @@ body {
     });
   });
 
-  // ─── ページ読み込み ───
   async function loadPage(page) {
     try {
       if (page === 'home') await loadDashboard();
       else if (page === 'expenses') await loadExpenses();
       else if (page === 'rewards') await loadRewards();
+      else if (page === 'detour') await loadDetour();
       else if (page === 'settings') await loadSettings();
+      else if (page === 'notifications') await loadNotifications();
+      else if (page === 'wishlist') await loadWishlist();
     } catch (e) {
       console.error('loadPage error:', e);
     }
@@ -446,8 +773,8 @@ body {
     const data = await api('/dashboard');
     const s = data.monthly_summary || {};
     document.getElementById('home-remaining').textContent = fmt(s.remaining);
-    let detail = '予算 ' + fmt(s.total_budget) + ' / 支出 ' + fmt(s.total_spent);
-    if (s.carryover_amount > 0) detail += '（繰越 ' + fmt(s.carryover_amount) + '）';
+    let detail = '\u4e88\u7b97 ' + fmt(s.total_budget) + ' / \u652f\u51fa ' + fmt(s.total_spent);
+    if (s.carryover_amount > 0) detail += '\uff08\u7e70\u8d8a ' + fmt(s.carryover_amount) + '\uff09';
     document.getElementById('home-budget-detail').textContent = detail;
     const pct = s.total_budget > 0 ? Math.min((s.total_spent / s.total_budget) * 100, 100) : 0;
     const bar = document.getElementById('home-progress');
@@ -457,12 +784,12 @@ body {
     const sugEl = document.getElementById('home-suggestions');
     const sugs = data.recent_suggestions || [];
     if (sugs.length === 0) {
-      sugEl.innerHTML = '<div class="empty-msg">まだ提案がありません</div>';
+      sugEl.innerHTML = '<div class="empty-msg">\u307e\u3060\u63d0\u6848\u304c\u3042\u308a\u307e\u305b\u3093</div>';
     } else {
       sugEl.innerHTML = sugs.map(function(s) {
-        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">購入済</span>'
-                    : s.outcome === 'skip' ? '<span class="badge badge-skip">スキップ</span>' : '';
-        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '—') + '</div>'
+        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">\u8cfc\u5165\u6e08</span>'
+                    : s.outcome === 'skip' ? '<span class="badge badge-skip">\u30b9\u30ad\u30c3\u30d7</span>' : '';
+        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '\u2014') + '</div>'
           + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
           + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
       }).join('');
@@ -474,47 +801,89 @@ body {
       currentExpenseMonth = new Date().toISOString().slice(0, 7);
     }
     document.getElementById('expenses-month-label').textContent = currentExpenseMonth;
-
-    // 月次グラフ（初回のみ描画、以降はデータ更新のみ）
     loadMonthlyChart();
 
-    // 支出一覧
     const data = await api('/expenses?month=' + currentExpenseMonth);
     const el = document.getElementById('expenses-list');
     const items = data.expenses || [];
     if (items.length === 0) {
-      el.innerHTML = '<div class="empty-msg">この月の支出はありません</div>';
+      el.innerHTML = '<div class="empty-msg">\u3053\u306e\u6708\u306e\u652f\u51fa\u306f\u3042\u308a\u307e\u305b\u3093</div>';
     } else {
       const total = items.reduce(function(s, e) { return s + e.amount; }, 0);
-      el.innerHTML = '<div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">合計: ' + fmt(total) + '</div>'
-        + items.map(function(e) {
-          return '<div class="swipe-row" data-sk="' + escAttr(e.sk) + '">'
-            + '<button class="swipe-delete-btn" data-sk="' + escAttr(e.sk) + '">削除</button>'
+      // 言い訳分類ごとにグルーピング
+      const groups = {};
+      items.forEach(function(e) {
+        const cat = e.ars_category || '\u305d\u306e\u4ed6';
+        if (!groups[cat]) groups[cat] = { items: [], total: 0 };
+        groups[cat].items.push(e);
+        groups[cat].total += e.amount;
+      });
+      const CAT_ICONS = {
+        '\u60c5\u7dd2\u5b89\u5b9a\u8cbb': '\u2615', '\u56de\u5fa9\u8cbb': '\ud83c\udf3f', '\u7dca\u6025\u56de\u5fa9\u8cbb': '\u26a1',
+        '\u3054\u8912\u7f8e\u8cbb': '\ud83c\udf81', '\u9ad8\u7d1a\u3054\u8912\u7f8e\u8cbb': '\u2728', '\u65c5\u884c\u30fb\u4f53\u9a13\u8cbb': '\u2708\ufe0f',
+        '\u6210\u9577\u6295\u8cc7\u8cbb': '\ud83d\udcda', '\u304a\u3059\u305d\u308f\u3051\u8cbb': '\ud83c\udf81', '\u65e5\u5e38\u6d88\u8cbb': '\ud83d\uded2',
+        '\u30b0\u30eb\u30e1\u8cbb': '\ud83c\udf5c', '\u305d\u306e\u4ed6': '\ud83d\udcdd'
+      };
+
+      let html = '<div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">\u5408\u8a08: ' + fmt(total) + '</div>';
+      Object.keys(groups).forEach(function(cat) {
+        const g = groups[cat];
+        const icon = CAT_ICONS[cat] || '\ud83d\udcdd';
+        const pct = total > 0 ? Math.round(g.total / total * 100) : 0;
+        html += '<div class="expense-group">'
+          + '<div class="expense-group-header" data-cat="' + escAttr(cat) + '">'
+          + '<div class="expense-group-left">'
+          + '<span class="expense-group-icon">' + icon + '</span>'
+          + '<span class="expense-group-name">' + escHtml(cat) + '</span>'
+          + '<span class="expense-group-count">(' + g.items.length + '\u4ef6)</span>'
+          + '</div>'
+          + '<div class="expense-group-right">'
+          + '<span class="expense-group-amount">' + fmt(g.total) + '</span>'
+          + '<span class="expense-group-pct">' + pct + '%</span>'
+          + '<span class="expense-group-arrow">\u25b6</span>'
+          + '</div></div>'
+          + '<div class="expense-group-body" style="display:none">';
+        g.items.forEach(function(e) {
+          html += '<div class="swipe-row" data-sk="' + escAttr(e.sk) + '">'
+            + '<button class="swipe-delete-btn" data-sk="' + escAttr(e.sk) + '">\u524a\u9664</button>'
             + '<div class="swipe-content">'
             + '<div class="list-item">'
-            + '<div style="flex:1"><div class="list-item-name">' + escHtml(e.item_name || '—') + '</div>'
-            + '<div class="list-item-cat">' + escHtml(e.ars_category || '') + '</div>'
-            + '<div class="list-item-date">' + fmtDate(e.created_at) + (e.corrected ? ' ✏️' : '') + '</div></div>'
+            + '<div style="flex:1"><div class="list-item-name">' + escHtml(e.item_name || '\u2014') + '</div>'
+            + '<div class="list-item-date">' + fmtDate(e.created_at) + (e.corrected ? ' \u270f\ufe0f' : '') + '</div></div>'
             + '<div style="display:flex;align-items:center">'
             + '<span class="list-item-amount">' + fmt(e.amount) + '</span>'
-            + '<button class="btn-edit" data-sk="' + escAttr(e.sk) + '" data-name="' + escAttr(e.item_name || '') + '" data-amount="' + e.amount + '">修正</button>'
-            + '</div></div>'
-            + '</div></div>';
-        }).join('');
-      // 修正ボタンのイベント
+            + '<button class="btn-edit" data-sk="' + escAttr(e.sk) + '" data-name="' + escAttr(e.item_name || '') + '" data-amount="' + e.amount + '">\u4fee\u6b63</button>'
+            + '</div></div></div></div>';
+        });
+        html += '</div></div>';
+      });
+      el.innerHTML = html;
+
+      // アコーディオン開閉
+      el.querySelectorAll('.expense-group-header').forEach(function(header) {
+        header.addEventListener('click', function() {
+          const body = this.nextElementSibling;
+          const arrow = this.querySelector('.expense-group-arrow');
+          if (body.style.display === 'none') {
+            body.style.display = 'block';
+            arrow.textContent = '\u25bc';
+          } else {
+            body.style.display = 'none';
+            arrow.textContent = '\u25b6';
+          }
+        });
+      });
+
       el.querySelectorAll('.btn-edit').forEach(function(btn) {
         btn.addEventListener('click', function() {
           openEditModal(this.dataset.sk, this.dataset.name, this.dataset.amount);
         });
       });
-      // スワイプ削除
       el.querySelectorAll('.swipe-row').forEach(function(row) {
         var content = row.querySelector('.swipe-content');
         var startX = 0, startY = 0, isDragging = false;
         content.addEventListener('touchstart', function(ev) {
-          startX = ev.touches[0].clientX;
-          startY = ev.touches[0].clientY;
-          isDragging = true;
+          startX = ev.touches[0].clientX; startY = ev.touches[0].clientY; isDragging = true;
         }, { passive: true });
         content.addEventListener('touchmove', function(ev) {
           if (!isDragging) return;
@@ -525,28 +894,19 @@ body {
           if (dx > 20) content.classList.remove('swiped');
         }, { passive: true });
         content.addEventListener('touchend', function() { isDragging = false; });
-        // 他行をタップしたら閉じる
         content.addEventListener('click', function(ev) {
-          if (!ev.target.classList.contains('btn-edit')) {
-            content.classList.remove('swiped');
-          }
+          if (!ev.target.classList.contains('btn-edit')) content.classList.remove('swiped');
         });
       });
-      // 削除ボタンのイベント
       el.querySelectorAll('.swipe-delete-btn').forEach(function(btn) {
         btn.addEventListener('click', async function() {
           const sk = this.dataset.sk;
-          if (!confirm('この支出を削除しますか？')) return;
+          if (!confirm('\u3053\u306e\u652f\u51fa\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f')) return;
           try {
             const result = await api('/expenses?sk=' + encodeURIComponent(sk), { method: 'DELETE' });
-            if (result.deleted) {
-              loadExpenses();
-            } else {
-              alert('削除に失敗しました: ' + (result.error || ''));
-            }
-          } catch(e) {
-            alert('削除に失敗しました');
-          }
+            if (result.deleted) loadExpenses();
+            else alert('\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + (result.error || ''));
+          } catch(e) { alert('\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f'); }
         });
       });
     }
@@ -556,7 +916,7 @@ body {
     try {
       const data = await api('/monthly-chart?months=6');
       const rows = data.data || [];
-      const labels = rows.map(function(r) { return r.month.slice(5); }); // "05" 形式
+      const labels = rows.map(function(r) { return r.month.slice(5); });
       const spents = rows.map(function(r) { return r.total_spent; });
       const budgets = rows.map(function(r) { return r.budget; });
 
@@ -572,22 +932,8 @@ body {
           data: {
             labels: labels,
             datasets: [
-              {
-                label: '支出',
-                data: spents,
-                backgroundColor: 'rgba(6,199,85,0.7)',
-                borderRadius: 4,
-              },
-              {
-                label: '予算',
-                data: budgets,
-                type: 'line',
-                borderColor: '#ffaa00',
-                backgroundColor: 'transparent',
-                borderWidth: 2,
-                pointRadius: 3,
-                tension: 0.3,
-              },
+              { label: '\u652f\u51fa', data: spents, backgroundColor: 'rgba(74,156,94,0.7)', borderRadius: 4 },
+              { label: '\u4e88\u7b97', data: budgets, type: 'line', borderColor: '#f9a825', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, tension: 0.3 },
             ],
           },
           options: {
@@ -595,21 +941,219 @@ body {
             maintainAspectRatio: false,
             plugins: { legend: { labels: { font: { size: 11 } } } },
             scales: {
-              y: {
-                ticks: {
-                  callback: function(v) { return '¥' + (v / 10000).toFixed(0) + '万'; },
-                  font: { size: 10 },
-                },
-              },
+              y: { ticks: { callback: function(v) { return '\u00a5' + (v / 10000).toFixed(0) + '\u4e07'; }, font: { size: 10 } } },
               x: { ticks: { font: { size: 11 } } },
             },
           },
         });
       }
+    } catch (e) { console.error('chart load error:', e); }
+  }
+
+  async function loadDetour() {
+    const LIFF_TEMPTATION = 'https://liff.line.me/2010106872-9t0gN1D6/temptation';
+    document.getElementById('btn-detour-start').onclick = function() {
+      liff.openWindow({ url: LIFF_TEMPTATION, external: false });
+    };
+
+    try {
+      const data = await api('/temptation/history');
+      const m = (data.this_month) || {};
+      const totalDetours = m.total_detours || 0;
+      document.getElementById('detour-count').textContent = totalDetours;
+
+      const lanesEl = document.getElementById('detour-lanes');
+      const byLane = m.by_lane || {};
+      const LANE_LABELS = {
+        CAFE_REBOOT: '\u2615 \u30ab\u30d5\u30a7\u518d\u8d77\u52d5',
+        CONVENIENCE_RECOVERY: '\ud83c\udfea \u30b3\u30f3\u30d3\u30cb\u56de\u5fa9',
+        SELF_COOKING_ESCAPE: '\ud83c\udf5c \u81ea\u7082\u653e\u68c4',
+        LOW_COST_RECOVERY: '\ud83d\udc8a \u4f4e\u30b3\u30b9\u30c8\u56de\u5fa9',
+        RICHER_ESCAPE: '\u2728 \u3061\u3087\u3063\u3068\u8d05\u6ca2',
+      };
+      const laneKeys = Object.keys(byLane);
+      if (laneKeys.length === 0) {
+        lanesEl.innerHTML = '<div class="empty-msg">\u4eca\u6708\u306f\u307e\u3060\u5bc4\u308a\u9053\u3057\u3066\u3044\u306a\u3044\u3088 \ud83c\udf31</div>';
+      } else {
+        lanesEl.innerHTML = laneKeys.map(function(k) {
+          var info = byLane[k];
+          return '<div class="detour-lane-row">'
+            + '<div><div class="detour-lane-name">' + escHtml(LANE_LABELS[k] || k) + '</div>'
+            + '<div class="detour-lane-stat">' + info.count + '\u56de / ' + fmt(info.total) + '</div></div>'
+            + '<div style="font-size:20px;">' + info.count + '\u56de</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      // セッション一覧
+      const sessionsEl = document.getElementById('detour-sessions');
+      const sessions = data.recent_sessions || [];
+      if (sessions.length === 0) {
+        sessionsEl.innerHTML = '<div class="empty-msg">\u307e\u3060\u5bc4\u308a\u9053\u306e\u8a18\u9332\u306f\u306a\u3044\u3088 \ud83c\udf31</div>';
+      } else {
+        sessionsEl.innerHTML = sessions.map(function(s) {
+          let statusBadge = '';
+          if (s.status === 'proposed') {
+            statusBadge = '<span class="badge badge-proposed">\ud83d\udca1 \u63d0\u6848\u6e08\u307f</span>';
+          } else if (s.status === 'accepted') {
+            statusBadge = '<span class="badge badge-active">\ud83d\udeb6 \u3053\u308c\u304b\u3089\u884c\u304f</span>';
+          } else if (s.expense_recorded) {
+            statusBadge = '<span class="badge badge-done">\u2705 \u8a18\u9332\u6e08\u307f</span>';
+          } else {
+            statusBadge = '<span class="badge badge-active">\ud83d\udcdd \u672a\u8a18\u9332</span>';
+          }
+          const placesHtml = (s.places || []).map(function(p, idx) {
+            const walk = Math.max(1, Math.round((p.distance_m || 0) / 80));
+            const placeData = escAttr(JSON.stringify(p));
+            let html = '<div class="session-place spot-clickable" data-place="' + placeData + '">';
+            if (p.image_url) {
+              html += '<img src="' + escAttr(p.image_url) + '" class="place-thumb" alt="">';
+            }
+            html += '<div class="place-info">';
+            html += '<div class="place-name">' + escHtml(p.name) + ' <span style="font-size:10px;color:var(--primary)">\u25b6\u8a73\u7d30</span></div>';
+            if (p.description) html += '<div class="place-desc">\ud83c\udf3f ' + escHtml(p.description) + '</div>';
+            if (p.genre) html += '<span class="place-genre">' + escHtml(p.genre) + '</span>';
+            if (p.budget_text) html += '<span class="place-budget">' + escHtml(p.budget_text) + '</span>';
+            html += '<span class="place-walk">\ud83d\udeb6 ' + walk + '\u5206</span>';
+            html += '</div></div>';
+            return html;
+          }).join('');
+
+          let actionsHtml = '';
+          if (s.status === 'accepted' && !s.expense_recorded) {
+            actionsHtml = '<div class="session-actions">'
+              + '<button class="btn-record-expense" data-session=\'' + escAttr(JSON.stringify({
+                session_id: s.session_id,
+                lane_title: s.lane_title,
+                places: s.places,
+              })) + '\'>\ud83d\udcb0 \u652f\u51fa\u3092\u8a18\u9332\u3059\u308b</button>'
+              + '</div>';
+          }
+
+          return '<div class="session-card">'
+            + '<div class="session-header">'
+            + '<span class="session-title">' + escHtml(s.lane_title || '\u5bc4\u308a\u9053') + '</span>'
+            + statusBadge
+            + '</div>'
+            + '<div class="session-date">' + fmtDateTime(s.created_at) + '</div>'
+            + placesHtml
+            + actionsHtml
+            + '</div>';
+        }).join('');
+
+        // スポット詳細クリック
+        sessionsEl.querySelectorAll('.spot-clickable').forEach(function(el) {
+          el.addEventListener('click', function(ev) {
+            if (ev.target.tagName === 'A') return;
+            const place = JSON.parse(this.dataset.place);
+            openSpotDetailModal(place);
+          });
+        });
+
+        sessionsEl.querySelectorAll('.btn-record-expense').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const sessionData = JSON.parse(this.dataset.session);
+            openDetourRecordModal(sessionData);
+          });
+        });
+      }
+
+      const places = m.frequent_places || [];
+      if (places.length > 0) {
+        document.getElementById('detour-places-card').style.display = '';
+        document.getElementById('detour-places').innerHTML =
+          places.map(function(p) { return '<span class="detour-place-chip">' + escHtml(p) + '</span>'; }).join('');
+      }
     } catch (e) {
-      console.error('chart load error:', e);
+      document.getElementById('detour-lanes').innerHTML = '<div class="empty-msg">\u30c7\u30fc\u30bf\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f</div>';
     }
   }
+
+  // 寄り道支出記録モーダル
+  function openDetourRecordModal(sessionData) {
+    detourRecordSession = sessionData;
+    const placeText = (sessionData.places || []).map(function(p) { return p.name; }).join('\u3001');
+    document.getElementById('detour-record-place').textContent = '\ud83d\udccd ' + (placeText || sessionData.lane_title);
+    document.getElementById('detour-record-item').value = '';
+    document.getElementById('detour-record-amount').value = '';
+    document.getElementById('detour-record-modal').classList.add('open');
+  }
+
+  document.getElementById('btn-detour-record-cancel').addEventListener('click', function() {
+    document.getElementById('detour-record-modal').classList.remove('open');
+    detourRecordSession = null;
+  });
+
+  document.getElementById('btn-detour-record-save').addEventListener('click', async function() {
+    if (!detourRecordSession) return;
+    const item = document.getElementById('detour-record-item').value.trim();
+    const amountStr = document.getElementById('detour-record-amount').value.trim();
+    if (!item) { alert('\u4f55\u3092\u8cb7\u3063\u305f\u304b\u5165\u529b\u3057\u3066\u306d'); return; }
+    const amount = parseInt(amountStr, 10);
+    if (isNaN(amount) || amount < 1 || amount > 1000000) { alert('\u91d1\u984d\u3092\u6b63\u3057\u304f\u5165\u529b\u3057\u3066\u306d\uff081\u301c1,000,000\u5186\uff09'); return; }
+
+    const placeName = (detourRecordSession.places && detourRecordSession.places.length > 0)
+      ? detourRecordSession.places[0].name : '';
+
+    try {
+      const result = await api('/temptation/complete', {
+        method: 'POST',
+        body: {
+          session_id: detourRecordSession.session_id,
+          lane_id: detourRecordSession.session_id,
+          amount: amount,
+          item_name: item,
+          place_name: placeName,
+        },
+      });
+      if (result.error) {
+        alert(result.error);
+      } else {
+        document.getElementById('detour-record-modal').classList.remove('open');
+        detourRecordSession = null;
+        alert('\u2705 \u8a18\u9332\u5b8c\u4e86\uff01\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093\u306b\u5831\u544a\u3057\u3066\u3082\u3044\u3044\u3088\ud83c\udf3f');
+        loadDetour();
+      }
+    } catch (e) {
+      alert('\u8a18\u9332\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+    }
+  });
+
+  // スポット詳細モーダル
+  function openSpotDetailModal(place) {
+    let html = '';
+    if (place.image_url) {
+      html += '<img src="' + escAttr(place.image_url) + '" style="width:100%;border-radius:10px;margin-bottom:12px;max-height:180px;object-fit:cover;" alt="">';
+    }
+    html += '<div style="font-size:17px;font-weight:bold;color:var(--text);margin-bottom:6px;">' + escHtml(place.name || '') + '</div>';
+    if (place.genre) html += '<div style="font-size:13px;color:var(--text-sub);margin-bottom:4px;">\ud83c\udf74 ' + escHtml(place.genre) + '</div>';
+    if (place.budget_text) html += '<div style="font-size:13px;color:var(--accent);margin-bottom:4px;">\ud83d\udcb0 \u4e88\u7b97: ' + escHtml(place.budget_text) + '</div>';
+    const walk = Math.max(1, Math.round((place.distance_m || 0) / 80));
+    html += '<div style="font-size:13px;color:var(--text-sub);margin-bottom:8px;">\ud83d\udeb6 \u5f92\u6b69\u7d04' + walk + '\u5206</div>';
+    if (place.description) {
+      html += '<div style="background:var(--card-inner,#f0f7f2);border-radius:8px;padding:10px;margin-bottom:12px;">'
+        + '<div style="font-size:11px;color:var(--primary);margin-bottom:4px;">\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093\u306e\u30b3\u30e1\u30f3\u30c8</div>'
+        + '<div style="font-size:13px;color:var(--text);">' + escHtml(place.description) + '</div>'
+        + '</div>';
+    }
+    html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    if (place.shop_url) {
+      html += '<a href="' + escAttr(place.shop_url) + '" target="_blank" class="spot-detail-link">\ud83c\udf74 \u304a\u5e97\u306eHP\u30fb\u30ec\u30d3\u30e5\u30fc\u3092\u898b\u308b</a>';
+    }
+    if (place.lat && place.lng) {
+      html += '<a href="https://www.google.com/maps/search/?api=1&query=' + place.lat + ',' + place.lng + '" target="_blank" class="spot-detail-link">\ud83d\uddfa\ufe0f Google\u30de\u30c3\u30d7\u3067\u958b\u304f</a>';
+    }
+    if (place.name) {
+      html += '<a href="https://www.google.com/search?q=' + encodeURIComponent(place.name + ' \u53e3\u30b3\u30df') + '" target="_blank" class="spot-detail-link">\u2b50 \u53e3\u30b3\u30df\u3092\u691c\u7d22</a>';
+    }
+    html += '</div>';
+    document.getElementById('spot-detail-content').innerHTML = html;
+    document.getElementById('spot-detail-modal').classList.add('open');
+  }
+
+  document.getElementById('btn-spot-detail-close').addEventListener('click', function() {
+    document.getElementById('spot-detail-modal').classList.remove('open');
+  });
 
   async function loadRewards() {
     const [histData, poolData] = await Promise.all([api('/history'), api('/pool')]);
@@ -617,12 +1161,12 @@ body {
     const histEl = document.getElementById('reward-history');
     const sugs = histData.suggestions || [];
     if (sugs.length === 0) {
-      histEl.innerHTML = '<div class="empty-msg">まだ提案がありません</div>';
+      histEl.innerHTML = '<div class="empty-msg">\u307e\u3060\u63d0\u6848\u304c\u3042\u308a\u307e\u305b\u3093</div>';
     } else {
       histEl.innerHTML = sugs.map(function(s) {
-        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">購入済</span>'
-                    : s.outcome === 'skip' ? '<span class="badge badge-skip">スキップ</span>' : '';
-        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '—') + '</div>'
+        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">\u8cfc\u5165\u6e08</span>'
+                    : s.outcome === 'skip' ? '<span class="badge badge-skip">\u30b9\u30ad\u30c3\u30d7</span>' : '';
+        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '\u2014') + '</div>'
           + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
           + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
       }).join('');
@@ -631,10 +1175,10 @@ body {
     const poolEl = document.getElementById('reward-pool');
     const items = poolData.items || [];
     if (items.length === 0) {
-      poolEl.innerHTML = '<div class="empty-msg">候補がありません</div>';
+      poolEl.innerHTML = '<div class="empty-msg">\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093</div>';
     } else {
       poolEl.innerHTML = items.map(function(item) {
-        const typeLabel = item.type === 'travel' ? '🏨' : item.type === 'restaurant' ? '🍽️' : '🛒';
+        const typeLabel = item.type === 'travel' ? '\ud83c\udfe8' : item.type === 'restaurant' ? '\ud83c\udf7d\ufe0f' : '\ud83d\uded2';
         const imgTag = item.image_url ? '<img class="pool-img" src="' + escAttr(item.image_url) + '" alt="">'
                                        : '<div class="pool-img"></div>';
         const link = item.source_url ? ' onclick="window.open(\'' + escAttr(item.source_url) + '\')"' : '';
@@ -653,33 +1197,32 @@ body {
     document.getElementById('set-budget').value = data.reward_budget_monthly || '';
     document.getElementById('set-carryover').value = Math.round((data.carryover_rate || 0.5) * 100);
 
-    // カレンダー連携
     const calData = await api('/calendar/status');
     const calEl = document.getElementById('calendar-section');
     if (calData.connected) {
-      calEl.innerHTML = '<div><span class="status-dot connected"></span>連携済み</div>'
-        + '<button class="btn btn-danger" id="btn-cal-disconnect" style="width:auto;padding:8px 16px;font-size:13px;">解除</button>';
+      calEl.innerHTML = '<div><span class="status-dot connected"></span>\u9023\u643a\u6e08\u307f</div>'
+        + '<button class="btn btn-danger" id="btn-cal-disconnect" style="width:auto;padding:8px 16px;font-size:13px;">\u89e3\u9664</button>';
       document.getElementById('btn-cal-disconnect').addEventListener('click', async function() {
-        if (confirm('カレンダー連携を解除しますか？')) {
+        if (confirm('\u30ab\u30ec\u30f3\u30c0\u30fc\u9023\u643a\u3092\u89e3\u9664\u3057\u307e\u3059\u304b\uff1f')) {
           await api('/calendar/disconnect', { method: 'POST' });
           loadSettings();
         }
       });
     } else {
-      calEl.innerHTML = '<div><span class="status-dot disconnected"></span>未連携</div>'
-        + '<button class="btn btn-outline" id="btn-cal-connect" style="width:auto;padding:8px 16px;font-size:13px;">Googleと連携する</button>';
+      calEl.innerHTML = '<div><span class="status-dot disconnected"></span>\u672a\u9023\u643a</div>'
+        + '<button class="btn btn-outline" id="btn-cal-connect" style="width:auto;padding:8px 16px;font-size:13px;">Google\u3068\u9023\u643a\u3059\u308b</button>';
       document.getElementById('btn-cal-connect').addEventListener('click', async function() {
         const authData = await api('/calendar/auth');
         if (authData.auth_url) {
           liff.openWindow({ url: authData.auth_url, external: true });
         } else {
-          alert(authData.error || 'カレンダー連携の設定がまだ完了していません');
+          alert(authData.error || '\u30ab\u30ec\u30f3\u30c0\u30fc\u9023\u643a\u306e\u8a2d\u5b9a\u304c\u307e\u3060\u5b8c\u4e86\u3057\u3066\u3044\u307e\u305b\u3093');
         }
       });
     }
   }
 
-  // ─── 月ナビ ───
+  // 月ナビ
   document.getElementById('btn-month-prev').addEventListener('click', function() {
     if (!currentExpenseMonth) return;
     var parts = currentExpenseMonth.split('-');
@@ -699,7 +1242,7 @@ body {
     loadExpenses();
   });
 
-  // ─── 編集モーダル ───
+  // 編集モーダル
   function openEditModal(sk, name, amount) {
     editTargetSk = sk;
     document.getElementById('edit-item-name').value = name;
@@ -715,7 +1258,7 @@ body {
     var newName = document.getElementById('edit-item-name').value.trim();
     var newAmount = parseInt(document.getElementById('edit-amount').value, 10);
     if (!newName || isNaN(newAmount) || newAmount < 1) {
-      alert('品名と金額を正しく入力してください');
+      alert('\u54c1\u540d\u3068\u91d1\u984d\u3092\u6b63\u3057\u304f\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044');
       return;
     }
     var result = await api('/expenses', {
@@ -727,11 +1270,11 @@ body {
       editTargetSk = null;
       loadExpenses();
     } else {
-      alert(result.error || '保存に失敗しました');
+      alert(result.error || '\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
     }
   });
 
-  // ─── 設定保存 ───
+  // 設定保存
   document.getElementById('btn-save-settings').addEventListener('click', async function() {
     const body = {};
     const nick = document.getElementById('set-nickname').value.trim();
@@ -744,13 +1287,13 @@ body {
 
     const result = await api('/settings', { method: 'PUT', body: body });
     if (result.updated) {
-      alert('保存しました！');
+      alert('\u4fdd\u5b58\u3057\u307e\u3057\u305f\uff01');
     } else if (result.error) {
       alert(result.error);
     }
   });
 
-  // ─── LIFF 初期化 ───
+  // LIFF 初期化
   async function initLiff() {
     try {
       await liff.init({ liffId: LIFF_ID });
@@ -760,21 +1303,104 @@ body {
       }
       idToken = liff.getIDToken();
       const profile = await liff.getProfile();
-      document.getElementById('header').textContent = '🎁 ' + (profile.displayName || 'リワードちゃん');
+      document.getElementById('header').textContent = '\ud83c\udf3f ' + (profile.displayName || '\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093');
       loadPage('home');
     } catch (e) {
       console.error('LIFF init error:', e);
-      document.querySelector('.content').innerHTML = '<div class="error-msg">初期化に失敗しました。LINEアプリから開いてください。</div>';
+      document.querySelector('.content').innerHTML = '<div class="error-msg">\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002LINE\u30a2\u30d7\u30ea\u304b\u3089\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002</div>';
     }
   }
 
-  // LIFF_ID が未設定の場合（開発時）はトークンなしで API を呼ぶ
   if (LIFF_ID === '__LIFF_ID__') {
-    console.warn('LIFF_ID not set — running in dev mode');
+    console.warn('LIFF_ID not set \u2014 running in dev mode');
     loadPage('home');
   } else {
     initLiff();
   }
+
+  // ─── 通知一覧 (変更依頼書_2 §3) ───
+  async function loadNotifications() {
+    const container = document.getElementById('notifications-list');
+    try {
+      const data = await api('/notifications');
+      const list = data.notifications || [];
+      if (list.length === 0) {
+        container.innerHTML = '<div class="empty-state">まだ通知はありません</div>';
+        return;
+      }
+      container.innerHTML = list.map(n => {
+        const typeLabel = {
+          'RECOMMENDATION': '💡 おすすめ',
+          'CART_ADDED': '🛒 カート',
+          'LOCATION_RECOMMENDATION': '📍 近くのお店',
+          'LOGIN_REQUIRED': '🔑 ログイン要求',
+          'PURCHASE_READY': '✅ 購入完了',
+          'MONTHLY_REMAINING': '📊 今月の残り',
+          'SYSTEM': 'ℹ️ お知らせ',
+        }[n.type] || '📨 通知';
+        const time = n.createdAt ? new Date(n.createdAt).toLocaleString('ja-JP', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+        return '<div class="notif-bubble">' +
+          '<div class="notif-type">' + typeLabel + '</div>' +
+          '<div class="notif-text">' + (n.message_text || n.title || '').replace(/\n/g, '<br>') + '</div>' +
+          '<div class="notif-time">' + time + '</div>' +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<div class="error-msg">通知の読み込みに失敗しました</div>';
+    }
+  }
+
+  // ─── 欲望在庫 (変更依頼書_2 §5) ───
+  async function loadWishlist() {
+    const container = document.getElementById('wishlist-items-list');
+    try {
+      const data = await api('/wishlist/items');
+      const items = data.items || [];
+      if (items.length === 0) {
+        container.innerHTML = '<div class="empty-state">まだ欲望在庫がありません<br>公開ほしい物リストURLを登録してね</div>';
+        return;
+      }
+      container.innerHTML = items.map(i => {
+        const price = i.price ? '¥' + Number(i.price).toLocaleString() : '価格不明';
+        const aging = i.desire_aging_days || 0;
+        const agingText = aging > 0 ? '🕐 熟成 ' + aging + '日目' : '🆕 登録直後';
+        const img = i.product_image_url ? '<img src="' + i.product_image_url + '" alt="">' : '<div style="width:60px;height:60px;background:#eee;border-radius:8px;display:flex;align-items:center;justify-content:center;">💎</div>';
+        return '<div class="wishlist-card">' +
+          img +
+          '<div class="wishlist-info">' +
+            '<div class="wishlist-title">' + (i.product_title || '不明') + '</div>' +
+            '<div class="wishlist-meta">' + price + ' / ' + (i.category || 'カテゴリなし') + '</div>' +
+            '<div class="wishlist-aging">' + agingText + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<div class="error-msg">読み込みに失敗しました</div>';
+    }
+  }
+
+  // ─── ほしい物リスト登録 ───
+  document.getElementById('btn-register-wishlist').addEventListener('click', async function() {
+    const url = document.getElementById('wishlist-url-input').value.trim();
+    if (!url) { alert('URLを入力してください'); return; }
+    this.disabled = true;
+    this.textContent = '同期中...';
+    try {
+      const result = await api('/wishlist/public-url', 'POST', { wishlistUrl: url });
+      if (result.success) {
+        alert('登録完了！ ' + (result.items_count || 0) + '件の商品を同期しました');
+        await loadWishlist();
+      } else {
+        alert(result.error || '登録に失敗しました');
+      }
+    } catch (e) {
+      alert('エラーが発生しました');
+    } finally {
+      this.disabled = false;
+      this.textContent = '登録して同期する';
+    }
+  });
+
 })();
 </script>
 </body>

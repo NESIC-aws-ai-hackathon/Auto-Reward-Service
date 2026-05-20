@@ -1,5 +1,5 @@
 """
-リワードちゃん「話す」機能 — 話しかけパターン選択
+ふれまーるちゃん「話す」機能 — 話しかけパターン選択
 
 postback action=start_talk で呼ばれ、ランダムに話しかけメッセージを生成する。
 記念日が近い場合はリマインダーメッセージを優先する。
@@ -16,24 +16,24 @@ from utils.logger import get_logger
 logger = get_logger(__name__)
 
 TALK_STARTERS_MOOD = [
-    "ねーねー、最近なんかいいことあった？😊",
-    "今日はどんな気分〜？🎵",
-    "お疲れさま〜！今週がんばったね✨",
-    "ねぇねぇ、最近どう？🎀",
-    "なんか楽しいことあった？教えて〜😆",
+    "ねぇねぇ〜、最近なんかいいことあった？🌿",
+    "今日はどんな気分〜？のんびりしてる？🌱",
+    "おつかれさま〜…今週もよくがんばったねぇ🌸",
+    "ねぇ〜、最近どうかなぁ？🌿",
+    "なんか楽しいことあった？教えてほしいな〜",
 ]
 
 TALK_STARTERS_PREFERENCE = [
-    "最近ハマってるものとかある？🤔",
-    "休みの日って何してることが多い？",
-    "好きな食べ物ベスト3教えて〜🍽️",
-    "最近読んだ本とか観た映画ある？📚🎬",
-    "今欲しいものとかある？教えて〜🎁",
+    "最近ハマってるものとかあるかなぁ？🌿",
+    "休みの日って何してることが多いの〜？",
+    "好きな食べ物ベスト3、教えてほしいなぁ〜🍽️",
+    "最近読んだ本とか観た映画ある〜？📚",
+    "今ほしいものとかある？教えてほしいな〜🌱",
 ]
 
 TALK_STARTERS_SEASONAL = [
-    "今月も残り少しだね〜✨ 何かご褒美考えてる？",
-    "週末だね〜！何か予定ある？😊",
+    "今月も残り少しだねぇ〜🌿 何かご褒美考えてる？",
+    "週末だね〜。何か予定あるのかなぁ？🌸",
 ]
 
 
@@ -79,7 +79,7 @@ def _check_upcoming_anniversary(pk: str, ddb: DynamoDBService) -> Optional[str]:
                     ann_date = ann_date.replace(year=today.year + 1)
                 days_until = (ann_date - today).days
                 if 0 < days_until <= 7:
-                    return f"{name}まであと{days_until}日だよ〜🎂\n何か準備する？"
+                    return f"{name}まであと{days_until}日だよ〜�\n何か準備しよっかなぁ？"
             except (ValueError, TypeError):
                 continue
         return None

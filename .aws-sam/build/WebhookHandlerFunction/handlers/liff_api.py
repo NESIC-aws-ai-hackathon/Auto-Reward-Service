@@ -637,6 +637,104 @@ def _handle_streak(user_id: str, ddb: DynamoDBService) -> dict:
     })
 
 
+def _serve_temptation_html() -> dict:
+    """寄り道レーンの HTML を配信する"""
+    html_path = Path(__file__).parent / "liff" / "temptation.html"
+    if not html_path.exists():
+        return {
+            "statusCode": 404,
+            "headers": {"Content-Type": "text/plain"},
+            "body": "Temptation page not found",
+        }
+    html = html_path.read_text(encoding="utf-8")
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "text/html; charset=utf-8",
+        },
+        "body": html,
+    }
+
+
+def _handle_temptation_start(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/temptation/start — 寄り道レーン生成"""
+    from services.temptation_engine import build_lanes
+
+    lat = body.get("lat")
+    lng = body.get("lng")
+    message = body.get("message", "寄り道したい")
+    genre = body.get("genre", "")
+
+    if lat is None or lng is None:
+        return _make_response(400, {"error": "lat, lng は必須です"})
+
+    try:
+        lat = float(lat)
+        lng = float(lng)
+    except (ValueError, TypeError):
+        return _make_response(400, {"error": "lat, lng は数値で指定してください"})
+
+    result = build_lanes(user_id, lat, lng, message, ddb, genre=genre)
+    return _make_response(200, result)
+
+
+def _handle_temptation_accept(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/temptation/accept — レーン選択確定"""
+    from services.temptation_engine import accept_lane
+
+    session_id = body.get("session_id", "")
+    lane_id = body.get("lane_id", "")
+
+    if not session_id or not lane_id:
+        return _make_response(400, {"error": "session_id, lane_id は必須です"})
+
+    result = accept_lane(user_id, session_id, lane_id, ddb)
+    return _make_response(200, result)
+
+
+def _handle_temptation_history(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/temptation/history — 寄り道履歴"""
+    from services.temptation_engine import get_temptation_history
+
+    result = get_temptation_history(user_id, ddb)
+    return _make_response(200, result)
+
+
+def _handle_temptation_complete(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/temptation/complete — ワンタップ支出記録"""
+    from services.temptation_engine import complete_temptation
+
+    session_id = body.get("session_id", "")
+    lane_id = body.get("lane_id", "")
+    amount = body.get("amount")
+    item_name = body.get("item_name", "")
+    place_name = body.get("place_name", "")
+    reward_id = body.get("reward_id")
+
+    if not session_id or not lane_id or amount is None or not item_name:
+        return _make_response(400, {"error": "session_id, lane_id, amount, item_name are required"})
+
+    try:
+        amount = int(amount)
+    except (ValueError, TypeError):
+        return _make_response(400, {"error": "invalid amount"})
+
+    if amount <= 0 or amount > 1_000_000:
+        return _make_response(400, {"error": "amount out of range"})
+
+    result = complete_temptation(
+        user_id=user_id,
+        session_id=session_id,
+        lane_id=lane_id,
+        amount=amount,
+        item_name=item_name,
+        place_name=place_name,
+        reward_id=reward_id,
+        ddb=ddb,
+    )
+    return _make_response(200, result)
+
+
 # ─────────────────────────────────────────
 # メインルーター
 # ─────────────────────────────────────────
@@ -671,6 +769,10 @@ def handler(event: dict, context: Any) -> dict:
     # /liff/onboarding → オンボーディングフォーム HTML
     if raw_path == "/liff/onboarding":
         return _serve_onboarding_html()
+
+    # /liff/temptation → 寄り道レーン HTML
+    if raw_path == "/liff/temptation":
+        return _serve_temptation_html()
 
     # /api/* → 認証必須
     user_id = _extract_user_id(event)
@@ -721,8 +823,215 @@ def handler(event: dict, context: Any) -> dict:
             return _handle_onboarding(user_id, event)
         elif raw_path == "/api/streak" and http_method == "GET":
             return _handle_streak(user_id, ddb)
+        elif raw_path == "/api/temptation/start" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_temptation_start(user_id, ddb, body)
+        elif raw_path == "/api/temptation/accept" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_temptation_accept(user_id, ddb, body)
+        elif raw_path == "/api/temptation/history" and http_method == "GET":
+            return _handle_temptation_history(user_id, ddb)
+        elif raw_path == "/api/temptation/complete" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_temptation_complete(user_id, ddb, body)
+        # ─── 欲望在庫 (Wishlist) ───
+        elif raw_path == "/api/wishlist/public-url" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_wishlist_register(user_id, ddb, body)
+        elif raw_path == "/api/wishlist/items" and http_method == "GET":
+            return _handle_wishlist_items(user_id, ddb)
+        # ─── レコメンド ───
+        elif raw_path == "/api/recommendations/generate" and http_method == "POST":
+            return _handle_recommendation_generate(user_id, ddb)
+        elif raw_path == "/api/recommendations" and http_method == "GET":
+            return _handle_recommendations_list(user_id, ddb)
+        elif raw_path == "/api/recommendations/active" and http_method == "GET":
+            return _handle_recommendation_active(user_id, ddb)
+        elif raw_path.startswith("/api/recommendations/") and raw_path.endswith("/cart") and http_method == "POST":
+            rec_id = raw_path.split("/")[3]
+            return _handle_recommendation_cart(user_id, ddb, rec_id)
+        elif raw_path.startswith("/api/recommendations/") and raw_path.endswith("/decline") and http_method == "POST":
+            rec_id = raw_path.split("/")[3]
+            return _handle_recommendation_decline(user_id, ddb, rec_id)
+        elif raw_path.startswith("/api/recommendations/") and raw_path.endswith("/purchase") and http_method == "POST":
+            rec_id = raw_path.split("/")[3]
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_recommendation_purchase(user_id, ddb, rec_id, body)
+        # ─── 通知 ───
+        elif raw_path == "/api/notifications" and http_method == "GET":
+            return _handle_notifications_list(user_id, ddb)
+        elif raw_path == "/api/notifications/latest-actionable" and http_method == "GET":
+            return _handle_notification_latest(user_id, ddb)
         else:
             return _make_response(404, {"error": "Not Found"})
     except Exception as e:
         logger.error("liff_api_error", error=str(e), path=raw_path)
         return _make_response(500, {"error": "内部エラーが発生しました"})
+
+
+# ─────────────────────────────────────────
+# 欲望在庫 (Wishlist) ハンドラ
+# ─────────────────────────────────────────
+def _handle_wishlist_register(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/wishlist/public-url — 公開ほしい物リストURL登録"""
+    from services.wishlist_service import register_wishlist_url
+
+    wishlist_url = body.get("wishlistUrl", "").strip()
+    display_name = body.get("displayName")
+    source_type = body.get("sourceType", "AMAZON_PUBLIC_WISHLIST")
+
+    if not wishlist_url:
+        return _make_response(400, {"error": "wishlistUrl は必須です"})
+
+    result = register_wishlist_url(
+        user_id, wishlist_url, ddb,
+        display_name=display_name,
+        source_type=source_type,
+    )
+    status_code = 200 if result.get("success") else 400
+    return _make_response(status_code, result)
+
+
+def _handle_wishlist_items(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/wishlist/items — 欲望在庫一覧"""
+    from services.wishlist_service import get_wishlist_items
+
+    items = get_wishlist_items(user_id, ddb)
+    return _make_response(200, {"items": items})
+
+
+# ─────────────────────────────────────────
+# レコメンドハンドラ
+# ─────────────────────────────────────────
+def _handle_recommendation_generate(user_id: str, ddb: DynamoDBService) -> dict:
+    """POST /api/recommendations/generate — レコメンド生成"""
+    from services.recommendation_engine import generate_recommendation
+
+    rec = generate_recommendation(user_id, ddb)
+    if rec:
+        return _make_response(200, rec)
+    return _make_response(200, {"message": "現在おすすめできる商品がありません"})
+
+
+def _handle_recommendations_list(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/recommendations — レコメンド一覧"""
+    from models.schemas import SK_PREFIX_RECOMMENDATION
+
+    pk = f"USER#{user_id}"
+    recs = ddb.query_begins_with(pk=pk, sk_prefix=SK_PREFIX_RECOMMENDATION)
+    recs.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
+    return _make_response(200, {"recommendations": recs[:20]})
+
+
+def _handle_recommendation_active(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/recommendations/active — アクティブなレコメンド"""
+    from services.recommendation_engine import get_active_recommendation
+
+    rec = get_active_recommendation(user_id, ddb)
+    if rec:
+        return _make_response(200, rec)
+    return _make_response(200, {"message": "アクティブなレコメンドはありません"})
+
+
+def _handle_recommendation_cart(user_id: str, ddb: DynamoDBService, rec_id: str) -> dict:
+    """POST /api/recommendations/{id}/cart — カート投入"""
+    from services.cart_job_service import create_cart_job
+    from services.recommendation_engine import update_recommendation_status
+    from models.schemas import SK_PREFIX_RECOMMENDATION
+
+    pk = f"USER#{user_id}"
+    rec = ddb.get_item(pk=pk, sk=f"{SK_PREFIX_RECOMMENDATION}{rec_id}")
+    if not rec:
+        return _make_response(404, {"error": "レコメンドが見つかりません"})
+
+    update_recommendation_status(user_id, rec_id, "CART_ADDING", ddb)
+
+    result = create_cart_job(
+        user_id, rec_id, "ADD_TO_CART", ddb,
+        product_url=rec.get("product_url"),
+        expected_product_title=rec.get("title"),
+        expected_price=rec.get("price"),
+    )
+    return _make_response(200, result)
+
+
+def _handle_recommendation_decline(user_id: str, ddb: DynamoDBService, rec_id: str) -> dict:
+    """POST /api/recommendations/{id}/decline — 拒否"""
+    from services.recommendation_engine import update_recommendation_status
+
+    update_recommendation_status(user_id, rec_id, "DECLINED", ddb)
+    return _make_response(200, {"status": "DECLINED", "message": "わかりました。欲望熟成庫に戻しておきます。"})
+
+
+def _handle_recommendation_purchase(user_id: str, ddb: DynamoDBService, rec_id: str, body: dict) -> dict:
+    """POST /api/recommendations/{id}/purchase — 購入リクエスト"""
+    from services.purchase_intent import classify_purchase_intent
+    from services.recommendation_engine import update_recommendation_status
+    from services.cart_job_service import create_cart_job
+    from models.schemas import SK_PREFIX_RECOMMENDATION
+
+    pk = f"USER#{user_id}"
+    rec = ddb.get_item(pk=pk, sk=f"{SK_PREFIX_RECOMMENDATION}{rec_id}")
+    if not rec:
+        return _make_response(404, {"error": "レコメンドが見つかりません"})
+
+    approval_text = body.get("approvalText", "")
+    intent = classify_purchase_intent(approval_text, rec.get("title"))
+
+    if intent == "EXPLICIT_PURCHASE":
+        update_recommendation_status(user_id, rec_id, "PURCHASE_APPROVED", ddb)
+        result = create_cart_job(
+            user_id, rec_id, "PURCHASE", ddb,
+            product_url=rec.get("product_url"),
+            expected_product_title=rec.get("title"),
+            expected_price=rec.get("price"),
+            explicit_approval_text=approval_text,
+        )
+        return _make_response(200, result)
+    elif intent == "AMBIGUOUS_BUY":
+        update_recommendation_status(user_id, rec_id, "PURCHASE_CONFIRMATION_REQUIRED", ddb)
+        return _make_response(200, {
+            "status": "PURCHASE_CONFIRMATION_REQUIRED",
+            "message": "買いたい気持ちはわかったよ！\n「この商品を購入して」と送ってくれたら、買ってくるよ～～",
+        })
+    elif intent == "DECLINE":
+        update_recommendation_status(user_id, rec_id, "DECLINED", ddb)
+        return _make_response(200, {"status": "DECLINED", "message": "わかりました。戻しておくね。"})
+    else:
+        return _make_response(400, {"error": "購入意思を確認できませんでした"})
+
+
+# ─────────────────────────────────────────
+# 通知ハンドラ
+# ─────────────────────────────────────────
+def _handle_notifications_list(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/notifications — 通知一覧"""
+    from services.notification_service import get_notifications
+
+    notifications = get_notifications(user_id, ddb)
+    return _make_response(200, {"notifications": notifications})
+
+
+def _handle_notification_latest(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/notifications/latest-actionable — 最新アクション可能通知"""
+    from services.notification_service import get_latest_actionable_notification
+
+    notif = get_latest_actionable_notification(user_id, ddb)
+    if notif:
+        return _make_response(200, notif)
+    return _make_response(200, {"message": "アクション可能な通知はありません"})

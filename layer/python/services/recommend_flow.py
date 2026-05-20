@@ -1,31 +1,51 @@
 """
-おすすめフロー — カテゴリ → 予算 → Bedrock 生成
+おすすめフロー — カテゴリ → 予算 → 実商品検索（楽天/ホットペッパー）
 
 状態管理: DynamoDB RECOMMEND_STATE# に step を保持（TTL: 10分）
 全応答は Reply で返す（Push 通数ゼロ）
 """
 from __future__ import annotations
 
-import json
+import random
 import time
 from datetime import datetime, timezone
 from typing import Optional
 
-from services.bedrock_service import BedrockService
 from services.dynamodb_service import DynamoDBService
 from services.finance_engine import calculate_slack
+from services.rakuten_service import search_products, RakutenProduct, RakutenAPIError
+from services.hotpepper_service import search_restaurants, HotPepperRestaurant, HotPepperAPIError
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_bedrock = BedrockService()
-
+# カテゴリ設定
 CATEGORIES = {
-    "グルメ": ["グルメ", "食べ物", "スイーツ", "ごはん", "食事"],
-    "エンタメ": ["エンタメ", "趣味", "ゲーム", "映画", "音楽"],
-    "リラックス": ["リラックス", "美容", "癒し", "温泉", "マッサージ"],
-    "ギフト": ["プレゼント", "ギフト", "お土産"],
-    "おまかせ": ["おまかせ", "なんでも", "任せる", "わからない"],
+    "グルメ": {
+        "keywords": ["グルメ", "食べ物", "スイーツ", "ごはん", "食事", "カフェ", "ランチ"],
+        "source": "hotpepper",
+        "search_terms": ["ご褒美 ランチ", "スイーツ カフェ", "人気 グルメ"],
+    },
+    "エンタメ": {
+        "keywords": ["エンタメ", "趣味", "ゲーム", "映画", "音楽", "本"],
+        "source": "rakuten",
+        "search_terms": ["ゲーム 人気", "漫画 話題", "趣味 グッズ"],
+    },
+    "リラックス": {
+        "keywords": ["リラックス", "美容", "癒し", "温泉", "マッサージ", "バス"],
+        "source": "rakuten",
+        "search_terms": ["入浴剤 ギフト", "アロマ リラックス", "美容 ご褒美"],
+    },
+    "ギフト": {
+        "keywords": ["プレゼント", "ギフト", "お土産"],
+        "source": "rakuten",
+        "search_terms": ["ギフト 人気", "プレゼント おしゃれ", "お取り寄せ ギフト"],
+    },
+    "おまかせ": {
+        "keywords": ["おまかせ", "なんでも", "任せる", "わからない"],
+        "source": "rakuten",
+        "search_terms": ["ご褒美 自分用", "癒し グッズ", "人気 ランキング"],
+    },
 }
 
 BUDGET_OPTIONS = {
@@ -50,13 +70,13 @@ def start_recommend(user_id: str, ddb: DynamoDBService) -> list[dict]:
     })
 
     text = (
-        "おすすめタイムだね！🎁\n"
+        "おすすめタイムだねぇ～🌿\n"
         "何のおすすめがほしい？\n\n"
         "🍽️ グルメ・スイーツ\n"
         "🎮 エンタメ・趣味\n"
         "💆 リラックス・美容\n"
         "🎁 プレゼント・ギフト\n"
-        "🤷 なんでもいい！おまかせ"
+        "🤷 なんでもいい～おまかせ～"
     )
     return [{"type": "text", "text": text}]
 
@@ -78,11 +98,11 @@ def handle_recommend_reply(
             "created_at": state.get("created_at", ""),
         })
         reply = (
-            "予算はどのくらい？\n\n"
-            "💰 〜1,000円\n"
-            "💰 〜3,000円\n"
-            "💰 〜5,000円\n"
-            "🤷 おまかせ"
+            "予算はどのくらいがいいかなぁ～？\n\n"
+            "💰 ～1,000円\n"
+            "💰 ～3,000円\n"
+            "💰 ～5,000円\n"
+            "🤷 おまかせ～"
         )
         return [{"type": "text", "text": reply}]
 
@@ -91,20 +111,20 @@ def handle_recommend_reply(
         budget = _match_budget(text, user_id, ddb)
         # 状態クリア
         ddb.delete_item(pk, SK_RECOMMEND_STATE)
-        # Bedrock でおすすめ生成（Flex Message 返却）
+        # 実商品検索（Flex Carousel 返却）
         return _generate_recommendation(user_id, category, budget, ddb)
 
     else:
         # 不明な状態 → クリア
         ddb.delete_item(pk, SK_RECOMMEND_STATE)
-        return [{"type": "text", "text": "ごめん、最初からやり直してね🎀"}]
+        return [{"type": "text", "text": "ごめんねぇ～、最初からやり直してみてね🌿"}]
 
 
 def _match_category(text: str) -> str:
     """ユーザー入力からカテゴリを判定"""
     text_lower = text.strip()
-    for cat, keywords in CATEGORIES.items():
-        if any(kw in text_lower for kw in keywords):
+    for cat, info in CATEGORIES.items():
+        if any(kw in text_lower for kw in info["keywords"]):
             return cat
     return "おまかせ"
 
@@ -139,106 +159,257 @@ def _get_remaining_budget(user_id: str, ddb: DynamoDBService) -> int:
 def _generate_recommendation(
     user_id: str, category: str, budget: int, ddb: DynamoDBService
 ) -> list[dict]:
-    """Bedrock でおすすめを生成し Flex Message で返す"""
-    pk = f"USER#{user_id}"
+    """実商品/飲食店を検索し Flex Carousel で返す"""
+    cat_info = CATEGORIES.get(category, CATEGORIES["おまかせ"])
+    source = cat_info.get("source", "rakuten")
+    search_terms = cat_info.get("search_terms", [])
 
-    # 嗜好情報を取得
-    pref = ddb.get_item(pk=pk, sk="PREF_MEMORY#") or {}
-    pref_categories = pref.get("categories", [])
+    if source == "hotpepper":
+        return _search_hotpepper(user_id, category, budget, search_terms, ddb)
+    else:
+        return _search_rakuten(user_id, category, budget, search_terms, ddb)
 
-    prompt = (
-        f"あなたは「リワードちゃん」という可愛い女の子キャラクターです。\n"
-        f"ユーザーに予算{budget}円以内で「{category}」カテゴリのご褒美を3つおすすめしてください。\n\n"
-        f"ユーザーの好み: {', '.join(pref_categories) if pref_categories else '特になし'}\n\n"
-        f"条件:\n"
-        f"- 各おすすめは①②③の番号付きで\n"
-        f"- 各アイテムに商品名、価格目安、一言コメントを含める\n"
-        f"- リワードちゃんの口調（タメ口、可愛い、絵文字使用）で\n"
-        f"- 最後に「気になるのあった？😊」で締める\n"
-        f"- 200文字以内で簡潔に"
-    )
+
+def _search_hotpepper(
+    user_id: str, category: str, budget: int, search_terms: list[str], ddb: DynamoDBService
+) -> list[dict]:
+    """ホットペッパーで飲食店を検索して Flex Carousel で返す"""
+    keyword = random.choice(search_terms) if search_terms else "人気 グルメ"
 
     try:
-        result_text = _bedrock.invoke_text(
-            prompt=prompt,
-            system_prompt="あなたはリワードちゃんです。可愛くフレンドリーにおすすめを紹介します。",
-            max_tokens=400,
-            temperature=0.9,
-        )
-        body_text = result_text.strip()
-    except Exception as e:
-        logger.warning("recommend_bedrock_error", error=str(e))
-        body_text = (
-            f"{category}で{budget}円くらいだと…🎀\n\n"
-            f"① ちょっといいスイーツ 🍰\n"
-            f"② 入浴剤セット 🛁\n"
-            f"③ お気に入りのカフェでゆっくり ☕\n\n"
-            f"気になるのあった？😊"
-        )
+        restaurants = search_restaurants(keyword=keyword, count=5)
+    except HotPepperAPIError as e:
+        logger.warning("recommend_hotpepper_error", error=str(e))
+        return [{"type": "text", "text": "ごめんねぇ～、お店の検索がうまくいかなかったみたい🌿 もう一度試してみてね～"}]
 
-    # Flex Message Bubble（テキスト本文 + アクションボタン）
-    flex_message = {
+    if not restaurants:
+        return [{"type": "text", "text": f"うーん、{category}で見つからなかったかも…🌿 別のジャンルも試してみる？"}]
+
+    # Flex Carousel 構築
+    bubbles = []
+    for r in restaurants[:3]:
+        bubble = _build_restaurant_bubble(r, user_id)
+        bubbles.append(bubble)
+
+    carousel = {
         "type": "flex",
-        "altText": f"🎁 {category}のおすすめを届けたよ〜！",
+        "altText": f"🍽️ {category}のおすすめを見つけたよ〜🌿",
         "contents": {
-            "type": "bubble",
-            "styles": {
-                "header": {"backgroundColor": "#FF6B9D"},
-            },
-            "header": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": f"🎁 {category}のおすすめ",
-                        "color": "#FFFFFF",
-                        "weight": "bold",
-                        "size": "md",
-                    }
-                ],
-            },
-            "body": {
-                "type": "box",
-                "layout": "vertical",
-                "contents": [
-                    {
-                        "type": "text",
-                        "text": body_text,
-                        "wrap": True,
-                        "size": "sm",
-                        "color": "#333333",
-                    }
-                ],
-            },
-            "footer": {
-                "type": "box",
-                "layout": "horizontal",
-                "spacing": "sm",
-                "contents": [
-                    {
-                        "type": "button",
-                        "style": "primary",
-                        "color": "#FF6B9D",
-                        "height": "sm",
-                        "action": {
-                            "type": "postback",
-                            "label": "気になる！🎀",
-                            "data": f"action=interested&item={category}",
-                        },
-                    },
-                    {
-                        "type": "button",
-                        "style": "secondary",
-                        "height": "sm",
-                        "action": {
-                            "type": "postback",
-                            "label": "もう一度",
-                            "data": "action=start_recommend",
-                        },
-                    },
-                ],
-            },
+            "type": "carousel",
+            "contents": bubbles,
         },
     }
-    return [flex_message]
+
+    intro_text = f"{category}で探してみたよぇ～🌿\n気になるお店があったら見てみてね〜"
+    return [{"type": "text", "text": intro_text}, carousel]
+
+
+def _search_rakuten(
+    user_id: str, category: str, budget: int, search_terms: list[str], ddb: DynamoDBService
+) -> list[dict]:
+    """楽天市場で商品を検索して Flex Carousel で返す"""
+    keyword = random.choice(search_terms) if search_terms else "ご褒美"
+
+    try:
+        products = search_products(
+            keyword=keyword,
+            hits=5,
+            min_price=300,
+            max_price=budget,
+        )
+    except RakutenAPIError as e:
+        logger.warning("recommend_rakuten_error", error=str(e))
+        return [{"type": "text", "text": "ごめんねぇ～、商品の検索がうまくいかなかったみたい🌿 もう一度試してみてね～"}]
+
+    if not products:
+        return [{"type": "text", "text": f"うーん、{category}で{budget}円以内だと見つからなかったかも…🌿 予算を上げてみる？"}]
+
+    # Flex Carousel 構築
+    bubbles = []
+    for p in products[:3]:
+        bubble = _build_product_bubble(p, user_id)
+        bubbles.append(bubble)
+
+    carousel = {
+        "type": "flex",
+        "altText": f"🌿 {category}のおすすめを見つけたよ〜",
+        "contents": {
+            "type": "carousel",
+            "contents": bubbles,
+        },
+    }
+
+    intro_text = f"{category}で{budget}円以内のおすすめを探してみたよぇ～🌿\n気になるのあったら商品ページ見てみてね〜"
+    return [{"type": "text", "text": intro_text}, carousel]
+
+
+def _build_product_bubble(product: RakutenProduct, user_id: str) -> dict:
+    """楽天商品の Flex Bubble を構築"""
+    price_str = f"¥{int(product.price):,}"
+    name = str(product.name)[:40]
+
+    body_contents = [
+        {
+            "type": "text",
+            "text": name,
+            "weight": "bold",
+            "size": "sm",
+            "wrap": True,
+            "maxLines": 2,
+        },
+        {
+            "type": "text",
+            "text": price_str,
+            "size": "lg",
+            "color": "#7BAF6E",
+            "weight": "bold",
+            "margin": "sm",
+        },
+        {
+            "type": "text",
+            "text": product.shop_name,
+            "size": "xs",
+            "color": "#999999",
+            "margin": "sm",
+        },
+    ]
+
+    bubble: dict = {
+        "type": "bubble",
+        "size": "micro",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": body_contents,
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#7BAF6E",
+                    "height": "sm",
+                    "action": {
+                        "type": "uri",
+                        "label": "商品を見る🌿",
+                        "uri": product.item_url,
+                    },
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "postback",
+                        "label": "買ったよ！",
+                        "data": f"action=purchased&price={int(product.price)}&name={name[:20]}",
+                    },
+                },
+            ],
+        },
+    }
+
+    if product.image_url:
+        bubble["hero"] = {
+            "type": "image",
+            "url": product.image_url.replace("http://", "https://"),
+            "size": "full",
+            "aspectRatio": "1:1",
+            "aspectMode": "cover",
+        }
+
+    return bubble
+
+
+def _build_restaurant_bubble(restaurant: HotPepperRestaurant, user_id: str) -> dict:
+    """ホットペッパー飲食店の Flex Bubble を構築"""
+    price_str = f"予算 ¥{int(restaurant.price):,}" if restaurant.price else "予算情報なし"
+    name = str(restaurant.name)[:40]
+
+    body_contents = [
+        {
+            "type": "text",
+            "text": name,
+            "weight": "bold",
+            "size": "sm",
+            "wrap": True,
+            "maxLines": 2,
+        },
+        {
+            "type": "text",
+            "text": restaurant.genre_name,
+            "size": "xs",
+            "color": "#7BAF6E",
+            "margin": "sm",
+        },
+        {
+            "type": "text",
+            "text": price_str,
+            "size": "sm",
+            "color": "#333333",
+            "margin": "sm",
+        },
+    ]
+
+    if restaurant.station_name:
+        body_contents.append({
+            "type": "text",
+            "text": f"📍 {restaurant.station_name}",
+            "size": "xs",
+            "color": "#999999",
+            "margin": "sm",
+        })
+
+    bubble: dict = {
+        "type": "bubble",
+        "size": "micro",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": body_contents,
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#7BAF6E",
+                    "height": "sm",
+                    "action": {
+                        "type": "uri",
+                        "label": "お店を見る🍽️",
+                        "uri": restaurant.shop_url,
+                    },
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "height": "sm",
+                    "action": {
+                        "type": "postback",
+                        "label": "行ったよ！",
+                        "data": f"action=purchased&price={int(restaurant.price)}&name={name[:20]}",
+                    },
+                },
+            ],
+        },
+    }
+
+    if restaurant.image_url:
+        bubble["hero"] = {
+            "type": "image",
+            "url": restaurant.image_url.replace("http://", "https://"),
+            "size": "full",
+            "aspectRatio": "3:2",
+            "aspectMode": "cover",
+        }
+
+    return bubble

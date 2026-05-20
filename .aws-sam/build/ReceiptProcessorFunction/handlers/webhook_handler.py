@@ -30,6 +30,8 @@ from services.recommend_flow import start_recommend, handle_recommend_reply
 from services.quick_expense import show_quick_expense_options, handle_quick_expense_reply
 from services.monthly_report import generate_monthly_report
 from services.streak import update_streak
+from services.temptation_engine import invite_location, try_complete_active_session
+from services.stress_engine import should_suggest_detour
 
 logger = get_logger(__name__)
 
@@ -37,21 +39,22 @@ DAILY_CHAT_LIMIT = int(os.getenv("DAILY_CHAT_LIMIT", "50"))
 MAX_INPUT_LENGTH = 1000
 
 DAILY_LIMIT_REPLY = (
-    "今日はもうたくさん話したね！リワードちゃん、ちょっと休憩するよ🥱\n"
-    "また明日話しかけてね✨"
+    "今日はいっぱいおしゃべりしたねぇ～🌿\n"
+    "ふれまーるちゃん、ちょっとのんびり休むねぇ。\n"
+    "また明日、ゆっくりお話しよー✨"
 )
 INPUT_TOO_LONG_REPLY = (
-    "ちょっと長すぎて読み切れなかったよ😅\n"
-    "1000文字以内でもう一度話しかけてね！"
+    "うーん、ちょっと長くて読み切れなかったかも～😅\n"
+    "1000文字くらいでもう一度教えてほしいなぁ～"
 )
 
 UNSUPPORTED_REPLIES = [
-    "スタンプかわいい！でもリワードちゃん、文字の方が得意なんだ😊",
-    "んそれはまだ読めないかも！テキストで話しかけてくれると嬉しいな",
-    "おっ、それ気になる！けど今はテキストだけ対応してるんだ～🥲",
+    "スタンプだねぇ～かわいい🌿 でも文字のほうが得意なんだぁ～",
+    "んー、それはまだ読めないかも～。テキストで話しかけてくれるとうれしいなぁ",
+    "おっ、気になるねぇ～！でも今はテキストだけ対応してるんだ～🌱",
 ]
 
-ERROR_REPLY = "ちょっと調子が悪いみたい…またあとで話しかけてね🥲"
+ERROR_REPLY = "んー、ちょっと調子がよくないみたい…🌿 またあとで話しかけてねぇ～"
 
 _ddb = None
 
@@ -128,7 +131,6 @@ def _handle_follow(event):
             "entityType": "PROFILE",
             "status": "ONBOARDING",
             "tone": "friendly",
-            "push_count_this_month": 0,
             "line_user_id": user_id,
             "createdAt": now,
             "updatedAt": now,
@@ -156,7 +158,6 @@ def _route_message(event):
                 "entityType": "PROFILE",
                 "status": "ONBOARDING",
                 "tone": "friendly",
-                "push_count_this_month": 0,
                 "line_user_id": user_id,
                 "createdAt": now,
                 "updatedAt": now,
@@ -251,7 +252,7 @@ def _handle_text(user_id, text, reply_token):
             if items_to_save:
                 streak_msg = update_streak(user_id, ddb)
                 if streak_msg:
-                    get_line_service().push_message(user_id, [{"type": "text", "text": streak_msg}])
+                    logger.info("streak_achieved", user_id=user_id, message=streak_msg)
             _update_daily_count(user_id, today, ddb)
         except Exception as e:
             logger.warning("post_reply_ops_failed", error=str(e))
@@ -293,6 +294,21 @@ def _handle_text(user_id, text, reply_token):
     if intent == "EXPENSE":
         reply_text, items_to_save = expense_extractor.extract(text, user_id, ddb)
         if reply_text:  # 空文字の場合は支出でなかった→チャットフローへ
+            # 寄り道キーワードがあれば、直近のacceptedセッションを自動完了する
+            detour_keywords = ["寄り道", "寄った", "寄っちゃった", "さっきの", "立ち寄"]
+            is_detour_expense = any(kw in text for kw in detour_keywords)
+            detour_place = None
+            if is_detour_expense:
+                try:
+                    amount = items_to_save[0].get("amount", 0) if items_to_save else 0
+                    item_name = items_to_save[0].get("item_name", "") if items_to_save else ""
+                    detour_place = try_complete_active_session(user_id, item_name, amount, ddb)
+                except Exception as e:
+                    logger.warning("temptation_auto_complete_failed", error=str(e))
+
+            if detour_place:
+                reply_text += f"\n\n🌿 寄り道セッションも記録したよ〜。おつかれさま〜"
+
             get_line_service().reply_message(
                 reply_token, [{"type": "text", "text": reply_text}]
             )
@@ -300,12 +316,11 @@ def _handle_text(user_id, text, reply_token):
                 _save_expense_items(user_id, items_to_save, ddb)
                 streak_msg = update_streak(user_id, ddb)
                 if streak_msg:
-                    try:
-                        get_line_service().push_message(user_id, [{"type": "text", "text": streak_msg}])
-                    except Exception:
-                        pass
+                    logger.info("streak_achieved", user_id=user_id, message=streak_msg)
                 _save_chat_log(user_id, text, reply_text, intent, ddb)
                 _update_daily_count(user_id, today, ddb)
+                # 小間籠〬の経験が級がっていないかストレス評価
+                _maybe_push_detour(user_id, text, ddb)
             except Exception as e:
                 logger.warning("post_reply_ops_failed", error=str(e))
 
@@ -336,6 +351,17 @@ def _handle_text(user_id, text, reply_token):
             logger.warning("post_reply_ops_failed", error=str(e))
         return
 
+    # TEMPTATION intent 処理（寄り道レーン提案）
+    if intent == "TEMPTATION":
+        messages = invite_location(user_id, text)
+        get_line_service().reply_message(reply_token, messages)
+        try:
+            _save_chat_log(user_id, text, "寄り道レーン提案", intent, ddb)
+            _update_daily_count(user_id, today, ddb)
+        except Exception as e:
+            logger.warning("post_reply_ops_failed", error=str(e))
+        return
+
     # 通常チャットフロー
     profile = ddb.get_item(pk=pk, sk="PROFILE#") or {}
     onboarding_state = ddb.get_item(pk=pk, sk="ONBOARDING_STATE#") or {}
@@ -347,6 +373,20 @@ def _handle_text(user_id, text, reply_token):
     )
 
     tone = profile.get("tone", "friendly")
+
+    # ─── 購入意図判定（アクティブなレコメンドがある場合） ───
+    if not in_onboarding:
+        reply_text = _handle_purchase_intent_if_active(user_id, text, ddb)
+        if reply_text:
+            get_line_service().reply_message(
+                reply_token, [{"type": "text", "text": reply_text}]
+            )
+            try:
+                _save_chat_log(user_id, text, reply_text, "PURCHASE_INTENT", ddb)
+                _update_daily_count(user_id, today, ddb)
+            except Exception as e:
+                logger.warning("post_reply_ops_failed", error=str(e))
+            return
 
     # REWARD intent → ご褒美提案（スライス 5-2〜5-6）
     if intent == "REWARD" and not in_onboarding:
@@ -389,6 +429,8 @@ def _handle_text(user_id, text, reply_token):
         _update_daily_count(user_id, today, ddb)
         _detect_preferences(user_id, text, ddb)
         _detect_anniversary(user_id, text, ddb)
+        # チャット内容・蒙積データを総合評価して寄り道を能動的に提案
+        _maybe_push_detour(user_id, text, ddb)
     except Exception as e:
         logger.warning("post_reply_ops_failed", error=str(e))
 
@@ -408,7 +450,7 @@ def _handle_image(user_id, message_id, reply_token):
             )
             get_line_service().reply_message(
                 reply_token,
-                [{"type": "text", "text": "レシート受け取ったよ！少し時間がかかるかも🎀\n解析できたらお知らせするね！"}],
+                [{"type": "text", "text": "レシート受け取ったよ〜🌿 ちょっと時間かかるかもだけど、解析できたらお知らせするねぇ"}],
             )
         except Exception as e:
             logger.warning("sqs_send_failed", error=str(e))
@@ -426,7 +468,7 @@ def _handle_image_sync(user_id, message_id, reply_token):
     except Exception as e:
         logger.warning("get_message_content_failed", error=str(e))
         get_line_service().reply_message(
-            reply_token, [{"type": "text", "text": "画像を取得できなかったよ😅テキストで教えてくれると嬉しいな！"}]
+            reply_token, [{"type": "text", "text": "画像を取得できなかったよ〜🌿 テキストで教えてくれるとうれしいなぁ"}]
         )
         return
 
@@ -506,33 +548,79 @@ def _update_daily_count(user_id, today, ddb):
     ddb.increment_atomic_counter(pk=pk, sk=sk, attribute="count", ttl=ttl)
 
 
+def _maybe_push_detour(user_id: str, text: str, ddb) -> None:
+    """
+    ストレスエンジンで総合評価し、閾値を超えたら寄り道を PWA 通知する。
+    TEMPTATION intent のような明示的な要求ではなく、
+    蓄積データ（時間帯・支出パターン・チャット傾向）から能動的に判定する。
+    """
+    try:
+        from services.notification_service import create_notification
+        result = should_suggest_detour(user_id, text, ddb)
+        if result.get("suggest"):
+            create_notification(
+                user_id=user_id,
+                ddb=ddb,
+                notification_type="detour_suggest",
+                title="寄り道してみない？",
+                message_text="お疲れがたまってるみたいだねぇ～。ちょっと寄り道して、のんびりリフレッシュしよ～🌿",
+            )
+            logger.info(
+                "proactive_detour_notified",
+                user_id=user_id,
+                score=result.get("score"),
+                reason=result.get("reason"),
+            )
+    except Exception as e:
+        logger.warning("maybe_push_detour_failed", error=str(e))
+
+
 def _detect_preferences(user_id, text, ddb):
     _KEYWORDS = {
-        "スイーツ": ["ケーキ", "プリン", "チョコ", "アイス", "パフェ"],
-        "カフェ": ["カフェ", "コーヒー", "ラテ", "紅茶"],
+        "スイーツ": ["ケーキ", "プリン", "チョコ", "アイス", "パフェ", "タルト", "マカロン", "ドーナツ", "クレープ"],
+        "カフェ": ["カフェ", "コーヒー", "ラテ", "紅茶", "抹茶", "スタバ", "タリーズ", "ドトール"],
         "旅行": ["旅行", "温泉", "ホテル", "旅館"],
         "読書": ["本", "読書", "漫画", "小説"],
-        "美容": ["コスメ", "スキンケア", "ネイル", "マッサージ"],
-        "グルメ": ["ランチ", "ディナー", "レストラン", "居酒屋", "ラーメン"],
+        "美容": ["コスメ", "スキンケア", "ネイル", "マッサージ", "エステ"],
+        "グルメ": ["ランチ", "ディナー", "レストラン", "居酒屋", "ラーメン", "焼肉", "寿司", "パスタ", "カレー", "うどん", "そば", "中華", "イタリアン", "フレンチ", "定食"],
+        "お酒": ["ビール", "ワイン", "日本酒", "焼酎", "ハイボール", "カクテル", "飲み"],
     }
-    detected = [cat for cat, kws in _KEYWORDS.items() if any(kw in text for kw in kws)]
-    if not detected:
+    # 具体的な食べ物/ジャンル好みも検出
+    _FOOD_LIKES_KW = [
+        "ラーメン", "カフェ", "コーヒー", "スイーツ", "ケーキ", "パン",
+        "焼肉", "寿司", "イタリアン", "フレンチ", "中華", "カレー",
+        "パスタ", "うどん", "そば", "定食", "ハンバーガー", "ピザ",
+        "タピオカ", "クレープ", "パフェ", "抹茶", "紅茶", "お酒",
+        "ビール", "ワイン", "居酒屋", "バー", "ダイニング",
+    ]
+    detected_cats = [cat for cat, kws in _KEYWORDS.items() if any(kw in text for kw in kws)]
+    detected_food = [kw for kw in _FOOD_LIKES_KW if kw in text]
+    if not detected_cats and not detected_food:
         return
     pk = f"USER#{user_id}"
     existing_raw = ddb.get_item(pk=pk, sk="PREF_MEMORY#")
     existing = existing_raw or {}
     categories = existing.get("categories", [])
-    new_categories = list(set(categories + detected))
-    if len(new_categories) != len(categories):
+    food_likes = existing.get("food", {}).get("likes", []) if isinstance(existing.get("food"), dict) else []
+    new_categories = list(set(categories + detected_cats))
+    new_food_likes = list(set(food_likes + detected_food))
+    changed = (len(new_categories) != len(categories)) or (len(new_food_likes) != len(food_likes))
+    if changed:
         now = datetime.now(timezone.utc).isoformat()
+        food_data = {"likes": new_food_likes}
         if existing_raw is None:
             ddb.put_item(pk, "PREF_MEMORY#", {
                 "entityType": "PREF_MEMORY",
                 "categories": new_categories,
+                "food": food_data,
                 "updatedAt": now,
             })
         else:
-            ddb.update_item(pk=pk, sk="PREF_MEMORY#", updates={"categories": new_categories, "updatedAt": now})
+            ddb.update_item(pk=pk, sk="PREF_MEMORY#", updates={
+                "categories": new_categories,
+                "food": food_data,
+                "updatedAt": now,
+            })
 
 
 # 記念日検知パターン（Unit 2 スライス 2-9）
@@ -597,8 +685,13 @@ def _handle_postback(event):
 
     try:
         if action == "start_talk":
-            messages = generate_talk_starter(user_id, ddb)
-            get_line_service().reply_message(reply_token, messages)
+            # 変更依頼書_2 §2: 直近の通知内容から会話開始
+            reply_text = _start_talk_with_context(user_id, ddb)
+            if reply_text:
+                get_line_service().reply_message(reply_token, [{"type": "text", "text": reply_text}])
+            else:
+                messages = generate_talk_starter(user_id, ddb)
+                get_line_service().reply_message(reply_token, messages)
 
         elif action == "start_recommend":
             messages = start_recommend(user_id, ddb)
@@ -615,28 +708,36 @@ def _handle_postback(event):
             get_line_service().reply_message(reply_token, messages)
 
         elif action == "interested":
+            # レガシー: 旧おすすめフローの気になるボタン（互換性のため残す）
             item_name = params.get("item", "それ")
             get_line_service().reply_message(reply_token, [
-                {"type": "text", "text": f"{item_name}が気になるんだね！🎀 候補に入れとくね✨"}
+                {"type": "text", "text": f"{item_name}が気になるんだねぇ～🌿 よかったら商品ページから買ってみてね〜"}
             ])
 
         elif action == "purchased":
-            item_name = params.get("item", "")
-            amount = int(params.get("amount", "0"))
-            if amount > 0:
-                _save_expense_items(user_id, [{"item_name": item_name, "amount": amount, "category": "ご褒美費", "source": "postback"}], ddb)
+            # おすすめから「買ったよ！」「行ったよ！」を押した場合
+            item_name = params.get("name", "") or params.get("item", "")
+            amount_str = params.get("price", "") or params.get("amount", "0")
+            try:
+                amount = int(amount_str)
+            except (ValueError, TypeError):
+                amount = 0
+            if amount > 0 and item_name:
+                _save_expense_items(user_id, [{"item_name": item_name, "amount": amount, "category": "ご褒美費", "source": "recommend"}], ddb)
                 streak_msg = update_streak(user_id, ddb)
-                reply = f"{item_name} {amount}円、記録したよ〜🎀✨"
+                reply = f"{item_name} {amount}円、記録したよぇ～🌿✨ 自分へのご褒美だねぇ〜"
                 if streak_msg:
                     reply += f"\n\n{streak_msg}"
                 get_line_service().reply_message(reply_token, [{"type": "text", "text": reply}])
+            elif item_name:
+                get_line_service().reply_message(reply_token, [{"type": "text", "text": f"{item_name}、楽しめたかなぁ～🌿✨"}])
             else:
-                get_line_service().reply_message(reply_token, [{"type": "text", "text": "記録したよ〜🎀"}])
+                get_line_service().reply_message(reply_token, [{"type": "text", "text": "記録したよぇ～🌿"}])
 
         else:
             logger.info("unknown_postback_action", action=action)
             get_line_service().reply_message(reply_token, [
-                {"type": "text", "text": "ん？ちょっとわからなかったかも🎀"}
+                {"type": "text", "text": "ん～？ちょっとわからなかったかも～🌿"}
             ])
     except Exception as e:
         logger.exception("postback_handler_error", action=action)
@@ -644,6 +745,55 @@ def _handle_postback(event):
             get_line_service().reply_message(reply_token, [{"type": "text", "text": ERROR_REPLY}])
         except Exception:
             pass
+
+
+# ─────────────────────────────────────────
+# リッチメニュー「ふれまーるちゃんと話す」の会話開始 (§2)
+# ─────────────────────────────────────────
+def _start_talk_with_context(user_id: str, ddb) -> Optional[str]:
+    """
+    直近のアクティブ通知・レコメンド状態から会話を開始する。
+    該当なければ None → 通常の talk_starter へフォールスルー。
+    """
+    try:
+        from services.notification_service import get_latest_actionable_notification
+        from services.recommendation_engine import get_active_recommendation
+
+        notif = get_latest_actionable_notification(user_id, ddb)
+        if notif:
+            # 通知内容から会話開始
+            msg = notif.get("message_text", "")
+            if msg:
+                return f"さっき通知したやつだね〜。\n\n{msg}"
+
+        rec = get_active_recommendation(user_id, ddb)
+        if rec:
+            status = rec.get("status", "")
+            title = rec.get("title", "")
+            reason = rec.get("reason_text", "")
+
+            if status == "CART_ADDED":
+                return (
+                    f"さっき通知したやつだね〜。\n\n"
+                    f"ほしい物リストで熟成していた {title}、\n"
+                    f"今のあなたにちょうどよさそうだったから、\n"
+                    f"買い物かごに入れておいたよ～\n\n"
+                    f"買うって言ったら買っちゃうけど、どうする〜？"
+                )
+            elif status == "PURCHASE_CONFIRMATION_REQUIRED":
+                return (
+                    f"{title} の購入確認中だったねぇ〜\n\n"
+                    f"「この商品を購入して」って言ってくれたら買ってくるよ〜"
+                )
+            elif status in ("WAITING_USER_DECISION",):
+                return (
+                    f"{title} について確認中だよ〜。\n"
+                    f"どうする〜？買う？やめる？"
+                )
+    except Exception as e:
+        logger.warning("start_talk_with_context_failed", error=str(e))
+
+    return None
 
 
 def _handle_error(event, error):
@@ -657,3 +807,69 @@ def _handle_error(event, error):
         )
     except Exception:
         logger.warning("fallback_reply_failed")
+
+
+# ─────────────────────────────────────────
+# 購入意図判定（アクティブレコメンド連携）
+# ─────────────────────────────────────────
+def _handle_purchase_intent_if_active(user_id: str, text: str, ddb) -> Optional[str]:
+    """
+    アクティブなレコメンドがある場合、購入意図を判定して処理する。
+    該当しなければ None を返す。
+    """
+    from services.purchase_intent import classify_purchase_intent
+    from services.recommendation_engine import get_active_recommendation, update_recommendation_status
+    from services.cart_job_service import create_cart_job
+
+    rec = get_active_recommendation(user_id, ddb)
+    if not rec:
+        return None
+
+    rec_status = rec.get("status", "")
+    rec_id = rec.get("recommendation_id", "")
+    product_title = rec.get("title", "")
+
+    # CART_ADDED / WAITING_USER_DECISION / PURCHASE_CONFIRMATION_REQUIRED 状態のみ意図判定
+    actionable_statuses = {"CART_ADDED", "WAITING_USER_DECISION", "PURCHASE_CONFIRMATION_REQUIRED"}
+    if rec_status not in actionable_statuses:
+        return None
+
+    intent = classify_purchase_intent(text, product_title)
+
+    if intent == "DECLINE":
+        update_recommendation_status(user_id, rec_id, "DECLINED", ddb)
+        # カートから削除ジョブ
+        if rec_status == "CART_ADDED":
+            create_cart_job(
+                user_id, rec_id, "REMOVE_FROM_CART", ddb,
+                product_url=rec.get("product_url"),
+                expected_product_title=product_title,
+            )
+        return (
+            "わかったよぇ～。\n"
+            "かごから出して、欲望熟成庫に戻しとくねぇ。\n"
+            "また必要そうな日に持ってくるねぇ～🌿"
+        )
+
+    elif intent == "AMBIGUOUS_BUY":
+        update_recommendation_status(user_id, rec_id, "PURCHASE_CONFIRMATION_REQUIRED", ddb)
+        return (
+            "買いたい気持ちはわかったよぇ～🌿\n"
+            "購入するってことだねぇ～！\n\n"
+            "それじゃあ、もう一度\n"
+            "「この商品を購入して」\n"
+            "と送ってくれたら、買ってくるよぇ～～"
+        )
+
+    elif intent == "EXPLICIT_PURCHASE":
+        update_recommendation_status(user_id, rec_id, "PURCHASE_APPROVED", ddb)
+        create_cart_job(
+            user_id, rec_id, "PURCHASE", ddb,
+            product_url=rec.get("product_url"),
+            expected_product_title=product_title,
+            expected_price=rec.get("price"),
+            explicit_approval_text=text,
+        )
+        return "承認確認したよぇ～🌿\n購入処理に進むねぇ。"
+
+    return None

@@ -139,10 +139,17 @@ class LineService:
         if msg_type == "text":
             return TextMessage(type="text", text=msg["text"])
         elif msg_type == "flex":
+            from linebot.v3.messaging import FlexBubble, FlexCarousel
+            raw = msg["contents"]
+            ct = raw.get("type", "bubble")
+            if ct == "carousel":
+                contents = FlexCarousel.from_dict(raw)
+            else:
+                contents = FlexBubble.from_dict(raw)
             return FlexMessage(
                 type="flex",
                 alt_text=msg.get("altText", ""),
-                contents=msg["contents"],
+                contents=contents,
             )
         else:
             raise LineServiceError(f"未対応のメッセージタイプ: {msg_type}")

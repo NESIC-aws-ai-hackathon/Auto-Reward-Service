@@ -222,3 +222,46 @@ def search_restaurants(
 
     logger.debug("hotpepper_search_result", keyword=keyword, count=len(restaurants))
     return restaurants
+
+
+def search_nearby_restaurants(
+    lat: float,
+    lng: float,
+    keyword: str = "",
+    range_code: int = 3,
+    count: int = 5,
+) -> list[HotPepperRestaurant]:
+    """
+    ホットペッパーグルメサーチ API で現在地周辺の飲食店を検索する。
+
+    Args:
+        lat:        緯度
+        lng:        経度
+        keyword:    追加キーワード（例: "カフェ"）
+        range_code: 検索範囲（1: 300m, 2: 500m, 3: 1000m, 4: 2000m, 5: 3000m）
+        count:      取得件数
+
+    Returns:
+        HotPepperRestaurant リスト
+    """
+    api_key = _get_api_key()
+    params: dict[str, Any] = {
+        "key": api_key,
+        "lat": lat,
+        "lng": lng,
+        "range": range_code,
+        "count": count,
+        "format": "json",
+        "order": 4,  # おすすめ順
+    }
+    if keyword:
+        params["keyword"] = keyword
+
+    logger.debug("hotpepper_nearby_search", lat=lat, lng=lng, keyword=keyword)
+    data = _call_with_retry(HOTPEPPER_SEARCH_URL, params)
+    restaurants = _parse_response(data)
+
+    time.sleep(RATE_LIMIT_SLEEP)
+
+    logger.debug("hotpepper_nearby_result", count=len(restaurants))
+    return restaurants

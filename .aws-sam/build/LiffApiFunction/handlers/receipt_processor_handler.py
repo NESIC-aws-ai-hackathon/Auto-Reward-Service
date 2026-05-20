@@ -2,7 +2,7 @@
 SQS トリガー: レシート画像の非同期解析（Unit 3 スライス 3-6）
 
 Webhook から SQS に投げられたメッセージを受け取り、
-レシート解析 → 支出保存 → Push 通知の流れを実行する。
+レシート解析 → 支出保存 → PWA通知の流れを実行する。
 """
 from __future__ import annotations
 
@@ -43,7 +43,7 @@ def handler(event, context):
 
 
 def _process_receipt(user_id: str, message_id: str) -> None:
-    """レシート画像を解析して支出を保存し Push 通知する"""
+    """レシート画像を解析して支出を保存しPWA通知する"""
     ddb = _get_ddb()
     line = get_line_service()
 
@@ -51,7 +51,13 @@ def _process_receipt(user_id: str, message_id: str) -> None:
         image_bytes = line.get_message_content(message_id)
     except Exception as e:
         logger.warning("receipt_get_content_failed", user_id=user_id, error=str(e))
-        line.push_message(user_id, [{"type": "text", "text": "レシートの読み込みに失敗しちゃった😅 もう一度送ってみて！"}])
+        from services.notification_service import create_notification
+        create_notification(
+            user_id, ddb,
+            notification_type="SYSTEM",
+            title="レシート読み取り失敗",
+            message_text="レシートの読み込みに失敗しちゃった😅 もう一度送ってみてね～",
+        )
         return
 
     reply_text, items_to_save = receipt_analyzer.analyze(
@@ -91,6 +97,12 @@ def _process_receipt(user_id: str, message_id: str) -> None:
                     updated_at=ts,
                 )
 
-    # Push 通知で結果を通知
-    line.push_message(user_id, [{"type": "text", "text": reply_text}])
+    # PWA 通知で結果を通知
+    from services.notification_service import create_notification
+    create_notification(
+        user_id, ddb,
+        notification_type="SYSTEM",
+        title="レシート解析完了",
+        message_text=reply_text,
+    )
     logger.info("receipt_processed", user_id=user_id, items_count=len(items_to_save))

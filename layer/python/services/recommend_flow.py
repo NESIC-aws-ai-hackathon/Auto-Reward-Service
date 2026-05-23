@@ -56,6 +56,28 @@ BUDGET_OPTIONS = {
 }
 
 SK_RECOMMEND_STATE = "RECOMMEND_STATE#"
+SK_LAST_SUGGESTION = "LAST_SUGGESTION#"  # 直前のおすすめ候補（テキスト「買った」と紐付け用）
+
+
+def _save_last_suggestion(user_id: str, candidates: list[dict], ddb: DynamoDBService, source: str = "rakuten") -> None:
+    """直前のおすすめ候補を保存する。テキスト「買った/これにする」での購入確定に使用。
+
+    candidates: [{"name": str, "price": int, "url": str, "source": str}, ...]
+    TTL: 1 時間
+    """
+    if not candidates:
+        return
+    pk = f"USER#{user_id}"
+    ttl = int(time.time()) + 3600  # 1 時間
+    try:
+        ddb.put_item(pk, SK_LAST_SUGGESTION, {
+            "candidates": candidates,
+            "source": source,
+            "ttl": ttl,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.warning("save_last_suggestion_failed", error=str(e))
 
 
 def start_recommend(user_id: str, ddb: DynamoDBService) -> list[dict]:
@@ -187,9 +209,17 @@ def _search_hotpepper(
 
     # Flex Carousel 構築
     bubbles = []
+    candidates = []
     for r in restaurants[:3]:
         bubble = _build_restaurant_bubble(r, user_id)
         bubbles.append(bubble)
+        candidates.append({
+            "name": str(r.name)[:30],
+            "price": int(r.price) if r.price else budget,
+            "url": r.shop_url,
+            "source": "hotpepper",
+            "category": "ご褒美費",
+        })
 
     carousel = {
         "type": "flex",
@@ -199,6 +229,8 @@ def _search_hotpepper(
             "contents": bubbles,
         },
     }
+
+    _save_last_suggestion(user_id, candidates, ddb, source="hotpepper")
 
     intro_text = f"{category}で探してみたよぇ～🌿\n気になるお店があったら見てみてね〜"
     return [{"type": "text", "text": intro_text}, carousel]
@@ -226,9 +258,17 @@ def _search_rakuten(
 
     # Flex Carousel 構築
     bubbles = []
+    candidates = []
     for p in products[:3]:
         bubble = _build_product_bubble(p, user_id)
         bubbles.append(bubble)
+        candidates.append({
+            "name": str(p.name)[:30],
+            "price": int(p.price),
+            "url": p.item_url,
+            "source": "rakuten",
+            "category": "ご褒美費",
+        })
 
     carousel = {
         "type": "flex",
@@ -238,6 +278,8 @@ def _search_rakuten(
             "contents": bubbles,
         },
     }
+
+    _save_last_suggestion(user_id, candidates, ddb, source="rakuten")
 
     intro_text = f"{category}で{budget}円以内のおすすめを探してみたよぇ～🌿\n気になるのあったら商品ページ見てみてね〜"
     return [{"type": "text", "text": intro_text}, carousel]
@@ -413,3 +455,139 @@ def _build_restaurant_bubble(restaurant: HotPepperRestaurant, user_id: str) -> d
         }
 
     return bubble
+
+
+# ─────────────────────────────────────────
+# テキスト「買った/これにする/OK」と直前提案の紐付け
+# ─────────────────────────────────────────
+_PURCHASE_KEYWORDS = (
+    "買った", "買いました", "購入した", "ポチった", "ぽちった",
+    "これにする", "それにする", "これにした", "それにした",
+    "決めた", "決めました", "ok", "OK", "了解", "いいね", "これ買う", "これ買います",
+    "行った", "行きました", "行ってきた",
+)
+
+
+def try_handle_last_suggestion_purchase(
+    user_id: str, text: str, ddb: DynamoDBService
+) -> Optional[list[dict]]:
+    """直前のおすすめ提案候補がある状態で「買った」系テキストが来た場合に処理する。
+
+    - 候補が1件なら自動で支出記録
+    - 複数候補なら Quick Reply で選択肢を提示
+    - 候補無し or キーワード未一致なら None を返す
+
+    Returns:
+        list[dict] (LINE messages) または None
+    """
+    pk = f"USER#{user_id}"
+    state = ddb.get_item(pk=pk, sk=SK_LAST_SUGGESTION)
+    if not state:
+        return None
+
+    candidates = state.get("candidates") or []
+    if not candidates:
+        ddb.delete_item(pk, SK_LAST_SUGGESTION)
+        return None
+
+    text_lower = text.strip().lower()
+    if not any(kw.lower() in text_lower for kw in _PURCHASE_KEYWORDS):
+        return None
+
+    # 「N番」「1番目」「最初」「2つ目」などの選択語を解釈
+    selected_idx = _parse_selection_index(text, len(candidates))
+
+    if selected_idx is not None:
+        cand = candidates[selected_idx]
+        _record_suggestion_purchase(user_id, cand, ddb)
+        ddb.delete_item(pk, SK_LAST_SUGGESTION)
+        return [{
+            "type": "text",
+            "text": (
+                f"おっ、{cand.get('name', 'それ')} 買ったんだねぇ～🌿\n"
+                f"ご褒美費 ¥{int(cand.get('price', 0)):,} で記録しといたよ〜✨\n"
+                f"自分を甘やかせて、ふれまーるちゃんもうれしいなぁ🌱"
+            ),
+        }]
+
+    # 候補が1件しかなければ即記録
+    if len(candidates) == 1:
+        cand = candidates[0]
+        _record_suggestion_purchase(user_id, cand, ddb)
+        ddb.delete_item(pk, SK_LAST_SUGGESTION)
+        return [{
+            "type": "text",
+            "text": (
+                f"おっ、{cand.get('name', 'それ')} 買ったんだねぇ～🌿\n"
+                f"ご褒美費 ¥{int(cand.get('price', 0)):,} で記録しといたよ〜✨"
+            ),
+        }]
+
+    # 複数候補 → Quick Reply で確認
+    items = []
+    for i, cand in enumerate(candidates[:3]):
+        label = f"{i+1}番 {str(cand.get('name', ''))[:10]}"
+        items.append({
+            "type": "action",
+            "action": {
+                "type": "message",
+                "label": label[:20],
+                "text": f"{i+1}番 買った",
+            },
+        })
+    items.append({
+        "type": "action",
+        "action": {"type": "message", "label": "違うやつ", "text": "違うやつ買った"},
+    })
+
+    return [{
+        "type": "text",
+        "text": "おっ、どれを買ったかなぁ～？🌿 教えてくれたら記録するねぇ〜",
+        "quickReply": {"items": items},
+    }]
+
+
+def _parse_selection_index(text: str, max_count: int) -> Optional[int]:
+    """「1番」「2つ目」「最初」などから候補インデックスを推測する。"""
+    text = text.strip()
+    if any(kw in text for kw in ("最初", "1番", "1つ目", "一番", "ひとつめ", "1番目")):
+        return 0 if max_count >= 1 else None
+    if any(kw in text for kw in ("2番", "2つ目", "二番", "ふたつめ", "2番目", "真ん中")):
+        return 1 if max_count >= 2 else None
+    if any(kw in text for kw in ("3番", "3つ目", "三番", "みっつめ", "3番目", "最後")):
+        return 2 if max_count >= 3 else None
+    m = re.match(r"^\s*([1-9])\s*[番つ]", text)
+    if m:
+        idx = int(m.group(1)) - 1
+        if 0 <= idx < max_count:
+            return idx
+    return None
+
+
+def _record_suggestion_purchase(user_id: str, cand: dict, ddb: DynamoDBService) -> None:
+    """選ばれた候補を ご褒美費 として支出記録する。"""
+    try:
+        from datetime import date
+        import uuid
+        pk = f"USER#{user_id}"
+        now = datetime.now(timezone.utc).isoformat()
+        today = date.today().strftime("%Y-%m-%d")
+        expense_id = uuid.uuid4().hex[:8]
+        ddb.put_item(pk, f"EXPENSE#{today}#{expense_id}", {
+            "entityType": "EXPENSE",
+            "item_name": cand.get("name", "ご褒美"),
+            "amount": int(cand.get("price", 0)),
+            "category": cand.get("category", "ご褒美費"),
+            "source": "recommend",
+            "url": cand.get("url", ""),
+            "date": today,
+            "createdAt": now,
+        })
+        # streak 更新
+        try:
+            from services.streak import update_streak
+            update_streak(user_id, ddb)
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning("record_suggestion_purchase_failed", error=str(e))

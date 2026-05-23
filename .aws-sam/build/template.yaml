@@ -20,10 +20,25 @@ Globals:
         BEDROCK_INTENT_MODEL_ID: amazon.nova-lite-v1:0
         DAILY_CHAT_LIMIT: '50'
         LIFF_URL: ''
-        CART_AUTOMATION_MODE: stub
-        ENABLE_REAL_PURCHASE: 'false'
+        CART_AUTOMATION_MODE: amazon_url
+        ENABLE_REAL_PURCHASE: 'true'
         NOVA_ACT_DEMO_MODE: 'true'
-        MAX_PURCHASE_AMOUNT: '1000'
+        MAX_PURCHASE_AMOUNT: '5000'
+        PUSH_COOLDOWN_HOURS: '1'
+        PUSH_SUGGEST_THRESHOLD: '40'
+        ENABLE_PWA_WEB_PUSH: 'true'
+        ENABLE_LINE_PUSH: 'false'
+        VAPID_SECRET_ID: ars/webpush
+        ENABLE_NOVA_ACT: 'true'
+        ENABLE_NOVA_ACT_SMOKE: 'true'
+        NOVA_ACT_SYNC_IN_LINE_CHAT: 'false'
+        ENABLE_EXTERNAL_REWARD_API: 'true'
+        ENABLE_STATIC_REWARD_FALLBACK: 'true'
+        ENABLE_REWARD_POOL_CACHE: 'true'
+        ENABLE_LINE_BOT: 'true'
+        ENABLE_LINE_RICH_MENU: 'true'
+        ENABLE_RECEIPT_ANALYSIS: 'true'
+        ENABLE_GOOGLE_CALENDAR: 'false'
     Layers:
     - Ref: ArsCommonLayer
     Tracing: PassThrough
@@ -129,6 +144,7 @@ Resources:
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/google*
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/rakuten*
             - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/hotpepper*
+            - Fn::Sub: arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/webpush*
       - PolicyName: ArsSQSPolicy
         PolicyDocument:
           Version: '2012-10-17'
@@ -244,6 +260,9 @@ Resources:
             - Fn::GetAtt:
               - PwaTemptationFunction
               - Arn
+            - Fn::GetAtt:
+              - ScheduledPushFunction
+              - Arn
   WarmupWebhookScheduler:
     Type: AWS::Scheduler::Schedule
     Properties:
@@ -351,6 +370,66 @@ Resources:
           - SchedulerExecutionRole
           - Arn
         Input: '{"source": "scheduler"}'
+  ScheduledPushFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ScheduledPushFunction
+      Handler: handlers.scheduled_push.handler
+      CodeUri: ScheduledPushFunction
+      MemorySize: 256
+      Timeout: 60
+      Role:
+        Fn::GetAtt:
+        - ArsLambdaRole
+        - Arn
+      Environment:
+        Variables:
+          DAILY_PUSH_LIMIT: '2'
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+    Metadata:
+      SamResourceId: ScheduledPushFunction
+  ScheduledPushFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${ScheduledPushFunction}
+      RetentionInDays: 14
+  ScheduledPushEvening:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: ScheduledPushEvening
+      ScheduleExpression: cron(0 9 * * ? *)
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn:
+          Fn::GetAtt:
+          - ScheduledPushFunction
+          - Arn
+        RoleArn:
+          Fn::GetAtt:
+          - SchedulerExecutionRole
+          - Arn
+        Input: '{"source": "scheduler", "slot": "evening"}'
+  ScheduledPushNight:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: ScheduledPushNight
+      ScheduleExpression: cron(0 12 * * ? *)
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      Target:
+        Arn:
+          Fn::GetAtt:
+          - ScheduledPushFunction
+          - Arn
+        RoleArn:
+          Fn::GetAtt:
+          - SchedulerExecutionRole
+          - Arn
+        Input: '{"source": "scheduler", "slot": "night"}'
   PwaTemptationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -460,6 +539,27 @@ Resources:
             ApiId:
               Ref: WebhookApi
             Path: /liff/temptation
+            Method: GET
+        LiffAmazonLogin:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /liff/amazon-login
+            Method: GET
+        PwaServiceWorker:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /service-worker.js
+            Method: GET
+        PwaManifest:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: WebhookApi
+            Path: /manifest.json
             Method: GET
         CalendarCallback:
           Type: HttpApi

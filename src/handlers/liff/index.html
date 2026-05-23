@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ふれまーるちゃん</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4a9c5e">
 <style>
 :root {
   --primary: #4a9c5e;
@@ -175,6 +177,15 @@ body {
 .btn:active { opacity: 0.7; }
 .btn-primary { background: var(--primary); color: #fff; }
 .btn-danger { background: var(--danger); color: #fff; }
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes progress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0); }
+  100% { transform: translateX(100%); }
+}
 .btn-outline {
   background: transparent;
   color: var(--primary);
@@ -606,7 +617,127 @@ body {
       <button class="btn btn-primary" id="btn-save-settings">保存する</button>
     </div>
     <div class="card">
-      <div class="card-title">📅 Googleカレンダー連携</div>
+      <div class="card-title">� 通知設定</div>
+      <div class="form-group">
+        <label class="form-label">通知クールダウン（時間）</label>
+        <select class="form-select" id="set-push-cooldown">
+          <option value="0">制限なし</option>
+          <option value="1">1時間</option>
+          <option value="2">2時間</option>
+          <option value="4">4時間</option>
+          <option value="8">8時間</option>
+        </select>
+        <small style="color:#888;font-size:11px;">PWA通知の最低間隔。短いほど通知が多くなります。</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">通知感度（閾値）</label>
+        <select class="form-select" id="set-push-threshold">
+          <option value="20">高め（よく通知）</option>
+          <option value="40">普通</option>
+          <option value="60">低め（控えめ）</option>
+          <option value="80">最低限</option>
+        </select>
+        <small style="color:#888;font-size:11px;">ストレススコアがこの値以上で寄り道提案します。</small>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔔 PWA Web Push通知</div>
+      <div id="webpush-status" style="margin-bottom:8px;font-size:13px;color:#555;">確認中...</div>
+      <button class="btn btn-primary" id="btn-webpush-subscribe" style="margin-right:6px;">通知をONにする</button>
+      <button class="btn btn-secondary" id="btn-webpush-test" style="margin-right:6px;">テスト通知</button>
+      <button class="btn btn-secondary" id="btn-webpush-unsubscribe">通知をOFFにする</button>
+      <button class="btn btn-primary" id="btn-push-trigger" style="margin-top:8px;">🌿 ご褒美通知を送る</button>
+      <div id="push-trigger-result" style="margin-top:6px;font-size:12px;color:#555;"></div>
+      <small style="display:block;color:#888;font-size:11px;margin-top:8px;">
+        ブラウザ通知を許可すると、ふれまーるちゃんからのおしらせがプッシュ通知で届きます。
+        「ご褒美通知を送る」で定期通知と同じPushを即座に受信できます。
+      </small>
+    </div>
+    <div class="card">
+      <div class="card-title">🎁 ご褒美候補検索テスト</div>
+      <div class="form-group">
+        <label class="form-label">検索キーワード</label>
+        <input type="text" class="form-input" id="nova-act-query" placeholder="抹茶 プリン（空欄でおまかせ）" value="">
+        <small style="color:#888;font-size:11px;">空欄でおまかせ検索。キーワードを入れると絞り込めます。</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">上限金額</label>
+        <select class="form-select" id="reward-test-budget">
+          <option value="1000">〜1,000円</option>
+          <option value="2000">〜2,000円</option>
+          <option value="3000" selected>〜3,000円</option>
+          <option value="5000">〜5,000円</option>
+          <option value="10000">〜10,000円</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="btn-nova-act-smoke">🔍 候補を検索する</button>
+      <div id="nova-act-result" style="margin-top:12px;font-size:12px;color:#555;"></div>
+      <small style="display:block;color:#888;font-size:11px;margin-top:8px;">
+        楽天API → ホットペッパーAPI → Nova Actキャッシュ → Bedrock AI → 静的カタログの順で候補を取得します。
+      </small>
+    </div>
+    <div class="card">
+      <div class="card-title">🤖 ご褒美候補プレビュー</div>
+      <div id="nova-act-cart-section">
+        <!-- 候補取得中 -->
+        <div id="nova-act-loading" style="display:none;text-align:center;padding:20px;">
+          <div style="font-size:36px;animation:bounce 1s infinite;">🎁</div>
+          <p style="font-size:14px;color:#2e7d32;margin-top:10px;font-weight:bold;">ふれまーるちゃんが候補を探し中...</p>
+          <div style="margin-top:12px;height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden;">
+            <div style="width:60%;height:100%;background:#7BAF6E;animation:progress 2s ease-in-out infinite;"></div>
+          </div>
+        </div>
+
+        <!-- Empty: 候補なし -->
+        <div id="nova-act-empty" style="text-align:center;padding:16px;">
+          <p style="font-size:14px;color:#555;">まだ候補が見つかっていないよ🌿</p>
+          <p style="font-size:12px;color:#888;margin-top:4px;">上の検索テストか「今すぐ候補を探す」ボタンで試してみてね！</p>
+          <button class="btn btn-secondary" id="btn-nova-act-trigger" style="margin-top:12px;">🎁 今すぐ候補を探す</button>
+        </div>
+
+        <!-- Phase 2: カート追加完了 → ユーザーが購入を許可するだけ -->
+        <div id="nova-act-step1" style="display:none;">
+          <div style="background:#e8f5e9;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #a5d6a7;">
+            <div style="display:flex;align-items:center;margin-bottom:10px;">
+              <span style="font-size:20px;margin-right:8px;">🎁</span>
+              <p style="font-size:14px;color:#2e7d32;font-weight:bold;margin:0;">ふれまーるちゃんがご褒美候補を見つけてきたよ</p>
+            </div>
+            <div id="nova-act-product-image" style="text-align:center;margin-bottom:10px;"></div>
+            <div id="nova-act-product-title" style="font-weight:bold;font-size:16px;margin-bottom:4px;color:#333;"></div>
+            <div id="nova-act-product-price" style="color:#7BAF6E;font-weight:bold;font-size:20px;margin-bottom:8px;"></div>
+            <p style="font-size:12px;color:#666;margin-bottom:4px;" id="nova-act-reason"></p>
+            <div id="nova-act-product-source" style="font-size:11px;color:#888;margin-bottom:6px;"></div>
+            <div id="nova-act-product-link" style="margin-top:6px;"></div>
+          </div>
+          <p style="font-size:14px;color:#2d5016;text-align:center;margin-bottom:12px;">購入手続きの準備ができたよ🌿<br><span style="font-size:12px;color:#666;">注文はまだ確定していません</span></p>
+          <button class="btn btn-primary" id="btn-nova-act-add-cart" style="background:#ff9900;margin-bottom:8px;font-size:16px;padding:14px;">🛒 Amazonのカートに入れる</button>
+          <button class="btn btn-secondary" id="btn-nova-act-rakuten" style="margin-bottom:8px;display:none;">🛍️ 楽天で確認する</button>
+          <button class="btn btn-secondary" id="btn-nova-act-hotpepper" style="margin-bottom:8px;display:none;">🍽️ お店を見る</button>
+          <button class="btn btn-secondary" id="btn-nova-act-change" style="margin-bottom:6px;">🔄 別の商品にして</button>
+          <button class="btn btn-secondary" id="btn-nova-act-decline">❌ やっぱりやめる</button>
+        </div>
+
+        <!-- Phase 3: カート追加後 -->
+        <div id="nova-act-step2" style="display:none;">
+          <div style="background:#e3f2fd;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #90caf9;">
+            <div style="display:flex;align-items:center;margin-bottom:8px;">
+              <span style="font-size:20px;margin-right:8px;">🛒</span>
+              <p style="font-size:14px;color:#1565c0;font-weight:bold;margin:0;">カートに入ったよ！</p>
+            </div>
+            <div id="nova-act-cart-title" style="font-weight:bold;font-size:15px;margin-bottom:4px;color:#333;"></div>
+            <div id="nova-act-cart-price" style="color:#7BAF6E;font-weight:bold;font-size:18px;margin-bottom:8px;"></div>
+            <p style="font-size:12px;color:#666;">Amazonのカートに入ってるから、あとは注文を確定するだけだよ🌿<br>注文はまだ確定していません。</p>
+          </div>
+          <button class="btn btn-primary" id="btn-nova-act-purchase" style="background:#ff9900;margin-bottom:8px;font-size:16px;">🛒 Amazonのカートを確認する</button>
+          <button class="btn btn-secondary" id="btn-nova-act-bought" style="margin-bottom:8px;">✅ 買ったよ！</button>
+          <button class="btn btn-secondary" id="btn-nova-act-cancel">❌ やっぱりやめる</button>
+        </div>
+
+        <div id="nova-act-status" style="margin-top:8px;font-size:13px;color:#555;"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">�📅 Googleカレンダー連携</div>
       <div class="calendar-status" id="calendar-section">
         <div class="loading">確認中...</div>
       </div>
@@ -705,6 +836,7 @@ body {
 
   const LIFF_ID = '2010106872-9t0gN1D6';
   let idToken = null;
+  let cachedUserId = localStorage.getItem('ars_user_id') || null;
   let currentPage = 'home';
   let currentExpenseMonth = null;
   let editTargetSk = null;
@@ -731,13 +863,48 @@ body {
 
   async function api(path, opts = {}) {
     const url = '/api' + path;
-    const headers = { 'Authorization': 'Bearer ' + idToken };
+    // トークンの最新取得を試みる
+    if (liff && liff.isLoggedIn && liff.isLoggedIn()) {
+      try {
+        const fresh = liff.getAccessToken();
+        if (fresh) idToken = fresh;
+      } catch (e) { /* PWA mode: SDK may throw */ }
+    }
+    const headers = {};
+    if (idToken) {
+      headers['Authorization'] = 'Bearer ' + idToken;
+    } else if (cachedUserId) {
+      // LIFF トークン無し → キャッシュ userId で認証
+      headers['X-ARS-User-Id'] = cachedUserId;
+    }
     if (opts.body) headers['Content-Type'] = 'application/json';
     const res = await fetch(url, {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
+    if (res.status === 401 && idToken && cachedUserId) {
+      // トークン認証失敗 → キャッシュ userId にフォールバックしてリトライ
+      console.warn('Token auth failed, retrying with cached userId');
+      idToken = null;
+      const retryHeaders = { 'X-ARS-User-Id': cachedUserId };
+      if (opts.body) retryHeaders['Content-Type'] = 'application/json';
+      const retry = await fetch(url, {
+        method: opts.method || 'GET',
+        headers: retryHeaders,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      });
+      if (retry.ok) return retry.json();
+    }
+    if (res.status === 401) {
+      // 完全に認証失敗 → ループせず静的表示
+      console.error('Auth failed completely');
+      throw new Error('認証に失敗しました。LINEアプリからLIFFを開き直してください。');
+    }
+    if (res.status === 503) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'サーバーが一時的に利用できません');
+    }
     return res.json();
   }
 
@@ -1196,6 +1363,11 @@ body {
     document.getElementById('set-tone').value = data.tone || 'friendly';
     document.getElementById('set-budget').value = data.reward_budget_monthly || '';
     document.getElementById('set-carryover').value = Math.round((data.carryover_rate || 0.5) * 100);
+    document.getElementById('set-push-cooldown').value = data.push_cooldown_hours != null ? data.push_cooldown_hours : '1';
+    document.getElementById('set-push-threshold').value = data.push_suggest_threshold != null ? data.push_suggest_threshold : '40';
+
+    // Web Push 状態表示
+    try { await loadWebPushStatus(); } catch (e) { console.warn('webpush status load failed', e); }
 
     const calData = await api('/calendar/status');
     const calEl = document.getElementById('calendar-section');
@@ -1284,6 +1456,8 @@ body {
     if (budget) body.reward_budget_monthly = parseInt(budget, 10);
     const co = document.getElementById('set-carryover').value;
     if (co !== '') body.carryover_rate = parseInt(co, 10) / 100;
+    body.push_cooldown_hours = parseInt(document.getElementById('set-push-cooldown').value, 10);
+    body.push_suggest_threshold = parseInt(document.getElementById('set-push-threshold').value, 10);
 
     const result = await api('/settings', { method: 'PUT', body: body });
     if (result.updated) {
@@ -1295,19 +1469,55 @@ body {
 
   // LIFF 初期化
   async function initLiff() {
+    const isPwa = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     try {
       await liff.init({ liffId: LIFF_ID });
       if (!liff.isLoggedIn()) {
+        if (isPwa && cachedUserId) {
+          // PWA モードでキャッシュあり → LIFF 再ログインせずキャッシュで続行
+          console.log('PWA mode: using cached userId');
+          document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+          loadPage('home');
+          return;
+        }
         liff.login();
         return;
       }
-      idToken = liff.getIDToken();
-      const profile = await liff.getProfile();
-      document.getElementById('header').textContent = '\ud83c\udf3f ' + (profile.displayName || '\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093');
+      idToken = liff.getAccessToken();
+      if (!idToken && cachedUserId) {
+        // トークン取得失敗だがキャッシュあり → 続行
+        console.log('No access token, using cached userId');
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+        loadPage('home');
+        return;
+      }
+      if (!idToken) {
+        liff.login();
+        return;
+      }
+      try {
+        const profile = await liff.getProfile();
+        document.getElementById('header').textContent = '\ud83c\udf3f ' + (profile.displayName || '\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093');
+        // userId をキャッシュ（次回 PWA 起動時に使用）
+        if (profile.userId) {
+          cachedUserId = profile.userId;
+          localStorage.setItem('ars_user_id', profile.userId);
+        }
+      } catch (e) {
+        console.warn('getProfile failed, using cached', e);
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+      }
       loadPage('home');
     } catch (e) {
       console.error('LIFF init error:', e);
-      document.querySelector('.content').innerHTML = '<div class="error-msg">\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002LINE\u30a2\u30d7\u30ea\u304b\u3089\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002</div>';
+      if (cachedUserId) {
+        // LIFF 初期化失敗だがキャッシュあり → 続行
+        console.log('LIFF init failed, using cached userId');
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+        loadPage('home');
+      } else {
+        document.querySelector('.content').innerHTML = '<div class="error-msg">\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002LINE\u30a2\u30d7\u30ea\u304b\u3089\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002</div>';
+      }
     }
   }
 
@@ -1386,7 +1596,7 @@ body {
     this.disabled = true;
     this.textContent = '同期中...';
     try {
-      const result = await api('/wishlist/public-url', 'POST', { wishlistUrl: url });
+      const result = await api('/wishlist/public-url', { method: 'POST', body: { wishlistUrl: url } });
       if (result.success) {
         alert('登録完了！ ' + (result.items_count || 0) + '件の商品を同期しました');
         await loadWishlist();
@@ -1399,6 +1609,428 @@ body {
       this.disabled = false;
       this.textContent = '登録して同期する';
     }
+  });
+
+  // ─────────────────────────────────────────
+  // PWA Web Push (要件整理.md §7)
+  // ─────────────────────────────────────────
+  function urlBase64ToUint8Array(b64) {
+    const padding = '='.repeat((4 - b64.length % 4) % 4);
+    const base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const out = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) out[i] = rawData.charCodeAt(i);
+    return out;
+  }
+
+  async function ensureServiceWorker() {
+    if (!('serviceWorker' in navigator)) throw new Error('Service Worker 非対応');
+    const existing = await navigator.serviceWorker.getRegistration('/');
+    if (existing) return existing;
+    return navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+  }
+
+  async function loadWebPushStatus() {
+    const el = document.getElementById('webpush-status');
+    if (!el) return;
+    let parts = [];
+    parts.push('Notification: ' + (('Notification' in window) ? Notification.permission : '未対応'));
+    parts.push('ServiceWorker: ' + (('serviceWorker' in navigator) ? 'OK' : '未対応'));
+    parts.push('PushManager: ' + (('PushManager' in window) ? 'OK' : '未対応'));
+    try {
+      const data = await api('/webpush/status');
+      parts.push('購読: ' + (data.subscribed ? data.subscriptionCount + '件' : 'なし'));
+    } catch (e) {
+      parts.push('購読状況取得失敗');
+    }
+    el.innerHTML = parts.join(' / ');
+  }
+
+  document.getElementById('btn-webpush-subscribe').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '処理中...';
+    try {
+      if (!('Notification' in window)) { alert('このブラウザは通知非対応です'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { alert('通知が許可されませんでした'); return; }
+      const reg = await ensureServiceWorker();
+      const keyData = await api('/webpush/vapid-public-key');
+      if (!keyData.publicKey) { alert('VAPIDキー取得失敗'); return; }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+      });
+      const result = await api('/webpush/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+      if (result.subscribed) {
+        alert('通知をONにしました🌿');
+        await loadWebPushStatus();
+      } else {
+        alert(result.error || '購読に失敗しました');
+      }
+    } catch (e) {
+      alert('購読エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+      this.textContent = '通知をONにする';
+    }
+  });
+
+  document.getElementById('btn-webpush-test').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '送信中...';
+    try {
+      const result = await api('/webpush/test', { method: 'POST', body: {} });
+      if (result.sent > 0) {
+        alert('テスト通知を送信したよ〜🌿 通知が来たか確認してね');
+      } else {
+        alert('送信失敗。先に「通知をONにする」を押してね。\n詳細: ' + JSON.stringify(result.details || []));
+      }
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+      this.textContent = 'テスト通知';
+    }
+  });
+
+  document.getElementById('btn-webpush-unsubscribe').addEventListener('click', async function() {
+    this.disabled = true;
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/');
+      if (reg) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await api('/webpush/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } });
+          await sub.unsubscribe();
+        }
+      }
+      alert('通知をOFFにしました');
+      await loadWebPushStatus();
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  // ─── ご褒美通知トリガー ───
+  document.getElementById('btn-push-trigger').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '送信中...';
+    const out = document.getElementById('push-trigger-result');
+    try {
+      const result = await api('/push/trigger', { method: 'POST', body: {} });
+      if (result.success) {
+        out.innerHTML = '<span style="color:#155724;">✅ ' + result.title + ' を送信しました</span>';
+      } else {
+        out.innerHTML = '<span style="color:#d33;">' + (result.error || '送信失敗') + '</span>';
+      }
+    } catch (e) {
+      out.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '🌿 ご褒美通知を送る';
+    }
+  });
+
+  // ─────────────────────────────────────────
+  // Nova Act スモーク (要件整理.md §10)
+  // ─────────────────────────────────────────
+  document.getElementById('btn-nova-act-smoke').addEventListener('click', async function() {
+    const query = document.getElementById('nova-act-query').value.trim();
+    const maxPrice = document.getElementById('reward-test-budget').value;
+    const out = document.getElementById('nova-act-result');
+    this.disabled = true;
+    this.textContent = '🔍 検索中...';
+    out.innerHTML = '<div style="color:#888;">候補取得中...</div>';
+    try {
+      const result = await api('/reward-candidates', { method: 'POST', body: { query: query, max_price: parseInt(maxPrice) } });
+      if (result.error) { out.innerHTML = '<span style="color:#d33;">' + result.error + '</span>'; return; }
+      let html = '<div style="margin-bottom:6px;"><b>取得件数:</b> ' + (result.count || 0) + '件</div>';
+      if (result.candidates && result.candidates.length > 0) {
+        html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+        result.candidates.forEach(function(c, i) {
+          var sourceLabels = {'rakuten':'🛍️楽天','hotpepper':'🍽️HP','nova_act_amazon':'📦Nova','bedrock_amazon':'🤖AI','static':'📋静的'};
+          var badge = sourceLabels[c.source] || c.source;
+          html += '<div style="background:#f5f5f5;border-radius:8px;padding:10px;border:1px solid #e0e0e0;">';
+          html += '<div style="display:flex;gap:10px;">';
+          // 画像
+          if (c.image_url) {
+            html += '<img src="' + c.image_url + '" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display=\'none\'">';
+          }
+          html += '<div style="flex:1;min-width:0;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+          html += '<span style="font-weight:bold;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (c.name || '?').substring(0, 40) + '</span>';
+          html += '<span style="background:#7BAF6E;color:white;padding:2px 6px;border-radius:4px;font-size:10px;flex-shrink:0;margin-left:4px;">' + badge + '</span>';
+          html += '</div>';
+          html += '<div style="color:#7BAF6E;font-weight:bold;margin-top:2px;">¥' + (c.amount || 0).toLocaleString() + '</div>';
+          if (c.url) html += '<a href="' + c.url + '" target="_blank" style="font-size:11px;color:#1976d2;word-break:break-all;">🔗 ' + c.url.substring(0, 50) + (c.url.length > 50 ? '...' : '') + '</a>';
+          html += '</div></div></div>';
+        });
+        html += '</div>';
+        // プレビューカードに最初の候補を表示
+        hideAllNovaSteps();
+        novaActProduct = result.candidates[0];
+        showStep1(result.candidates[0], result.candidates[0].reason || 'ふれまーるちゃんが見つけてきたよ🌿');
+      } else {
+        html += '<div style="color:#888;">候補が見つかりませんでした</div>';
+      }
+      out.innerHTML = html;
+    } catch (e) {
+      out.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '🔍 候補を検索する';
+    }
+  });
+
+  // ─── ご褒美候補プレビュー ───
+  let novaActProduct = null;
+  const novaActLoading = document.getElementById('nova-act-loading');
+  const novaActEmpty = document.getElementById('nova-act-empty');
+  const novaActStep1 = document.getElementById('nova-act-step1');
+  const novaActStep2 = document.getElementById('nova-act-step2');
+  const novaActStatus = document.getElementById('nova-act-status');
+
+  function hideAllNovaSteps() {
+    novaActLoading.style.display = 'none';
+    novaActEmpty.style.display = 'none';
+    novaActStep1.style.display = 'none';
+    novaActStep2.style.display = 'none';
+  }
+
+  function openUrl(url) {
+    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
+      liff.openWindow({ url: url, external: true });
+    } else {
+      window.open(url, '_blank') || (location.href = url);
+    }
+  }
+
+  // APIから商品を取得して Step 1 を表示
+  async function loadNovaActProduct() {
+    hideAllNovaSteps();
+    novaActLoading.style.display = 'block';
+    novaActStatus.textContent = '';
+    try {
+      const r = await api('/reward-candidates', { method: 'POST', body: {} });
+      console.log('reward-candidates response:', JSON.stringify(r));
+      hideAllNovaSteps();
+      if (r && r.success && r.candidates && r.candidates.length > 0) {
+        // 最もスコアの高い候補を表示
+        var best = r.candidates[0];
+        novaActProduct = best;
+        showStep1(best, best.reason || 'ふれまーるちゃんが見つけてきたよ🌿');
+      } else if (r && r.success && r.product) {
+        // 旧形式互換
+        novaActProduct = r.product;
+        showStep1(r.product, r.reason);
+      } else {
+        console.warn('reward-candidates: no candidates', r);
+        novaActEmpty.style.display = 'block';
+        novaActStatus.innerHTML = '<span style="color:#888;font-size:11px;">候補が見つかりませんでした</span>';
+      }
+    } catch (e) {
+      console.error('reward-candidates error:', e);
+      hideAllNovaSteps();
+      novaActEmpty.style.display = 'block';
+      novaActStatus.innerHTML = '<span style="color:#d33;font-size:11px;">Error: ' + (e.message || e) + '</span>';
+    }
+  }
+
+  function showStep1(product, reason) {
+    console.log('showStep1 called:', JSON.stringify(product));
+    const imgDiv = document.getElementById('nova-act-product-image');
+    if (product.image_url) {
+      imgDiv.innerHTML = '<img src="' + product.image_url + '" style="max-width:140px;max-height:140px;border-radius:8px;" alt="">';
+    } else {
+      imgDiv.innerHTML = '';
+    }
+    var titleEl = document.getElementById('nova-act-product-title');
+    titleEl.textContent = product.name || product.title || '（商品名取得中...）';
+    titleEl.style.fontSize = '16px';
+    var price = product.amount || product.price;
+    document.getElementById('nova-act-product-price').textContent = price ? ('¥' + Number(price).toLocaleString()) : '';
+    document.getElementById('nova-act-reason').textContent = reason || '';
+
+    // ソース表示
+    var sourceLabels = {
+      'rakuten': '🛍️ 楽天市場',
+      'hotpepper': '🍽️ ホットペッパー',
+      'nova_act_amazon': '📦 Amazon (Nova Act検索)',
+      'bedrock_amazon': '📦 Amazon (AI推薦)',
+      'static': '📋 おすすめカタログ'
+    };
+    var sourceEl = document.getElementById('nova-act-product-source');
+    if (sourceEl) {
+      sourceEl.textContent = sourceLabels[product.source] || product.source || '';
+    }
+
+    // 商品リンクを表示
+    var linkEl = document.getElementById('nova-act-product-link');
+    var url = product.url || product.product_url || '';
+    if (linkEl && url) {
+      linkEl.innerHTML = '<a href="' + url + '" target="_blank" style="color:#2e7d32;font-size:13px;">🔗 商品ページを見る</a>';
+    } else if (linkEl) {
+      linkEl.innerHTML = '';
+    }
+
+    // ソースに応じてボタン表示を切り替え
+    var btnAmazon = document.getElementById('btn-nova-act-add-cart');
+    var btnRakuten = document.getElementById('btn-nova-act-rakuten');
+    var btnHotpepper = document.getElementById('btn-nova-act-hotpepper');
+    btnAmazon.style.display = 'none';
+    btnRakuten.style.display = 'none';
+    btnHotpepper.style.display = 'none';
+
+    var source = product.source || '';
+    if (source === 'rakuten') {
+      btnRakuten.style.display = 'block';
+    } else if (source === 'hotpepper') {
+      btnHotpepper.style.display = 'block';
+    } else {
+      // Amazon系 → カートに入れるボタン（ASINなくてもサーバーで解決する）
+      btnAmazon.style.display = 'block';
+      btnAmazon.textContent = '🛒 Amazonのカートに入れる';
+    }
+
+    novaActStep1.style.display = 'block';
+  }
+
+  function showStep2(product) {
+    document.getElementById('nova-act-cart-title').textContent = product.name || product.title || '';
+    var price = product.amount || product.price;
+    document.getElementById('nova-act-cart-price').textContent = price ? ('¥' + Number(price).toLocaleString()) : '';
+    novaActStep2.style.display = 'block';
+  }
+
+  // 設定ページが開かれた時に商品を取得（認証完了後）
+  // ※ initLiff → loadPage('settings') 経由で呼ばれるため認証済み
+
+  // 「今すぐ候補を探す」
+  document.getElementById('btn-nova-act-trigger').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '🌿 ふれまーるちゃんが探してるよ...';
+    await loadNovaActProduct();
+    this.disabled = false;
+    this.textContent = '🎁 今すぐ候補を探す';
+  });
+
+  // 「Amazonのカートに入れる」→ サーバーでASIN解決 → Add-to-Cart URLで自動カート投入
+  document.getElementById('btn-nova-act-add-cart').addEventListener('click', async function() {
+    if (!novaActProduct) {
+      novaActStatus.innerHTML = '<span style="color:#d33;">商品データがありません。</span>';
+      return;
+    }
+
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = '🔍 Amazonで商品を探しています...';
+    novaActStatus.innerHTML = '<span style="color:#666;">少々お待ちください...</span>';
+
+    var asin = novaActProduct.asin || '';
+    var cartUrl = '';
+
+    try {
+      if (asin) {
+        // 既にASINがある場合（nova_act_amazon等）→ 直接カートURL
+        cartUrl = 'https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=' + asin + '&Quantity.1=1';
+      } else {
+        // ASINなし → サーバーで商品名からASIN解決
+        var data = await api('/amazon/resolve-cart', {
+          method: 'POST',
+          body: {product_name: novaActProduct.name || novaActProduct.title, max_price: novaActProduct.amount || 5000}
+        });
+
+        if (data.success && data.asin) {
+          asin = data.asin;
+          cartUrl = data.cart_url || ('https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=' + asin + '&Quantity.1=1');
+          novaActProduct.asin = asin;
+          if (data.image_url) novaActProduct.image_url = data.image_url;
+          if (data.product_url) novaActProduct.url = data.product_url;
+          if (data.name) novaActProduct.name = data.name;
+        }
+      }
+
+      if (cartUrl) {
+        openUrl(cartUrl);
+        hideAllNovaSteps();
+        showStep2(novaActProduct);
+        novaActStatus.innerHTML = '<span style="color:#155724;">🛒 Amazonのカートに追加したよ！確認してね🌿</span>';
+      } else {
+        // ASIN解決失敗 → 商品検索ページへ
+        var url = novaActProduct.url || novaActProduct.product_url || '';
+        if (url) {
+          openUrl(url);
+          hideAllNovaSteps();
+          showStep2(novaActProduct);
+          novaActStatus.innerHTML = '<span style="color:#856404;">⚠️ 自動カート追加できませんでした。商品ページを開いたよ🌿</span>';
+        } else {
+          novaActStatus.innerHTML = '<span style="color:#d33;">商品が見つかりませんでした。別の候補を試してね。</span>';
+        }
+      }
+    } catch (e) {
+      console.error('Add to cart failed:', e);
+      novaActStatus.innerHTML = '<span style="color:#d33;">エラーが発生しました: ' + (e.message || e) + '</span>';
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🛒 Amazonのカートに入れる';
+  });
+
+  // 楽天ボタン
+  document.getElementById('btn-nova-act-rakuten').addEventListener('click', function() {
+    if (!novaActProduct || !novaActProduct.url) return;
+    openUrl(novaActProduct.url);
+    hideAllNovaSteps();
+    showStep2(novaActProduct);
+  });
+
+  // ホットペッパーボタン
+  document.getElementById('btn-nova-act-hotpepper').addEventListener('click', function() {
+    if (!novaActProduct || !novaActProduct.url) return;
+    openUrl(novaActProduct.url);
+    hideAllNovaSteps();
+    showStep2(novaActProduct);
+  });
+
+  // Step 2:「サイトで確認する」→ 商品URLを開く
+  document.getElementById('btn-nova-act-purchase').addEventListener('click', function() {
+    // Amazonカートページを開く
+    openUrl('https://www.amazon.co.jp/gp/cart/view.html');
+  });
+
+  // 「買ったよ！」→ 購入完了記録
+  document.getElementById('btn-nova-act-bought').addEventListener('click', async function() {
+    hideAllNovaSteps();
+    novaActStatus.innerHTML = '<span style="color:#155724;">🎉 おめでとう！ご褒美を楽しんでね🌿</span>';
+    // TODO: 購入完了をバックエンドに記録 (REWARD_HISTORY)
+    novaActProduct = null;
+  });
+
+  // 「別の商品にして」→ 候補リフレッシュ
+  document.getElementById('btn-nova-act-change').addEventListener('click', async function() {
+    this.disabled = true;
+    hideAllNovaSteps();
+    novaActLoading.style.display = 'block';
+    novaActStatus.innerHTML = '<span style="color:#555;">🤖 ふれまーるちゃんが別の候補を探してるよ...</span>';
+    await loadNovaActProduct();
+    this.disabled = false;
+    novaActStatus.textContent = '';
+  });
+
+  // 「やっぱりやめる」（Step 1）
+  document.getElementById('btn-nova-act-decline').addEventListener('click', function() {
+    hideAllNovaSteps();
+    novaActProduct = null;
+    novaActStatus.innerHTML = '<span style="color:#555;">わかった！また次の機会に🌿</span>';
+  });
+
+  // 「やっぱりやめる」（Step 2）
+  document.getElementById('btn-nova-act-cancel').addEventListener('click', function() {
+    hideAllNovaSteps();
+    novaActProduct = null;
+    novaActStatus.innerHTML = '<span style="color:#555;">了解！キャンセルしたよ🌿</span>';
   });
 
 })();

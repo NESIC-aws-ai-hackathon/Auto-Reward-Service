@@ -81,48 +81,91 @@ def _make_response(status: int, body: dict) -> dict:
 # 認証
 # ─────────────────────────────────────────
 
+def _get_user_id_from_access_token(token: str) -> Optional[str]:
+    """LINE アクセストークンから userId を取得（LINE Profile API 呼び出し）"""
+    import urllib.request as _ureq
+    import urllib.error as _uerr
+    try:
+        req = _ureq.Request(
+            "https://api.line.me/v2/profile",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        with _ureq.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+            user_id = data.get("userId")
+            if user_id:
+                logger.info("access_token_auth_ok", user_id=user_id[:8] + "***")
+            return user_id
+    except _uerr.HTTPError as e:
+        # 401/403 = トークン無効 → None (認証失敗)
+        if e.code in (401, 403):
+            logger.warning("access_token_invalid", status=e.code)
+            return None
+        # 5xx = LINE API 一時障害 → "LINE_API_ERROR" を返してフロントが区別可能にする
+        logger.warning("line_api_error", status=e.code, error=str(e))
+        return "__LINE_API_ERROR__"
+    except Exception as e:
+        # タイムアウト等のネットワークエラー → API 障害扱い
+        logger.warning("access_token_network_error", error=str(e))
+        return "__LINE_API_ERROR__"
+
+
 def _extract_user_id(event: dict) -> Optional[str]:
     """
-    LIFF ID Token（JWT）から LINE ユーザー ID を抽出する。
+    Authorization ヘッダーのトークンから LINE ユーザー ID を抽出する。
 
-    ハッカソンスコープ: 署名検証なし（aud + exp チェックのみ）。
-    本番環境では LINE の公開鍵による署名検証が必要。
+    優先順位:
+    1. Authorization: Bearer <token> → LINE Profile API / JWT 検証
+    2. X-ARS-User-Id: <userId> → PWA キャッシュフォールバック（ハッカソン用）
     """
     headers = event.get("headers") or {}
     auth = headers.get("authorization", headers.get("Authorization", ""))
     token = auth.replace("Bearer ", "").strip()
-    if not token:
-        return None
 
-    try:
-        # JWT ペイロード部分をデコード（header.payload.signature の 2 番目）
-        parts = token.split(".")
-        if len(parts) != 3:
-            return None
-        payload_b64 = parts[1]
-        # パディング補完
-        padding = 4 - len(payload_b64) % 4
-        if padding != 4:
-            payload_b64 += "=" * padding
-        payload_bytes = base64.urlsafe_b64decode(payload_b64)
-        payload = json.loads(payload_bytes)
+    # Bearer トークンがある場合 → 通常の認証フロー
+    if token:
+        # JWT でない場合（"." が2つない）→ LINE アクセストークン
+        if token.count(".") != 2:
+            result = _get_user_id_from_access_token(token)
+            if result and result != "__LINE_API_ERROR__":
+                return result
+            if result == "__LINE_API_ERROR__":
+                return "__LINE_API_ERROR__"
+            # トークン無効 → フォールバックへ
+        else:
+            # JWT（LIFF ID Token）のデコード
+            try:
+                parts = token.split(".")
+                payload_b64 = parts[1]
+                padding = 4 - len(payload_b64) % 4
+                if padding != 4:
+                    payload_b64 += "=" * padding
+                payload_bytes = base64.urlsafe_b64decode(payload_b64)
+                payload = json.loads(payload_bytes)
 
-        # aud 検証（LIFF Channel ID と一致すること）
-        channel_id = os.environ.get("LIFF_CHANNEL_ID", "") or LIFF_CHANNEL_ID
-        if channel_id and payload.get("aud") != channel_id:
-            logger.warning("liff_token_aud_mismatch", aud=payload.get("aud"))
-            return None
+                # aud 検証（LIFF Channel ID と一致すること）
+                channel_id = os.environ.get("LIFF_CHANNEL_ID", "") or LIFF_CHANNEL_ID
+                if channel_id and payload.get("aud") != channel_id:
+                    logger.warning("liff_token_aud_mismatch", aud=payload.get("aud"))
+                else:
+                    # exp 検証（24時間の猶予: ハッカソンスコープ）
+                    exp = payload.get("exp", 0)
+                    if exp + 86400 < time.time():
+                        logger.warning("liff_token_very_expired", exp=exp)
+                    else:
+                        sub = payload.get("sub")
+                        if sub:
+                            return sub
+            except Exception as e:
+                logger.warning("liff_token_decode_failed", error=str(e))
 
-        # exp 検証
-        exp = payload.get("exp", 0)
-        if exp < time.time():
-            logger.warning("liff_token_expired")
-            return None
+    # フォールバック: X-ARS-User-Id ヘッダー（PWA キャッシュ認証）
+    cached_uid = headers.get("x-ars-user-id", headers.get("X-ARS-User-Id", "")).strip()
+    if cached_uid and cached_uid.startswith("U") and len(cached_uid) > 10:
+        logger.info("auth_fallback_cached_uid", user_id=cached_uid[:8] + "***")
+        return cached_uid
 
-        return payload.get("sub")  # LINE ユーザー ID
-    except Exception as e:
-        logger.warning("liff_token_decode_failed", error=str(e))
-        return None
+    return None
 
 
 # ─────────────────────────────────────────
@@ -363,6 +406,8 @@ def _handle_get_settings(user_id: str, ddb: DynamoDBService) -> dict:
         "nickname": profile.get("nickname"),
         "fixed_costs": fixed_costs_item.get("items") or [],
         "anniversaries": profile.get("anniversaries") or [],
+        "push_cooldown_hours": int(profile.get("push_cooldown_hours", 1)),
+        "push_suggest_threshold": int(profile.get("push_suggest_threshold", 40)),
     })
 
 
@@ -453,6 +498,24 @@ def _handle_update_settings(user_id: str, ddb: DynamoDBService, body: dict) -> d
             updates["bonus_amount"] = val
         except (ValueError, TypeError):
             return _make_response(400, {"error": "bonus_amount は数値を指定してください"})
+
+    if "push_cooldown_hours" in body:
+        try:
+            val = int(body["push_cooldown_hours"])
+            if not (0 <= val <= 24):
+                return _make_response(400, {"error": "push_cooldown_hours は 0〜24 の範囲で指定してください"})
+            updates["push_cooldown_hours"] = val
+        except (ValueError, TypeError):
+            return _make_response(400, {"error": "push_cooldown_hours は数値を指定してください"})
+
+    if "push_suggest_threshold" in body:
+        try:
+            val = int(body["push_suggest_threshold"])
+            if not (0 <= val <= 100):
+                return _make_response(400, {"error": "push_suggest_threshold は 0〜100 の範囲で指定してください"})
+            updates["push_suggest_threshold"] = val
+        except (ValueError, TypeError):
+            return _make_response(400, {"error": "push_suggest_threshold は数値を指定してください"})
 
     if not updates:
         return _make_response(400, {"error": "更新するフィールドがありません"})
@@ -602,6 +665,7 @@ def _serve_liff_html() -> dict:
         "statusCode": 200,
         "headers": {
             "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
         },
         "body": html,
     }
@@ -653,6 +717,81 @@ def _serve_temptation_html() -> dict:
             "Content-Type": "text/html; charset=utf-8",
         },
         "body": html,
+    }
+
+
+def _serve_service_worker() -> dict:
+    """PWA Service Worker を配信する (要件整理.md §7)"""
+    sw = """// Auto-Reward-Service PWA Service Worker (auto-generated)
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data ? event.data.text() : '' }; }
+  const title = data.title || 'ふれまーるちゃん🌿';
+  const options = {
+    body: data.body || 'ちょっと話したいことがあるよ〜',
+    icon: data.icon || '/liff/icon-192.png',
+    badge: data.badge || '/liff/badge-72.png',
+    data: { url: data.url || '/liff' },
+    tag: data.type || 'ars-notification',
+    renotify: true,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event.notification.data && event.notification.data.url ? event.notification.data.url : '/liff';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      for (const client of clientList) {
+        if (client.url.includes('/liff') && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});
+"""
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "application/javascript; charset=utf-8",
+            "Service-Worker-Allowed": "/",
+            "Cache-Control": "no-cache",
+        },
+        "body": sw,
+    }
+
+
+def _serve_manifest() -> dict:
+    """PWA manifest.json を配信する"""
+    manifest = {
+        "id": "/liff",
+        "name": "Auto Reward Service",
+        "short_name": "ARS",
+        "start_url": "/liff",
+        "scope": "/",
+        "display": "standalone",
+        "theme_color": "#7BAF6E",
+        "background_color": "#ffffff",
+        "icons": [
+            {"src": "/liff/icon-192.png", "sizes": "192x192", "type": "image/png"},
+            {"src": "/liff/icon-512.png", "sizes": "512x512", "type": "image/png"},
+        ],
+    }
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/manifest+json; charset=utf-8"},
+        "body": json.dumps(manifest, ensure_ascii=False),
     }
 
 
@@ -774,8 +913,28 @@ def handler(event: dict, context: Any) -> dict:
     if raw_path == "/liff/temptation":
         return _serve_temptation_html()
 
+    # /liff/amazon-login → Amazon 連携ページ（ECS 不要デモ版）
+    if raw_path == "/liff/amazon-login":
+        return _serve_amazon_login_html(event)
+
+    # /liff/amazon-buy → 自動カート追加＋購入中間ページ
+    if raw_path == "/liff/amazon-buy":
+        return _serve_amazon_buy_html(event)
+
+    # PWA: Service Worker / manifest (要件整理.md §7) — 認証不要
+    if raw_path == "/service-worker.js":
+        return _serve_service_worker()
+    if raw_path == "/manifest.json" or raw_path == "/liff/manifest.json":
+        return _serve_manifest()
+
+    # VAPID 公開鍵は公開情報 — 認証不要
+    if raw_path == "/api/webpush/vapid-public-key" and http_method == "GET":
+        return _handle_webpush_vapid_key()
+
     # /api/* → 認証必須
     user_id = _extract_user_id(event)
+    if user_id == "__LINE_API_ERROR__":
+        return _make_response(503, {"error": "LINE API一時障害です。少し待ってから再試行してください。"})
     if not user_id:
         return _make_response(401, {"error": "認証が必要です"})
 
@@ -877,6 +1036,103 @@ def handler(event: dict, context: Any) -> dict:
             return _handle_notifications_list(user_id, ddb)
         elif raw_path == "/api/notifications/latest-actionable" and http_method == "GET":
             return _handle_notification_latest(user_id, ddb)
+        # ─── PWA Web Push ───
+        elif raw_path == "/api/webpush/vapid-public-key" and http_method == "GET":
+            return _handle_webpush_vapid_key()
+        elif raw_path == "/api/webpush/subscribe" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            ua = (event.get("headers") or {}).get("user-agent", "")
+            return _handle_webpush_subscribe(user_id, ddb, body, ua)
+        elif raw_path == "/api/webpush/unsubscribe" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_webpush_unsubscribe(user_id, ddb, body)
+        elif raw_path == "/api/webpush/test" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                body = {}
+            return _handle_webpush_test(user_id, ddb, body)
+        elif raw_path == "/api/webpush/status" and http_method == "GET":
+            return _handle_webpush_status(user_id, ddb)
+        # ─── ご褒美候補検索 (Provider ベース) ───
+        elif raw_path == "/api/reward-candidates" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                body = {}
+            return _handle_reward_candidates(user_id, ddb, body)
+        # ─── Nova Act 検証導線 (後方互換) ───
+        elif raw_path == "/api/nova-act/smoke" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                body = {}
+            return _handle_nova_act_smoke(user_id, ddb, body)
+        elif raw_path == "/api/nova-act/cart" and http_method == "POST":
+            # 後方互換: 新APIにリダイレクト
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                body = {}
+            return _handle_reward_candidates(user_id, ddb, body)
+        elif raw_path == "/api/nova-act/create-job" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_nova_act_create_search_job(user_id, ddb, body)
+        elif raw_path == "/api/nova-act/job-status" and http_method == "GET":
+            qs = event.get("queryStringParameters") or {}
+            return _handle_nova_act_search_job_status(user_id, ddb, qs)
+        # ─── Amazon カートに追加 (ASIN解決) ───
+        elif raw_path == "/api/amazon/add-to-cart" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                body = {}
+            return _handle_amazon_add_to_cart(user_id, ddb, body)
+        elif raw_path == "/api/amazon/resolve-cart" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                body = {}
+            return _handle_amazon_resolve_cart(user_id, body)
+        # ─── Amazon 連携 ───
+        elif raw_path == "/api/amazon/status" and http_method == "GET":
+            return _handle_amazon_status(user_id, ddb)
+        elif raw_path == "/api/amazon/login-url" and http_method == "GET":
+            return _handle_amazon_login_url(user_id, ddb)
+        elif raw_path == "/api/amazon/confirm" and http_method == "POST":
+            return _handle_amazon_confirm(user_id, ddb)
+        elif raw_path == "/api/amazon/save-cookies" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_amazon_save_cookies(user_id, ddb, body)
+        elif raw_path == "/api/amazon/unlink" and http_method == "POST":
+            return _handle_amazon_unlink(user_id, ddb)
+        elif raw_path == "/api/amazon/add-to-cart" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_amazon_add_to_cart(user_id, ddb, body)
+        elif raw_path == "/api/amazon/purchase" and http_method == "POST":
+            try:
+                body = json.loads(event.get("body") or "{}")
+            except json.JSONDecodeError:
+                return _make_response(400, {"error": "無効な JSON です"})
+            return _handle_amazon_purchase(user_id, ddb, body)
+        # ─── 定期 Push 手動トリガー ───
+        elif raw_path == "/api/push/trigger" and http_method == "POST":
+            return _handle_push_trigger(user_id, ddb)
         else:
             return _make_response(404, {"error": "Not Found"})
     except Exception as e:
@@ -933,7 +1189,7 @@ def _handle_recommendations_list(user_id: str, ddb: DynamoDBService) -> dict:
     from models.schemas import SK_PREFIX_RECOMMENDATION
 
     pk = f"USER#{user_id}"
-    recs = ddb.query_begins_with(pk=pk, sk_prefix=SK_PREFIX_RECOMMENDATION)
+    recs = ddb.query_by_pk(pk=pk, sk_prefix=SK_PREFIX_RECOMMENDATION)
     recs.sort(key=lambda x: x.get("createdAt", ""), reverse=True)
     return _make_response(200, {"recommendations": recs[:20]})
 
@@ -1035,3 +1291,998 @@ def _handle_notification_latest(user_id: str, ddb: DynamoDBService) -> dict:
     if notif:
         return _make_response(200, notif)
     return _make_response(200, {"message": "アクション可能な通知はありません"})
+
+
+# ─────────────────────────────────────────
+# PWA Web Push ハンドラ (要件整理.md §7)
+# ─────────────────────────────────────────
+def _handle_webpush_vapid_key() -> dict:
+    """GET /api/webpush/vapid-public-key — ブラウザ用 applicationServerKey"""
+    from services.webpush_service import get_public_key
+
+    key = get_public_key()
+    if not key:
+        return _make_response(500, {"error": "VAPID key not configured"})
+    return _make_response(200, {"publicKey": key})
+
+
+def _handle_webpush_subscribe(user_id: str, ddb: DynamoDBService, body: dict, user_agent: str) -> dict:
+    """POST /api/webpush/subscribe — PushSubscription を保存"""
+    from services.webpush_service import save_subscription
+
+    subscription = body.get("subscription") or body
+    try:
+        sk = save_subscription(user_id, subscription, ddb, user_agent=user_agent)
+    except ValueError as e:
+        return _make_response(400, {"error": f"無効な subscription: {e}"})
+    except Exception as e:
+        logger.error("webpush_subscribe_failed", error=str(e))
+        return _make_response(500, {"error": "subscription 保存失敗"})
+    return _make_response(200, {"subscribed": True, "sk": sk})
+
+
+def _handle_webpush_unsubscribe(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/webpush/unsubscribe — PushSubscription を削除"""
+    from services.webpush_service import delete_subscription
+
+    endpoint = body.get("endpoint", "")
+    if not endpoint:
+        return _make_response(400, {"error": "endpoint は必須です"})
+    ok = delete_subscription(user_id, endpoint, ddb)
+    return _make_response(200, {"unsubscribed": ok})
+
+
+def _handle_webpush_test(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/webpush/test — テスト通知を即時送信"""
+    from services.webpush_service import send_webpush
+
+    payload = {
+        "title": body.get("title") or "ふれまーるちゃん🌿",
+        "body": body.get("body") or "テスト通知だよ〜。ちゃんと届いてるかなぁ？",
+        "url": body.get("url") or "/liff",
+    }
+    result = send_webpush(user_id, payload, ddb)
+    status = 200 if result.get("sent", 0) > 0 else 500
+    return _make_response(status, result)
+
+
+def _handle_webpush_status(user_id: str, ddb: DynamoDBService) -> dict:
+    """GET /api/webpush/status — 購読状況"""
+    from services.webpush_service import list_subscriptions, get_public_key
+
+    subs = list_subscriptions(user_id, ddb)
+    return _make_response(200, {
+        "subscribed": len(subs) > 0,
+        "subscriptionCount": len(subs),
+        "vapidPublicKey": get_public_key(),
+        "subscriptions": [{
+            "endpoint_hash": s.get("endpoint", "")[:80] + "…" if len(s.get("endpoint", "")) > 80 else s.get("endpoint", ""),
+            "userAgent": s.get("userAgent", ""),
+            "createdAt": s.get("created_at", ""),
+        } for s in subs],
+    })
+
+
+# ─────────────────────────────────────────
+# Nova Act 検証導線 (要件整理.md §10)
+# ─────────────────────────────────────────
+def _handle_nova_act_smoke(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/nova-act/smoke — Nova Act 動作確認/候補取得テスト
+
+    Body: {"query": "抹茶 プリン", "max_results": 3}
+    """
+    import os as _os
+    enabled = _os.environ.get("ENABLE_NOVA_ACT_SMOKE", "true").lower() == "true"
+    if not enabled:
+        return _make_response(403, {"error": "Nova Act smoke is disabled"})
+
+    query = (body.get("query") or "").strip()
+    if not query:
+        return _make_response(400, {"error": "query は必須です"})
+    max_results = min(int(body.get("max_results", 3)), 10)
+
+    try:
+        from services.reward_candidate_provider import run_nova_act_smoke
+        candidates, meta = run_nova_act_smoke(query=query, max_results=max_results)
+    except Exception as e:
+        logger.error("nova_act_smoke_failed", error=str(e))
+        return _make_response(500, {
+            "error": "Nova Act smoke failed",
+            "detail": str(e)[:200],
+        })
+
+    # 結果をDynamoDBに監査ログとして保存
+    try:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        ddb.put_item(f"USER#{user_id}", f"NOVA_ACT_LOG#{ts}", {
+            "entityType": "NOVA_ACT_LOG",
+            "query": query,
+            "result_count": len(candidates),
+            "status": meta.get("status", "unknown"),
+            "provider": meta.get("provider", ""),
+            "duration_ms": meta.get("duration_ms", 0),
+            "failure_reason": meta.get("failure_reason"),
+            "created_at": ts,
+        })
+    except Exception as e:
+        logger.warning("nova_act_log_save_failed", error=str(e))
+
+    return _make_response(200, {
+        "query": query,
+        "candidates": candidates,
+        "meta": meta,
+    })
+
+
+def _handle_nova_act_cart(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/nova-act/cart — Nova Actが自動でカートに入れた商品を返す
+
+    Nova Act体験のコア: ユーザーのほしいものリストから自動選択し、
+    「もうカートに入れたよ」として表示する。
+    """
+    from services.wishlist_service import get_active_items_for_recommendation
+    import random
+
+    max_price = int(body.get("max_price", 5000))
+
+    try:
+        items = get_active_items_for_recommendation(user_id, ddb, max_price=max_price)
+    except Exception as e:
+        logger.error("nova_act_cart_items_failed", error=str(e))
+        return _make_response(200, {"success": False, "error": "ほしいものリストの取得に失敗しました"})
+
+    if not items:
+        # ほしいものリスト未登録時はデモ商品でフォールバック
+        from services.amazon_cart_service import get_amazon_product_for_category
+        demo = get_amazon_product_for_category("おまかせ", max_price=max_price)
+        if demo:
+            items = [{
+                "title": demo["title"],
+                "price": demo["price"],
+                "asin": demo["asin"],
+                "url": demo.get("product_url", ""),
+                "image_url": "",
+            }]
+        else:
+            return _make_response(200, {
+                "success": False,
+                "error": "商品が見つかりませんでした🌿"
+            })
+
+    # Nova Actが「選んだ」商品 = ほしいものリストからランダムに1つ選択
+    # 実際のNova Actではブラウザ操作で追加するが、ハッカソンではシミュレート
+    selected = random.choice(items) if len(items) > 1 else items[0]
+
+    # ほしい度が高いものを優先（desire_levelでソート済みの上位から選ぶ）
+    high_desire = [it for it in items if it.get("desire_level", 0) >= 3]
+    if high_desire:
+        selected = random.choice(high_desire)
+
+    # フィールド名の正規化（DynamoDB: product_title/product_url vs コード: title/url）
+    if not selected.get("title") and selected.get("product_title"):
+        selected["title"] = selected["product_title"]
+    if not selected.get("url") and selected.get("product_url"):
+        selected["url"] = selected["product_url"]
+    if not selected.get("image_url") and selected.get("product_image_url"):
+        selected["image_url"] = selected["product_image_url"]
+
+    # ASIN抽出
+    from services.amazon_cart_service import extract_asin, get_amazon_product_for_category as _get_demo
+    asin = selected.get("asin") or ""
+    if not asin and selected.get("url"):
+        asin = extract_asin(selected["url"]) or ""
+
+    # ASINが取れない場合はデモ商品にフォールバック
+    if not asin:
+        logger.warning("nova_act_no_asin_fallback", selected_title=selected.get("title"), selected_url=selected.get("url"))
+        demo = _get_demo("おまかせ", max_price=max_price)
+        if demo:
+            selected = {
+                "title": demo["title"],
+                "price": demo["price"],
+                "asin": demo["asin"],
+                "url": demo.get("product_url", ""),
+                "image_url": "",
+            }
+            asin = demo["asin"]
+
+    # カート追加URL・チェックアウトURLを生成
+    from services.amazon_cart_service import generate_add_to_cart_url, generate_checkout_url, generate_product_url
+    add_to_cart_url = generate_add_to_cart_url(asin) if asin else ""
+    checkout_url = generate_checkout_url()
+    product_url = generate_product_url(asin) if asin else selected.get("url", "")
+
+    product = {
+        "title": selected.get("title", "不明な商品"),
+        "price": selected.get("price"),
+        "image_url": selected.get("image_url"),
+        "asin": asin,
+        "product_url": product_url,
+        "add_to_cart_url": add_to_cart_url,
+        "checkout_url": checkout_url,
+    }
+
+    # Nova Actがカートに入れた記録を保存
+    try:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        ddb.put_item(f"USER#{user_id}", f"NOVA_ACT_CART#{ts}", {
+            "entityType": "NOVA_ACT_CART",
+            "asin": asin,
+            "title": product["title"],
+            "price": product.get("price"),
+            "status": "proposed",
+            "created_at": ts,
+        })
+    except Exception as e:
+        logger.warning("nova_act_cart_log_failed", error=str(e))
+
+    reasons = [
+        "あなたのほしいものリストから、今のあなたにぴったりだと思って選んだよ🌿",
+        "最近頑張ってたから、これご褒美にどうかな？🌿",
+        "ほしいものリストでずっと気になってたやつ、カートに入れちゃった🌿",
+        "今日は自分にご褒美あげていい日だよ～🌿",
+    ]
+
+    return _make_response(200, {
+        "success": True,
+        "product": product,
+        "reason": random.choice(reasons),
+        "source": "nova_act_wishlist",
+    })
+
+
+def _handle_nova_act_approve(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/nova-act/approve — Nova Actがサーバーサイドでカートに追加
+
+    Body: {"asin": "...", "title": "...", "price": 1234}
+
+    フロー:
+      1. ユーザーの保存済みAmazon Cookieを取得
+      2. サーバーサイドからAmazonのカート追加エンドポイントにリクエスト
+      3. ユーザーのAmazonカートに実際に商品が追加される
+      4. 購入許可ログを記録
+    """
+    from services.nova_act_service import add_to_cart_server_side, get_amazon_cookies
+
+    asin = body.get("asin", "")
+    title = body.get("title", "")
+    price = body.get("price")
+
+    # 1. ユーザーのAmazon Cookieを取得
+    cookies = get_amazon_cookies(user_id, ddb)
+    if not cookies:
+        logger.warning("nova_act_no_cookies", user_id=user_id[:8])
+        return _make_response(400, {
+            "success": False,
+            "message": "Amazonセッションが保存されていません。設定画面から「Amazonにログインする」を実行してください。",
+            "needs_login": True,
+        })
+
+    # 2. サーバーサイドでカートに追加（Nova Act）
+    cart_result = add_to_cart_server_side(asin, cookies)
+    logger.info("nova_act_cart_result", asin=asin, success=cart_result.get("success"))
+
+    if not cart_result.get("success"):
+        # セッション切れの場合
+        if cart_result.get("needs_relogin"):
+            return _make_response(401, {
+                "success": False,
+                "message": cart_result.get("message", "セッションが切れています"),
+                "needs_login": True,
+            })
+        return _make_response(400, {
+            "success": False,
+            "message": cart_result.get("message", "カート追加に失敗しました"),
+        })
+
+    # 3. 購入許可ログを保存
+    try:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+
+        ddb.put_item(f"USER#{user_id}", f"NOVA_ACT_PURCHASE#{ts}", {
+            "entityType": "NOVA_ACT_PURCHASE",
+            "asin": asin,
+            "title": title,
+            "price": int(price) if price else None,
+            "status": "cart_added",
+            "approved_at": ts,
+        })
+
+        # ご褒美支出としても記録
+        ddb.put_item(f"USER#{user_id}", f"EXPENSE#REWARD#{ts}", {
+            "entityType": "EXPENSE",
+            "category": "reward",
+            "description": f"🎁 {title}" if title else "🎁 ご褒美購入",
+            "amount": int(price) if price else 0,
+            "date": datetime.now(_JST).strftime("%Y-%m-%d"),
+            "source": "nova_act",
+            "created_at": ts,
+        })
+
+        logger.info("nova_act_purchase_approved", user_id=user_id[:8], asin=asin, price=price)
+    except Exception as e:
+        logger.error("nova_act_approve_log_failed", error=str(e))
+
+    return _make_response(200, {
+        "success": True,
+        "message": "カートに追加しました！🛒 Amazonで注文を確定してね🌿",
+        "cart_url": cart_result.get("cart_url", "https://www.amazon.co.jp/gp/cart/view.html"),
+    })
+
+
+# ─────────────────────────────────────────
+# Amazon ASIN解決 → カートURL (商品名ベース)
+# ─────────────────────────────────────────
+def _handle_amazon_resolve_cart(user_id: str, body: dict) -> dict:
+    """POST /api/amazon/resolve-cart — 商品名からASINを解決しカートURLを返す
+
+    Body: {"product_name": "アロマキャンドル", "max_price": 3000}
+    Returns: {"success": true, "asin": "B08...", "cart_url": "https://...", ...}
+    """
+    product_name = (body.get("product_name") or "").strip()
+    if not product_name:
+        return _make_response(400, {"success": False, "error": "product_name が必要です"})
+
+    max_price = int(body.get("max_price", 5000))
+
+    try:
+        from services.reward_candidate_provider import resolve_amazon_asin
+        result = resolve_amazon_asin(product_name, max_price=max_price)
+
+        if result.get("asin"):
+            return _make_response(200, {
+                "success": True,
+                "asin": result["asin"],
+                "cart_url": result["cart_url"],
+                "product_url": result.get("url", ""),
+                "image_url": result.get("image_url", ""),
+                "name": result.get("name", product_name),
+            })
+        else:
+            return _make_response(200, {
+                "success": False,
+                "error": result.get("error", "ASINが見つかりませんでした"),
+            })
+    except Exception as e:
+        logger.error("amazon_resolve_cart_failed", error=str(e))
+        return _make_response(500, {
+            "success": False,
+            "error": "ASIN解決に失敗しました",
+            "detail": str(e)[:200],
+        })
+
+
+# ─────────────────────────────────────────
+# ご褒美候補検索 Provider API (新方式)
+# ─────────────────────────────────────────
+def _handle_reward_candidates(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/reward-candidates — Provider ベースでご褒美候補を検索
+
+    Body: {"query": "プリン", "max_price": 3000}
+    Returns: {"success": true, "candidates": [...]}
+    """
+    query = (body.get("query") or "").strip()
+    max_price = int(body.get("max_price", 3000))
+
+    try:
+        from services.reward_candidate_provider import search_reward_candidates
+        candidates = search_reward_candidates(
+            query=query,
+            max_price=max_price,
+            user_context={"user_id": user_id, "ddb": ddb},
+        )
+
+        # candidates は既に list[dict] で返ってくる
+        return _make_response(200, {
+            "success": True,
+            "candidates": candidates,
+            "count": len(candidates),
+        })
+    except Exception as e:
+        logger.error("reward_candidates_failed", error=str(e))
+        return _make_response(500, {
+            "success": False,
+            "error": "候補検索に失敗しました",
+            "detail": str(e)[:200],
+        })
+
+
+# ─────────────────────────────────────────
+# Nova Act 検索ジョブ API (新方式: 検索のみ、カート操作なし)
+# ─────────────────────────────────────────
+_NOVA_ACT_SEARCH_JOB_PK_PREFIX = "NOVA_ACT_SEARCH_JOB#"
+
+
+def _handle_nova_act_create_search_job(user_id: str, ddb: DynamoDBService, body: dict) -> dict:
+    """POST /api/nova-act/create-job — Amazon 検索ジョブを作成（Worker が非同期処理）
+
+    Body: {"query": "抹茶 プリン", "max_price": 3000}
+
+    フロー:
+      1. DynamoDB に queued ステータスの検索ジョブレコードを作成
+      2. job_id を返す
+      3. Nova Act Worker が queued ジョブを検出して Amazon 検索を実行
+      4. LIFF がポーリングで進捗確認
+    """
+    import uuid as _uuid
+
+    query = (body.get("query") or "").strip()
+    max_price = int(body.get("max_price", 5000))
+
+    if not query:
+        return _make_response(400, {"error": "query は必須です"})
+
+    job_id = str(_uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    pk = f"{_NOVA_ACT_SEARCH_JOB_PK_PREFIX}{job_id}"
+    sk = "META#"
+
+    job_data = {
+        "entityType": "NOVA_ACT_SEARCH_JOB",
+        "job_id": job_id,
+        "userId": f"USER#{user_id}",
+        "query": query,
+        "max_price": max_price,
+        "status": "queued",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    ddb.put_item(pk, sk, job_data)
+    logger.info("nova_act_search_job_created", job_id=job_id, user_id=user_id[:8], query=query)
+
+    return _make_response(200, {
+        "success": True,
+        "job_id": job_id,
+        "status": "queued",
+        "message": "検索ジョブを作成しました！ふれまーるちゃんがAmazonを検索するよ🔍",
+    })
+
+
+def _handle_nova_act_search_job_status(user_id: str, ddb: DynamoDBService, qs: dict) -> dict:
+    """GET /api/nova-act/job-status?job_id=xxx — 検索ジョブの進捗を返す"""
+    job_id = qs.get("job_id", "")
+    if not job_id:
+        return _make_response(400, {"error": "job_id パラメータが必要です"})
+
+    pk = f"{_NOVA_ACT_SEARCH_JOB_PK_PREFIX}{job_id}"
+    sk = "META#"
+
+    item = ddb.get_item(pk, sk)
+    if not item:
+        return _make_response(404, {"error": "ジョブが見つかりません"})
+
+    # 完了時は結果件数も返す
+    result = {
+        "job_id": item.get("job_id"),
+        "status": item.get("status", "unknown"),
+        "query": item.get("query"),
+        "created_at": item.get("created_at"),
+        "updated_at": item.get("updated_at"),
+    }
+
+    if item.get("status") == "completed":
+        result["candidate_count"] = item.get("candidate_count", 0)
+    elif item.get("status") == "failed":
+        result["error"] = item.get("error", "不明なエラー")
+
+    return _make_response(200, result)
+
+
+# ─────────────────────────────────────────
+# Amazon 連携ハンドラ
+# ─────────────────────────────────────────
+# ECS ログインサーバーの URL（環境変数 or ハードコード）
+_ECS_LOGIN_BASE_URL = os.environ.get("ECS_LOGIN_SERVER_URL", "")
+
+
+def _handle_amazon_status(user_id: str, ddb) -> dict:
+    """GET /api/amazon/status — Amazon 連携状態を確認（セッション有効期限含む）"""
+    try:
+        item = ddb.get_item(f"USER#{user_id}", "AMAZON_SESSION")
+        linked = item.get("amazon_linked", False) if item else False
+        linked_at = item.get("linked_at") if item else None
+        return _make_response(200, {
+            "amazon_linked": linked,
+            "linked_at": linked_at,
+            "updated_at": item.get("updated_at") if item else None,
+        })
+    except Exception as e:
+        logger.warning("amazon_status_check_failed", error=str(e))
+        return _make_response(200, {"amazon_linked": False})
+
+
+def _handle_amazon_save_cookies(user_id: str, ddb, body: dict) -> dict:
+    """POST /api/amazon/save-cookies — ユーザーのAmazon CookieをDynamoDBに保存
+
+    Body: {"cookies": {"session-id": "...", "ubid-acbjp": "...", ...}}
+
+    これにより、Nova Act がサーバーサイドからユーザーのAmazonセッションを使って
+    カート操作等を行えるようになる。
+    """
+    cookies = body.get("cookies")
+    if not cookies or not isinstance(cookies, dict):
+        return _make_response(400, {"error": "cookies フィールドが必要です"})
+
+    # 最低限必要なCookie
+    required_keys = ["session-id"]
+    if not any(k in cookies for k in required_keys):
+        return _make_response(400, {"error": "session-id Cookie が必要です"})
+
+    from services.nova_act_service import save_amazon_cookies
+    success = save_amazon_cookies(user_id, cookies, ddb)
+    if success:
+        return _make_response(200, {
+            "success": True,
+            "message": "Amazonセッションを保存しました。ふれまーるちゃんが自動操作できるようになりました🌿",
+        })
+    return _make_response(500, {"error": "保存に失敗しました"})
+
+
+def _handle_amazon_login_url(user_id: str, ddb) -> dict:
+    """GET /api/amazon/login-url — Amazon ログインページの URL を返す"""
+    base_url = _ECS_LOGIN_BASE_URL
+    if base_url:
+        # ECS デプロイ済みの場合
+        login_url = f"{base_url}/login/{user_id}"
+    else:
+        # ECS 未デプロイ → Lambda 提供のデモログインページ
+        login_url = f"/liff/amazon-login?uid={user_id}"
+    return _make_response(200, {"login_url": login_url})
+
+
+def _handle_amazon_confirm(user_id: str, ddb) -> dict:
+    """POST /api/amazon/confirm — Amazon 連携を確認済みにマーク"""
+    try:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        ddb.put_item(f"USER#{user_id}", "AMAZON_SESSION", {
+            "entityType": "AMAZON_SESSION",
+            "amazon_linked": True,
+            "updated_at": ts,
+            "linked_at": ts,
+        })
+        return _make_response(200, {"success": True, "amazon_linked": True})
+    except Exception as e:
+        logger.error("amazon_confirm_failed", error=str(e))
+        return _make_response(500, {"error": "連携確認に失敗しました"})
+
+
+def _serve_amazon_buy_html(event: dict) -> dict:
+    """ふれまーるちゃんが自動でカートに追加する中間ページ。
+
+    Amazon の公開 Add-to-Cart URL を使い、ユーザーのブラウザ(Cookie)で
+    自動的にカートに追加する。ユーザーはカートに入った状態のAmazonを見る。
+    """
+    import html as html_mod
+    qs = event.get("queryStringParameters") or {}
+    asin = qs.get("asin", "")
+    title = qs.get("title", "ご褒美アイテム")
+
+    # Sanitize
+    asin = html_mod.escape(asin)
+    title = html_mod.escape(title)
+
+    # Amazon カート追加URL（GETでカートに追加→カート確認ページ表示）
+    cart_add_url = f"https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1={asin}&Quantity.1=1"
+
+    page_html = f"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ふれまーるちゃんがカートに追加中...</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: linear-gradient(135deg, #f5f0e8 0%, #e8f5e9 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }}
+.container {{ text-align: center; padding: 32px; max-width: 380px; }}
+.mascot {{ font-size: 64px; animation: bounce 1s infinite; }}
+@keyframes bounce {{ 0%, 100% {{ transform: translateY(0); }} 50% {{ transform: translateY(-12px); }} }}
+.msg {{ font-size: 18px; color: #2d5016; font-weight: bold; margin: 16px 0 8px; }}
+.sub {{ font-size: 14px; color: #555; margin-bottom: 12px; }}
+.product {{ background: #fff; border-radius: 12px; padding: 12px 16px; margin: 12px 0; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }}
+.product-title {{ font-size: 13px; font-weight: bold; color: #333; }}
+.progress {{ margin: 16px 0; }}
+.progress-bar {{ height: 6px; background: #e0e0e0; border-radius: 3px; overflow: hidden; }}
+.progress-fill {{ height: 100%; background: linear-gradient(90deg, #7BAF6E, #ff9900); border-radius: 3px; animation: fill 1.2s ease-in-out forwards; }}
+@keyframes fill {{ from {{ width: 0%; }} to {{ width: 100%; }} }}
+.status {{ font-size: 13px; color: #2e7d32; margin-top: 8px; font-weight: bold; }}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="mascot">🌿🛒</div>
+  <div class="msg">ふれまーるちゃんがカートに入れてるよ～</div>
+  <div class="sub">{title}</div>
+  <div class="progress">
+    <div class="progress-bar"><div class="progress-fill"></div></div>
+    <div class="status" id="st">Amazonのカートに追加中...</div>
+  </div>
+</div>
+<script>
+// 1.2秒の演出後にAmazonカート追加URLへ直接遷移
+// ユーザーのブラウザCookieでログイン済みAmazonカートに自動追加される
+setTimeout(function() {{
+  document.getElementById('st').textContent = 'カートに追加完了！移動中...';
+  window.location.href = '{cart_add_url}';
+}}, 1200);
+</script>
+</body>
+</html>"""
+
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache, no-store",
+        },
+        "body": page_html,
+    }
+
+
+def _serve_amazon_login_html(event: dict) -> dict:
+    """Amazon 連携ページ — Cookie保存方式でNova Actがカート操作可能になる"""
+    qs = event.get("queryStringParameters") or {}
+    uid = qs.get("uid", "")
+    html = f"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon 連携 - ふれまーるちゃん</title>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }}
+.container {{ max-width: 420px; width: 92%; padding: 20px; }}
+.card {{ background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); margin-bottom: 16px; }}
+h1 {{ font-size: 18px; text-align: center; margin-bottom: 16px; color: #2d5016; }}
+.desc {{ font-size: 13px; color: #555; line-height: 1.6; margin-bottom: 16px; text-align: center; }}
+.btn {{ width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 15px; font-weight: bold; cursor: pointer; margin-bottom: 10px; }}
+.btn-amazon {{ background: #ff9900; color: #111; }}
+.btn-confirm {{ background: #2d5016; color: #fff; }}
+.btn-confirm:disabled {{ opacity: 0.5; cursor: not-allowed; }}
+.btn-back {{ background: #e8e8e8; color: #333; }}
+.success {{ text-align: center; }}
+.success .icon {{ font-size: 48px; margin-bottom: 12px; }}
+.success .msg {{ font-size: 16px; color: #155724; margin-bottom: 12px; }}
+.step {{ display: none; }}
+.step.active {{ display: block; }}
+.cookie-area {{ margin: 16px 0; }}
+.cookie-area textarea {{ width: 100%; height: 100px; border: 2px solid #ddd; border-radius: 8px; padding: 10px; font-size: 12px; font-family: monospace; resize: vertical; }}
+.cookie-area textarea:focus {{ border-color: #ff9900; outline: none; }}
+.cookie-help {{ font-size: 11px; color: #666; margin-top: 8px; line-height: 1.5; }}
+.status-msg {{ font-size: 13px; text-align: center; margin: 10px 0; padding: 8px; border-radius: 8px; }}
+.status-msg.error {{ background: #fde8e8; color: #c53030; }}
+.status-msg.success {{ background: #e8f5e9; color: #155724; }}
+.tab-btns {{ display: flex; gap: 8px; margin-bottom: 16px; }}
+.tab-btn {{ flex: 1; padding: 10px; text-align: center; border: 2px solid #ddd; border-radius: 8px; font-size: 13px; cursor: pointer; font-weight: bold; }}
+.tab-btn.active {{ border-color: #ff9900; background: #fff8e8; }}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="card">
+<h1>🛒 Amazon セッション連携</h1>
+
+<div id="step-login" class="step active">
+<p class="desc">Amazonのセッション情報を連携すると、<br>ふれまーるちゃんが<strong>サーバーサイドで自動的にカートに追加</strong>できるようになります🌿</p>
+
+<div class="tab-btns">
+  <div class="tab-btn active" onclick="showTab('easy')">かんたん連携</div>
+  <div class="tab-btn" onclick="showTab('manual')">手動Cookie入力</div>
+</div>
+
+<div id="tab-easy" class="tab-content">
+  <p style="font-size:13px;color:#333;margin-bottom:12px;">
+    <strong>手順:</strong><br>
+    1. 下のボタンでAmazonにログイン<br>
+    2. ログイン後このページに戻る<br>
+    3. 「セッション取得」ボタンを押す
+  </p>
+  <button class="btn btn-amazon" onclick="openAmazon()">🔗 Amazon.co.jp にログインする</button>
+  <button class="btn btn-confirm" id="btn-auto-capture" onclick="autoCaptureSession()">🔄 セッション取得（ログイン後に押す）</button>
+</div>
+
+<div id="tab-manual" class="tab-content" style="display:none;">
+  <p style="font-size:12px;color:#333;margin-bottom:8px;">
+    ブラウザのDevToolsからAmazon Cookieを貼り付けてください：<br>
+    <small>DevTools → Application → Cookies → amazon.co.jp → 全てコピー</small>
+  </p>
+  <div class="cookie-area">
+    <textarea id="cookie-input" placeholder="session-id=xxx-xxxxxxx-xxxxxxx; ubid-acbjp=xxx-xxxxxxx-xxxxxxx; ..."></textarea>
+  </div>
+  <button class="btn btn-confirm" onclick="saveCookiesManual()">💾 Cookie を保存</button>
+  <p class="cookie-help">
+    必要なCookie: <code>session-id</code>, <code>ubid-acbjp</code>, <code>session-id-time</code><br>
+    これらがあればふれまーるちゃんがカート操作できます。
+  </p>
+</div>
+
+<div id="status" class="status-msg" style="display:none;"></div>
+
+<button class="btn btn-back" onclick="goBack()" style="margin-top:12px;">← 戻る</button>
+</div>
+
+<div id="step-success" class="step">
+<div class="success">
+  <div class="icon">✅</div>
+  <div class="msg">セッション連携完了！</div>
+  <p class="desc">ふれまーるちゃんがサーバーサイドで<br>自動カート追加できるようになりました🌿</p>
+  <p style="font-size:12px;color:#666;margin-bottom:16px;">ほしいものリストの商品が自動でカートに入ります</p>
+  <button class="btn btn-back" onclick="goBack()">LIFFに戻る</button>
+</div>
+</div>
+
+</div>
+</div>
+<script>
+const USER_ID = "{uid}";
+const API_BASE = location.origin;
+
+function showTab(tab) {{
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+  if (tab === 'easy') {{
+    document.querySelectorAll('.tab-btn')[0].classList.add('active');
+    document.getElementById('tab-easy').style.display = 'block';
+  }} else {{
+    document.querySelectorAll('.tab-btn')[1].classList.add('active');
+    document.getElementById('tab-manual').style.display = 'block';
+  }}
+}}
+
+function showStatus(msg, type) {{
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status-msg ' + type;
+  el.style.display = 'block';
+}}
+
+function openAmazon() {{
+  window.open('https://www.amazon.co.jp/', '_blank');
+}}
+
+async function autoCaptureSession() {{
+  // ブラウザから直接Cookieは取れないため、プロキシ経由で確認を試みる
+  // 実際にはユーザーのブラウザでAmazonにログイン済みなら、
+  // 中間ページ経由でCookieを取得する方法を使う
+  showStatus('セッション確認中...', '');
+  try {{
+    // confirmエンドポイントを呼んでセッション登録
+    const headers = {{}};
+    const cachedUid = localStorage.getItem('ars_user_id');
+    if (cachedUid) headers['X-ARS-User-Id'] = cachedUid;
+    headers['Content-Type'] = 'application/json';
+
+    const res = await fetch('/api/amazon/confirm', {{
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({{ amazon_linked: true }})
+    }});
+    const data = await res.json();
+    if (data.success) {{
+      showStatus('連携登録完了！手動Cookie入力でセッションを保存してください。', 'success');
+      // 自動でmanualタブに切り替え
+      showTab('manual');
+    }}
+  }} catch(e) {{
+    showStatus('エラー: ' + e.message, 'error');
+  }}
+}}
+
+async function saveCookiesManual() {{
+  const raw = document.getElementById('cookie-input').value.trim();
+  if (!raw) {{
+    showStatus('Cookie文字列を入力してください', 'error');
+    return;
+  }}
+
+  // Cookie文字列をパース: "key=value; key2=value2" 形式
+  const cookies = {{}};
+  raw.split(/[;\\n]/).forEach(function(pair) {{
+    pair = pair.trim();
+    if (!pair) return;
+    var eq = pair.indexOf('=');
+    if (eq > 0) {{
+      var key = pair.substring(0, eq).trim();
+      var val = pair.substring(eq + 1).trim();
+      cookies[key] = val;
+    }}
+  }});
+
+  if (!cookies['session-id']) {{
+    showStatus('session-id Cookie が見つかりません。正しい形式で入力してください。', 'error');
+    return;
+  }}
+
+  showStatus('保存中...', '');
+  try {{
+    const headers = {{}};
+    const cachedUid = localStorage.getItem('ars_user_id');
+    if (cachedUid) headers['X-ARS-User-Id'] = cachedUid;
+    headers['Content-Type'] = 'application/json';
+
+    const res = await fetch('/api/amazon/save-cookies', {{
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({{ cookies: cookies }})
+    }});
+    const data = await res.json();
+    if (data.success) {{
+      document.getElementById('step-login').classList.remove('active');
+      document.getElementById('step-success').classList.add('active');
+    }} else {{
+      showStatus(data.error || '保存に失敗しました', 'error');
+    }}
+  }} catch(e) {{
+    showStatus('エラー: ' + e.message, 'error');
+  }}
+}}
+
+function goBack() {{
+  if (window.opener) {{ window.close(); }}
+  else {{ location.href = '/liff'; }}
+}}
+</script>
+</body>
+</html>"""
+    return {
+        "statusCode": 200,
+        "headers": {
+            "Content-Type": "text/html; charset=utf-8",
+            "Cache-Control": "no-cache, no-store",
+        },
+        "body": html,
+    }
+
+
+def _handle_amazon_add_to_cart(user_id: str, ddb, body: dict) -> dict:
+    """POST /api/amazon/add-to-cart — ほしいものリストから商品を選んでカートURL生成"""
+    import random
+    from services.amazon_cart_service import (
+        generate_add_to_cart_url, generate_add_and_checkout_url, extract_asin,
+    )
+    from services.wishlist_service import get_active_items_for_recommendation
+
+    max_price = int(body.get("max_price", 5000))
+
+    # ユーザーのほしいものリストから商品を取得
+    items = get_active_items_for_recommendation(user_id, ddb, max_price=max_price)
+
+    if not items:
+        return _make_response(404, {
+            "error": "ほしいものリストに商品がありません。先にほしいものリストを登録してね🌿",
+        })
+
+    # ランダムに1つ選択
+    item = random.choice(items)
+
+    # ASIN を抽出
+    product_url = item.get("product_url", "")
+    asin = extract_asin(product_url)
+
+    product = {
+        "title": item.get("product_title", "商品"),
+        "price": item.get("price"),
+        "product_url": product_url,
+        "image_url": item.get("product_image_url"),
+        "asin": asin,
+    }
+
+    if asin:
+        product["add_to_cart_url"] = generate_add_to_cart_url(asin)
+        product["checkout_url"] = generate_add_and_checkout_url(asin)
+    else:
+        # ASIN 抽出不可 → 商品ページ直接リンク
+        product["add_to_cart_url"] = product_url
+        product["checkout_url"] = product_url
+
+    # DynamoDB に記録
+    from datetime import datetime, timezone
+    ts = datetime.now(timezone.utc).isoformat()
+    ddb.put_item(f"USER#{user_id}", "AMAZON_CART_LAST", {
+        "asin": asin or "",
+        "title": product["title"],
+        "price": product.get("price"),
+        "cart_url": product["add_to_cart_url"],
+        "checkout_url": product["checkout_url"],
+        "product_url": product_url,
+        "created_at": ts,
+    })
+
+    return _make_response(200, {
+        "success": True,
+        "product": product,
+        "message": f"「{product['title']}」を見つけました！",
+    })
+
+
+def _handle_amazon_purchase(user_id: str, ddb, body: dict) -> dict:
+    """POST /api/amazon/purchase — Amazon で購入（チェックアウトページへ誘導）"""
+    from services.amazon_cart_service import (
+        generate_add_and_checkout_url, generate_checkout_url, extract_asin,
+    )
+
+    asin = body.get("asin", "")
+    product_url = body.get("product_url", "")
+
+    # ASIN or URL から購入URL生成
+    if not asin and product_url:
+        asin = extract_asin(product_url)
+
+    if not asin:
+        # DynamoDB から直前のカート追加情報を取得
+        last_cart = ddb.get_item(pk=f"USER#{user_id}", sk="AMAZON_CART_LAST")
+        if last_cart:
+            asin = last_cart.get("asin", "")
+
+    if asin:
+        checkout_url = generate_add_and_checkout_url(asin)
+        # 購入記録
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        ddb.put_item(f"USER#{user_id}", "AMAZON_PURCHASE_LOG#" + ts, {
+            "asin": asin,
+            "action": "PURCHASE_INITIATED",
+            "created_at": ts,
+        })
+        return _make_response(200, {
+            "success": True,
+            "asin": asin,
+            "checkout_url": checkout_url,
+            "cart_view_url": generate_checkout_url(),
+            "message": "購入ページを開きます。「注文を確定する」をタップして購入を完了してください。",
+        })
+
+    return _make_response(400, {"error": "購入する商品が指定されていません。先にカートに追加してください。"})
+
+
+def _handle_amazon_unlink(user_id: str, ddb) -> dict:
+    """POST /api/amazon/unlink — Amazon 連携を解除"""
+    try:
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        ddb.put_item(f"USER#{user_id}", "AMAZON_SESSION", {
+            "entityType": "AMAZON_SESSION",
+            "amazon_linked": False,
+            "updated_at": ts,
+            "unlinked_at": ts,
+        })
+        return _make_response(200, {"success": True})
+    except Exception as e:
+        logger.error("amazon_unlink_failed", error=str(e))
+        return _make_response(500, {"error": "解除に失敗しました"})
+
+
+def _handle_push_trigger(user_id: str, ddb) -> dict:
+    """POST /api/push/trigger — 手動で定期Push通知を自分に送る（テスト用）"""
+    import random
+    from services.notification_service import create_notification
+
+    messages = [
+        {"title": "今日もお疲れさまっ🌿", "body": "頑張った自分にちょっとしたご褒美、どうかなぁ？ ふれまーるちゃんが探しとくね～"},
+        {"title": "ご褒美タイムだよ～🍵", "body": "毎日えらいっ！今日は何か自分に優しくしてあげよ？"},
+        {"title": "のんびりしよっ🛁", "body": "今日も1日おつかれさま。ちょっとだけ自分を甘やかす時間にしない？"},
+    ]
+    msg = random.choice(messages)
+
+    try:
+        result = create_notification(
+            user_id=user_id,
+            ddb=ddb,
+            notification_type="SCHEDULED_REWARD_REMIND",
+            title=msg["title"],
+            message_text=msg["body"],
+        )
+        return _make_response(200, {
+            "success": True,
+            "notification_id": result.get("notification_id"),
+            "title": msg["title"],
+            "message": msg["body"],
+        })
+    except Exception as e:
+        logger.error("push_trigger_failed", error=str(e))
+        return _make_response(500, {"error": f"Push送信失敗: {str(e)[:100]}"})

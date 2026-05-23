@@ -4,6 +4,160 @@
 
 ---
 
+## [INCEPTION] Unit 8: PWAダッシュボード強化 — Requirements Analysis 開始
+**Timestamp**: 2026-05-23T19:00:00+09:00
+**User Input (raw)**:
+```
+方針を変更する
+AI-DLCのunit-8機能拡張として仕様書駆動で作成して
+PWAサイトを強化して、専用ダッシュボードとしよう
+LLMモデルは性能を優先して高価なものも利用することとする
+PWAサイトのトップは音声チャット画面、ここでふれまーるちゃんと自由に会話ができる
+将来拡張として3Dモデルの利用を検討
+会話の内容からライフログ機能と簡易的なダッシュボードと連携する
+家計簿ダッシュボードは、余剰金の支出監理にする。この機能は現状の機能を強化する形でおいておく
+ライフログは普段どこ行ったかとかどれくらい運動したかやどのようなことをやったかをふれまーるちゃんとの会話の内容から積み上げていく。1日の最後に日記調でサマリを報告する。
+ライフログ機能及び家計簿の余剰金の状況から、本人のストレス度などを判定し会話の流れで自然にお金を使ってもいいよという風にサービスや商品に誘導する。
+```
+
+### Intent Analysis
+- **Request Type**: New Feature (Unit 8 機能拡張)
+- **Request Clarity**: Standard（主要方針は明確だが詳細仕様の確認が必要）
+- **Scope**: System-wide（PWAフロントエンド + バックエンド + LLM連携 + 新データモデル）
+- **Complexity**: Complex（音声チャット + ライフログ + ストレス判定 + 自然な商品誘導）
+- **Requirements Depth**: Standard
+
+### Key Feature Areas Identified
+1. PWAトップ = 音声チャット（ふれまーるちゃん）
+2. 高性能LLMモデル利用（コスト制約緩和）
+3. ライフログ機能（会話から自動抽出）
+4. 日記サマリ（1日の最後に報告）
+5. 余剰金支出管理ダッシュボード（既存強化）
+6. ストレス判定 → 商品/サービス誘導
+7. 将来拡張: 3Dモデル
+
+### Next Step
+- 要件確認質問ファイル生成 → ユーザー回答待ち
+
+### Requirements Analysis 完了
+**Timestamp**: 2026-05-23T19:30:00+09:00
+**Status**: ユーザー回答受領 → 要件定義書生成完了
+
+**回答サマリ:**
+| Q# | トピック | 回答 |
+|----|---------|------|
+| Q1 | 音声チャット方式 | X: OpenAI Realtime API（分析は別LLMで非同期） |
+| Q2 | LLMモデル選定 | E: 用途別使い分け（Realtime: OpenAI / 分析: Claude Sonnet） |
+| Q3 | 音声UX | B+テキスト: VADメイン + テキスト切り替え |
+| Q4 | ライフログ粒度 | C（詳細だが自然な会話から読み取れる範囲のみ） |
+| Q5 | 日記サマリ配信 | D+PWA Push: ふれまーるちゃん読み上げ + ダッシュボード + Push |
+| Q6 | ストレス判定 | C: 会話+余剰金+ライフログ複合判定 |
+| Q7 | ご褒美誘導 | D: 段階的アプローチ |
+| Q8 | LINE Bot関係 | X: LINE Bot廃止、PWAに統合 |
+| Q9 | オフライン対応 | A: オンライン前提 |
+| Q10 | 3Dモデル準備 | B: アバターエリア予約、初期は静止画 |
+| Q11 | 認証 | X: Cognito に寄せる。LINE認証廃止方向 |
+
+**成果物**: `aidlc-docs/inception/requirements/u8-requirements.md`
+
+---
+
+## [INCEPTION] Unit 8 — Requirements Analysis 承認
+**Timestamp**: 2026-05-23T19:45:00+09:00
+**User Response**: "承認します"（補正3件適用後に承認）
+**Status**: Approved
+**補正内容**:
+1. WebSocket → WebRTC + ephemeral key パターンに変更
+2. 広告的文言排除（「おすすめ商品」→「今日の回復案」、カート誘導を主導線から外す）
+3. DynamoDB SK統一命名（CONVERSATION_TURN#, LIFE_LOG#, DAILY_FUREMARU_SUMMARY# 等）
+
+---
+
+## [INCEPTION] Unit 8 — Workflow Planning 完了
+**Timestamp**: 2026-05-23T19:50:00+09:00
+**Status**: Plan Generated
+
+**実行フェーズ決定:**
+| フェーズ | 決定 | 理由 |
+|---------|------|------|
+| User Stories | SKIP | 要件定義書で仕様明確。ハッカソンスピード優先 |
+| Application Design | EXECUTE | 新規コンポーネント多数。依存関係定義が必要 |
+| Units Generation | EXECUTE | 9機能のデプロイ単位分割が必要 |
+| Functional Design | EXECUTE (per-unit) | API仕様・シーケンス詳細化 |
+| NFR Requirements | SKIP | 要件定義書で定義済み |
+| NFR Design | SKIP | 既存パターン踏襲 |
+| Infrastructure Design | SKIP | SAM差分のみ |
+| Code Generation | EXECUTE | 実装必須 |
+| Build and Test | EXECUTE | テスト必須 |
+
+**成果物**: `aidlc-docs/inception/plans/u8-workflow-plan.md`
+
+## [INCEPTION] Unit 8 — Workflow Planning 承認
+**Timestamp**: 2026-05-23T19:55:00+09:00
+**User Response**: "承認します"
+**Status**: Approved
+**Next Stage**: Application Design
+
+---
+
+## [INCEPTION] Unit 8 — Application Design 承認
+**Timestamp**: 2026-05-23T20:20:00+09:00
+**User Response**: "承認します"（補正4件適用後に承認）
+**Status**: Approved
+**補正内容**:
+1. VOICE_SESSION#{sessionId} エンティティ追加
+2. ANALYSIS_JOB#{jobId} エンティティ追加
+3. EXPENSE# 書込元修正（SyncApi + Analysis）
+4. RecoveryProvider LLM利用範囲明確化
+**Next Stage**: Units Generation
+
+---
+
+## [INCEPTION] Unit 8 — Units Generation 完了
+**Timestamp**: 2026-05-23T20:30:00+09:00
+**Status**: Units Generated
+
+**設計判断回答:**
+| Q# | トピック | 回答 |
+|----|---------|------|
+| Q1 | デプロイスタック | B: 新SAMスタック `ars-u8-pwa`（DynamoDBは既存ArsTable参照） |
+| Q2 | 実装優先度 | 提示順通り（U8-A→B→C→D→E） |
+| Q3 | 既存コード共存 | A: 完全分離。liff_api.py変更なし |
+
+**Unit分割:**
+| Unit | 名称 | 規模 |
+|------|------|------|
+| U8-A | PWA基盤 + Cognito認証 | Medium |
+| U8-B | 音声チャット | Large |
+| U8-C | ライフログ + 日記サマリ | Large |
+| U8-D | ストレス判定 + 回復提案 | Medium |
+| U8-E | ダッシュボード統合 | Medium |
+
+**成果物:**
+- `aidlc-docs/inception/application-design/u8-unit-of-work.md`
+- `aidlc-docs/inception/application-design/u8-unit-of-work-dependency.md`
+- `aidlc-docs/inception/application-design/u8-unit-of-work-story-map.md`
+
+---
+
+**設計判断回答:**
+| Q# | トピック | 回答 |
+|----|---------|------|
+| Q1 | フロントエンド | C: Vite + React SPA（Next.js不要） |
+| Q2 | Lambda構成 | C: ハイブリッド（同期API + 非同期分析分離） |
+| Q3 | Transcript保存 | D: ターンごと + 切断時ローカルキャッシュ再送 |
+| Q4 | 分析トリガー | B: セッション終了イベント + EventBridge補助 |
+| Q5 | PWAホスティング | A: S3 + CloudFront |
+
+**成果物:**
+- `aidlc-docs/inception/application-design/u8-components.md`
+- `aidlc-docs/inception/application-design/u8-component-methods.md`
+- `aidlc-docs/inception/application-design/u8-services.md`
+- `aidlc-docs/inception/application-design/u8-component-dependency.md`
+- `aidlc-docs/inception/application-design/u8-application-design.md`
+
+---
+
 ## [BUG FIX] Webhook 応答欠落 + LIFF URL オンボーディング誘導
 **Timestamp**: 2026-05-17T14:00:00Z
 **User Input**: "返信しても応答が返ってこないことが多々ある" / "オンボーディングの時はリワードちゃんからオンボーディング用URLへの誘導があるといいかも"

@@ -26,7 +26,7 @@ from handlers.character_reply import _infer_emotion
 from models.schemas import SK_PENDING_CLARIFICATION, SK_PENDING_EXPENSE
 
 from services.talk_starter import generate_talk_starter
-from services.recommend_flow import start_recommend, handle_recommend_reply
+from services.recommend_flow import start_recommend, handle_recommend_reply, try_handle_last_suggestion_purchase
 from services.quick_expense import show_quick_expense_options, handle_quick_expense_reply
 from services.monthly_report import generate_monthly_report
 from services.streak import update_streak
@@ -258,6 +258,20 @@ def _handle_text(user_id, text, reply_token):
             logger.warning("post_reply_ops_failed", error=str(e))
         return
 
+    # LAST_SUGGESTION チェック — 直前のおすすめ提案 + 「買った」テキストで支出記録に直行
+    try:
+        last_sug_messages = try_handle_last_suggestion_purchase(user_id, text, ddb)
+    except Exception as e:
+        logger.warning("last_suggestion_check_failed", error=str(e))
+        last_sug_messages = None
+    if last_sug_messages:
+        get_line_service().reply_message(reply_token, last_sug_messages)
+        try:
+            _update_daily_count(user_id, today, ddb)
+        except Exception as e:
+            logger.warning("post_reply_ops_failed", error=str(e))
+        return
+
     # Intent 分類（1回呼び出し）
     intent_result = classify_intent(text)
     intent = intent_result.get("intent", "CHAT")
@@ -388,17 +402,11 @@ def _handle_text(user_id, text, reply_token):
                 logger.warning("post_reply_ops_failed", error=str(e))
             return
 
-    # REWARD intent → ご褒美提案（スライス 5-2〜5-6）
+    # REWARD intent → Nova Actカート体験（ご褒美提案 + カートに入れたよ通知）
     if intent == "REWARD" and not in_onboarding:
         emotion_info = _infer_emotion(text)
-        reply_text = reward_proposal_handler.propose_reward(
-            user_id=user_id,
-            text=text,
-            ddb=ddb,
-            tone=tone,
-            emotion=emotion_info["emotion"],
-            fatigue_level=emotion_info["fatigue_level"],
-        )
+        # ほしいものリストから商品を選んでNova Act体験として通知
+        reply_text = _nova_act_reward_reply(user_id, text, ddb, tone, emotion_info)
         get_line_service().reply_message(
             reply_token, [{"type": "text", "text": reply_text}]
         )
@@ -521,6 +529,56 @@ def _save_expense_items(user_id: str, items: list[dict], ddb: DynamoDBService) -
                 reward_budget=reward_budget,
                 updated_at=ts,
             )
+
+
+def _nova_act_reward_reply(user_id: str, text: str, ddb, tone: str, emotion_info: dict) -> str:
+    """Nova Act体験: ほしいものリストから商品を選んで「カートに入れたよ」と通知する"""
+    import random
+    try:
+        from services.wishlist_service import get_active_items_for_recommendation
+        items = get_active_items_for_recommendation(user_id, ddb, max_price=5000)
+    except Exception as e:
+        logger.warning("nova_act_wishlist_failed", error=str(e))
+        items = []
+
+    if items:
+        # ほしい度が高いものを優先
+        high_desire = [it for it in items if it.get("desire_level", 0) >= 3]
+        selected = random.choice(high_desire) if high_desire else random.choice(items)
+        title = selected.get("title", "ご褒美アイテム")
+        price = selected.get("price")
+
+        # Nova Actカートに入れた記録を保存
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            ts = _dt.now(_tz.utc).isoformat()
+            ddb.put_item(f"USER#{user_id}", f"NOVA_ACT_CART#{ts}", {
+                "entityType": "NOVA_ACT_CART",
+                "title": title,
+                "price": price,
+                "status": "proposed",
+                "created_at": ts,
+            })
+        except Exception:
+            pass
+
+        price_str = f"（¥{int(price):,}）" if price else ""
+        replies = [
+            f"はいはい～🌿 あなたのほしいものリストから『{title}』{price_str}をカートに入れたよ！\nLIFFの設定ページで確認して、購入を許可してね💕",
+            f"おっけ～🌿 『{title}』{price_str}、カートに入れといたよ！\nLIFFで「購入を許可する」を押してね～💕",
+            f"うんうん、頑張ったもんねぇ🌿\n『{title}』{price_str}をカートに入れたよ！LIFFから購入許可してね～✨",
+        ]
+        return random.choice(replies)
+    else:
+        # ほしいものリスト未登録 → 従来のご褒美提案にフォールバック
+        return reward_proposal_handler.propose_reward(
+            user_id=user_id,
+            text=text,
+            ddb=ddb,
+            tone=tone,
+            emotion=emotion_info["emotion"],
+            fatigue_level=emotion_info["fatigue_level"],
+        )
 
 
 def _save_chat_log(user_id, user_text, reply_text, intent, ddb):

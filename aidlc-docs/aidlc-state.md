@@ -5,7 +5,7 @@
 - **プロジェクト種別**: グリーンフィールド（新規開発）
 - **開始日**: 2026-05-07
 - **コンセプト変更日**: 2026-05-15
-- **現在のステージ**: CONSTRUCTION フェーズ — Unit 6: Push通知（Code Generation 完了）
+- **現在のステージ**: INCEPTION フェーズ — Unit 8: PWAダッシュボード強化（Units Generation 完了）
 
 ## コンセプト変更サマリー
 - **変更根拠**: `docs/コンセプト変更定義書.md`
@@ -107,3 +107,26 @@
 
 ### 🟡 OPERATIONS フェーズ
 - [ ] 運用（プレースホルダー）
+
+### 🔵 INCEPTION フェーズ（Unit 8）
+- [x] Requirements Analysis ✅ 2026-05-23
+- [x] Workflow Planning ✅ 2026-05-23
+- [x] Application Design ✅ 2026-05-23
+- [x] Units Generation ✅ 2026-05-23
+
+### 🟢 CONSTRUCTION フェーズ（Unit 8）
+- [ ] U8-A: PWA基盤 + Cognito認証
+  - [ ] Functional Design
+  - [ ] Code Generation
+- [ ] U8-B: 音声チャット
+  - [ ] Functional Design
+  - [ ] Code Generation
+- [ ] U8-C: ライフログ + 日記サマリ
+  - [ ] Functional Design
+  - [ ] Code Generation
+- [ ] U8-D: ストレス判定 + 回復提案
+  - [ ] Functional Design
+  - [ ] Code Generation
+- [ ] U8-E: ダッシュボード統合
+  - [ ] Functional Design
+  - [ ] Code Generation

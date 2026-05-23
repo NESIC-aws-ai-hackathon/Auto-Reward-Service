@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ふれまーるちゃん</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4a9c5e">
 <style>
 :root {
   --primary: #4a9c5e;
@@ -606,7 +608,99 @@ body {
       <button class="btn btn-primary" id="btn-save-settings">保存する</button>
     </div>
     <div class="card">
-      <div class="card-title">📅 Googleカレンダー連携</div>
+      <div class="card-title">� 通知設定</div>
+      <div class="form-group">
+        <label class="form-label">通知クールダウン（時間）</label>
+        <select class="form-select" id="set-push-cooldown">
+          <option value="0">制限なし</option>
+          <option value="1">1時間</option>
+          <option value="2">2時間</option>
+          <option value="4">4時間</option>
+          <option value="8">8時間</option>
+        </select>
+        <small style="color:#888;font-size:11px;">PWA通知の最低間隔。短いほど通知が多くなります。</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">通知感度（閾値）</label>
+        <select class="form-select" id="set-push-threshold">
+          <option value="20">高め（よく通知）</option>
+          <option value="40">普通</option>
+          <option value="60">低め（控えめ）</option>
+          <option value="80">最低限</option>
+        </select>
+        <small style="color:#888;font-size:11px;">ストレススコアがこの値以上で寄り道提案します。</small>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔔 PWA Web Push通知</div>
+      <div id="webpush-status" style="margin-bottom:8px;font-size:13px;color:#555;">確認中...</div>
+      <button class="btn btn-primary" id="btn-webpush-subscribe" style="margin-right:6px;">通知をONにする</button>
+      <button class="btn btn-secondary" id="btn-webpush-test" style="margin-right:6px;">テスト通知</button>
+      <button class="btn btn-secondary" id="btn-webpush-unsubscribe">通知をOFFにする</button>
+      <button class="btn btn-primary" id="btn-push-trigger" style="margin-top:8px;">🌿 ご褒美通知を送る</button>
+      <div id="push-trigger-result" style="margin-top:6px;font-size:12px;color:#555;"></div>
+      <small style="display:block;color:#888;font-size:11px;margin-top:8px;">
+        ブラウザ通知を許可すると、ふれまーるちゃんからのおしらせがプッシュ通知で届きます。
+        「ご褒美通知を送る」で定期通知と同じPushを即座に受信できます。
+      </small>
+    </div>
+    <div class="card">
+      <div class="card-title">🤖 Nova Act 動作確認</div>
+      <div class="form-group">
+        <label class="form-label">テストクエリ</label>
+        <input type="text" class="form-input" id="nova-act-query" placeholder="抹茶 プリン" value="抹茶 プリン">
+      </div>
+      <button class="btn btn-primary" id="btn-nova-act-smoke">Nova Act 候補取得テスト</button>
+      <div id="nova-act-result" style="margin-top:12px;font-size:12px;color:#555;"></div>
+      <small style="display:block;color:#888;font-size:11px;margin-top:8px;">
+        Nova Act → 外部API → 静的候補の順にフォールバックします。結果のsourceでどの層がヒットしたか確認できます。
+      </small>
+    </div>
+    <div class="card">
+      <div class="card-title">🛒 Amazon アカウント連携</div>
+      <div id="amazon-link-status" style="margin-bottom:10px;font-size:13px;color:#555;">確認中...</div>
+      <button class="btn btn-primary" id="btn-amazon-link" style="margin-bottom:8px;">Amazon にログインする</button>
+      <button class="btn btn-secondary" id="btn-amazon-unlink" style="display:none;">連携を解除する</button>
+      <small style="display:block;color:#888;font-size:11px;margin-top:8px;">
+        Amazonアカウントを連携すると、ふれまーるちゃんが自動でカートに商品を追加できるようになります。
+        パスワードはサーバーに保存されません。
+      </small>
+    </div>
+    <div class="card">
+      <div class="card-title">🛍️ Amazon ご褒美を買う</div>
+      <div id="amazon-cart-section">
+        <div class="form-group">
+          <label class="form-label">カテゴリ</label>
+          <select class="form-input" id="amazon-category">
+            <option value="おまかせ">🤷 おまかせ</option>
+            <option value="リラックス">💆 リラックス</option>
+            <option value="スイーツ">🍫 スイーツ</option>
+            <option value="エンタメ">🎮 エンタメ</option>
+            <option value="ギフト">🎁 ギフト</option>
+            <option value="ビューティー">💄 ビューティー</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">予算上限</label>
+          <select class="form-input" id="amazon-budget">
+            <option value="1000">〜1,000円</option>
+            <option value="3000" selected>〜3,000円</option>
+            <option value="5000">〜5,000円</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="btn-amazon-find" style="margin-bottom:8px;">🔍 ご褒美を探す</button>
+        <div id="amazon-product-result" style="display:none;margin-top:12px;padding:12px;background:#f8f8f0;border-radius:10px;">
+          <div id="amazon-product-title" style="font-weight:bold;font-size:14px;margin-bottom:4px;"></div>
+          <div id="amazon-product-price" style="color:#7BAF6E;font-weight:bold;font-size:16px;margin-bottom:8px;"></div>
+          <button class="btn btn-primary" id="btn-amazon-cart" style="background:#ff9900;margin-bottom:6px;">🛒 Amazonカートに追加</button>
+          <button class="btn btn-primary" id="btn-amazon-buy" style="background:#ff6600;">💳 今すぐ購入する</button>
+          <button class="btn btn-secondary" id="btn-amazon-another" style="margin-top:6px;">🔄 別の商品を探す</button>
+        </div>
+        <div id="amazon-cart-status" style="margin-top:8px;font-size:13px;color:#555;"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">�📅 Googleカレンダー連携</div>
       <div class="calendar-status" id="calendar-section">
         <div class="loading">確認中...</div>
       </div>
@@ -705,6 +799,7 @@ body {
 
   const LIFF_ID = '2010106872-9t0gN1D6';
   let idToken = null;
+  let cachedUserId = localStorage.getItem('ars_user_id') || null;
   let currentPage = 'home';
   let currentExpenseMonth = null;
   let editTargetSk = null;
@@ -731,13 +826,48 @@ body {
 
   async function api(path, opts = {}) {
     const url = '/api' + path;
-    const headers = { 'Authorization': 'Bearer ' + idToken };
+    // トークンの最新取得を試みる
+    if (liff && liff.isLoggedIn && liff.isLoggedIn()) {
+      try {
+        const fresh = liff.getAccessToken();
+        if (fresh) idToken = fresh;
+      } catch (e) { /* PWA mode: SDK may throw */ }
+    }
+    const headers = {};
+    if (idToken) {
+      headers['Authorization'] = 'Bearer ' + idToken;
+    } else if (cachedUserId) {
+      // LIFF トークン無し → キャッシュ userId で認証
+      headers['X-ARS-User-Id'] = cachedUserId;
+    }
     if (opts.body) headers['Content-Type'] = 'application/json';
     const res = await fetch(url, {
       method: opts.method || 'GET',
       headers: headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
+    if (res.status === 401 && idToken && cachedUserId) {
+      // トークン認証失敗 → キャッシュ userId にフォールバックしてリトライ
+      console.warn('Token auth failed, retrying with cached userId');
+      idToken = null;
+      const retryHeaders = { 'X-ARS-User-Id': cachedUserId };
+      if (opts.body) retryHeaders['Content-Type'] = 'application/json';
+      const retry = await fetch(url, {
+        method: opts.method || 'GET',
+        headers: retryHeaders,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      });
+      if (retry.ok) return retry.json();
+    }
+    if (res.status === 401) {
+      // 完全に認証失敗 → ループせず静的表示
+      console.error('Auth failed completely');
+      throw new Error('認証に失敗しました。LINEアプリからLIFFを開き直してください。');
+    }
+    if (res.status === 503) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'サーバーが一時的に利用できません');
+    }
     return res.json();
   }
 
@@ -1196,6 +1326,11 @@ body {
     document.getElementById('set-tone').value = data.tone || 'friendly';
     document.getElementById('set-budget').value = data.reward_budget_monthly || '';
     document.getElementById('set-carryover').value = Math.round((data.carryover_rate || 0.5) * 100);
+    document.getElementById('set-push-cooldown').value = data.push_cooldown_hours != null ? data.push_cooldown_hours : '1';
+    document.getElementById('set-push-threshold').value = data.push_suggest_threshold != null ? data.push_suggest_threshold : '40';
+
+    // Web Push 状態表示
+    try { await loadWebPushStatus(); } catch (e) { console.warn('webpush status load failed', e); }
 
     const calData = await api('/calendar/status');
     const calEl = document.getElementById('calendar-section');
@@ -1284,6 +1419,8 @@ body {
     if (budget) body.reward_budget_monthly = parseInt(budget, 10);
     const co = document.getElementById('set-carryover').value;
     if (co !== '') body.carryover_rate = parseInt(co, 10) / 100;
+    body.push_cooldown_hours = parseInt(document.getElementById('set-push-cooldown').value, 10);
+    body.push_suggest_threshold = parseInt(document.getElementById('set-push-threshold').value, 10);
 
     const result = await api('/settings', { method: 'PUT', body: body });
     if (result.updated) {
@@ -1295,19 +1432,55 @@ body {
 
   // LIFF 初期化
   async function initLiff() {
+    const isPwa = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
     try {
       await liff.init({ liffId: LIFF_ID });
       if (!liff.isLoggedIn()) {
+        if (isPwa && cachedUserId) {
+          // PWA モードでキャッシュあり → LIFF 再ログインせずキャッシュで続行
+          console.log('PWA mode: using cached userId');
+          document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+          loadPage('home');
+          return;
+        }
         liff.login();
         return;
       }
-      idToken = liff.getIDToken();
-      const profile = await liff.getProfile();
-      document.getElementById('header').textContent = '\ud83c\udf3f ' + (profile.displayName || '\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093');
+      idToken = liff.getAccessToken();
+      if (!idToken && cachedUserId) {
+        // トークン取得失敗だがキャッシュあり → 続行
+        console.log('No access token, using cached userId');
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+        loadPage('home');
+        return;
+      }
+      if (!idToken) {
+        liff.login();
+        return;
+      }
+      try {
+        const profile = await liff.getProfile();
+        document.getElementById('header').textContent = '\ud83c\udf3f ' + (profile.displayName || '\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093');
+        // userId をキャッシュ（次回 PWA 起動時に使用）
+        if (profile.userId) {
+          cachedUserId = profile.userId;
+          localStorage.setItem('ars_user_id', profile.userId);
+        }
+      } catch (e) {
+        console.warn('getProfile failed, using cached', e);
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+      }
       loadPage('home');
     } catch (e) {
       console.error('LIFF init error:', e);
-      document.querySelector('.content').innerHTML = '<div class="error-msg">\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002LINE\u30a2\u30d7\u30ea\u304b\u3089\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002</div>';
+      if (cachedUserId) {
+        // LIFF 初期化失敗だがキャッシュあり → 続行
+        console.log('LIFF init failed, using cached userId');
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+        loadPage('home');
+      } else {
+        document.querySelector('.content').innerHTML = '<div class="error-msg">\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002LINE\u30a2\u30d7\u30ea\u304b\u3089\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002</div>';
+      }
     }
   }
 
@@ -1386,7 +1559,7 @@ body {
     this.disabled = true;
     this.textContent = '同期中...';
     try {
-      const result = await api('/wishlist/public-url', 'POST', { wishlistUrl: url });
+      const result = await api('/wishlist/public-url', { method: 'POST', body: { wishlistUrl: url } });
       if (result.success) {
         alert('登録完了！ ' + (result.items_count || 0) + '件の商品を同期しました');
         await loadWishlist();
@@ -1399,6 +1572,297 @@ body {
       this.disabled = false;
       this.textContent = '登録して同期する';
     }
+  });
+
+  // ─────────────────────────────────────────
+  // PWA Web Push (要件整理.md §7)
+  // ─────────────────────────────────────────
+  function urlBase64ToUint8Array(b64) {
+    const padding = '='.repeat((4 - b64.length % 4) % 4);
+    const base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const out = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) out[i] = rawData.charCodeAt(i);
+    return out;
+  }
+
+  async function ensureServiceWorker() {
+    if (!('serviceWorker' in navigator)) throw new Error('Service Worker 非対応');
+    const existing = await navigator.serviceWorker.getRegistration('/');
+    if (existing) return existing;
+    return navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+  }
+
+  async function loadWebPushStatus() {
+    const el = document.getElementById('webpush-status');
+    if (!el) return;
+    let parts = [];
+    parts.push('Notification: ' + (('Notification' in window) ? Notification.permission : '未対応'));
+    parts.push('ServiceWorker: ' + (('serviceWorker' in navigator) ? 'OK' : '未対応'));
+    parts.push('PushManager: ' + (('PushManager' in window) ? 'OK' : '未対応'));
+    try {
+      const data = await api('/webpush/status');
+      parts.push('購読: ' + (data.subscribed ? data.subscriptionCount + '件' : 'なし'));
+    } catch (e) {
+      parts.push('購読状況取得失敗');
+    }
+    el.innerHTML = parts.join(' / ');
+  }
+
+  document.getElementById('btn-webpush-subscribe').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '処理中...';
+    try {
+      if (!('Notification' in window)) { alert('このブラウザは通知非対応です'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { alert('通知が許可されませんでした'); return; }
+      const reg = await ensureServiceWorker();
+      const keyData = await api('/webpush/vapid-public-key');
+      if (!keyData.publicKey) { alert('VAPIDキー取得失敗'); return; }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+      });
+      const result = await api('/webpush/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+      if (result.subscribed) {
+        alert('通知をONにしました🌿');
+        await loadWebPushStatus();
+      } else {
+        alert(result.error || '購読に失敗しました');
+      }
+    } catch (e) {
+      alert('購読エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+      this.textContent = '通知をONにする';
+    }
+  });
+
+  document.getElementById('btn-webpush-test').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '送信中...';
+    try {
+      const result = await api('/webpush/test', { method: 'POST', body: {} });
+      if (result.sent > 0) {
+        alert('テスト通知を送信したよ〜🌿 通知が来たか確認してね');
+      } else {
+        alert('送信失敗。先に「通知をONにする」を押してね。\n詳細: ' + JSON.stringify(result.details || []));
+      }
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+      this.textContent = 'テスト通知';
+    }
+  });
+
+  document.getElementById('btn-webpush-unsubscribe').addEventListener('click', async function() {
+    this.disabled = true;
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/');
+      if (reg) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await api('/webpush/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } });
+          await sub.unsubscribe();
+        }
+      }
+      alert('通知をOFFにしました');
+      await loadWebPushStatus();
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  // ─── ご褒美通知トリガー ───
+  document.getElementById('btn-push-trigger').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '送信中...';
+    const out = document.getElementById('push-trigger-result');
+    try {
+      const result = await api('/push/trigger', { method: 'POST', body: {} });
+      if (result.success) {
+        out.innerHTML = '<span style="color:#155724;">✅ ' + result.title + ' を送信しました</span>';
+      } else {
+        out.innerHTML = '<span style="color:#d33;">' + (result.error || '送信失敗') + '</span>';
+      }
+    } catch (e) {
+      out.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '🌿 ご褒美通知を送る';
+    }
+  });
+
+  // ─────────────────────────────────────────
+  // Nova Act スモーク (要件整理.md §10)
+  // ─────────────────────────────────────────
+  document.getElementById('btn-nova-act-smoke').addEventListener('click', async function() {
+    const query = document.getElementById('nova-act-query').value.trim();
+    const out = document.getElementById('nova-act-result');
+    if (!query) { out.textContent = 'クエリを入力してね'; return; }
+    this.disabled = true;
+    this.textContent = '実行中...';
+    out.innerHTML = '<div style="color:#888;">候補取得中...</div>';
+    try {
+      const result = await api('/nova-act/smoke', { method: 'POST', body: { query: query, max_results: 3 } });
+      if (result.error) { out.innerHTML = '<span style="color:#d33;">' + result.error + '</span>'; return; }
+      let html = '<div><b>provider:</b> ' + (result.meta?.provider || '?') + ' / <b>status:</b> ' + (result.meta?.status || '?') + ' / <b>duration:</b> ' + (result.meta?.duration_ms || 0) + 'ms</div>';
+      html += '<ol style="padding-left:18px;">';
+      (result.candidates || []).forEach(c => {
+        html += '<li>' + c.name + ' — ¥' + (c.amount||0).toLocaleString() + ' (' + c.source + ', conf ' + (c.confidence||0).toFixed(2) + ')</li>';
+      });
+      html += '</ol>';
+      out.innerHTML = html;
+    } catch (e) {
+      out.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = 'Nova Act 候補取得テスト';
+    }
+  });
+
+  // ─── Amazon 連携 ───
+  const amazonStatus = document.getElementById('amazon-link-status');
+  const btnAmazonLink = document.getElementById('btn-amazon-link');
+  const btnAmazonUnlink = document.getElementById('btn-amazon-unlink');
+
+  async function checkAmazonStatus() {
+    try {
+      const r = await api('/amazon/status');
+      if (r.amazon_linked) {
+        amazonStatus.innerHTML = '<span style="color:#155724;">✅ 連携済み</span>';
+        btnAmazonLink.textContent = '再ログインする';
+        btnAmazonUnlink.style.display = 'inline-block';
+      } else {
+        amazonStatus.innerHTML = '<span style="color:#856404;">⚠️ 未連携</span>';
+        btnAmazonLink.textContent = 'Amazon にログインする';
+        btnAmazonUnlink.style.display = 'none';
+      }
+    } catch (e) {
+      amazonStatus.textContent = '状態確認に失敗しました';
+    }
+  }
+  checkAmazonStatus();
+
+  btnAmazonLink.addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = 'URL取得中...';
+    try {
+      const r = await api('/amazon/login-url');
+      if (r.login_url) {
+        window.open(r.login_url, '_blank');
+      } else {
+        alert(r.error || 'ログインURLの取得に失敗しました');
+      }
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+      this.textContent = 'Amazon にログインする';
+      // 5秒後にステータス再確認
+      setTimeout(checkAmazonStatus, 5000);
+    }
+  });
+
+  btnAmazonUnlink.addEventListener('click', async function() {
+    if (!confirm('Amazon連携を解除しますか？')) return;
+    this.disabled = true;
+    try {
+      await api('/amazon/unlink', { method: 'POST' });
+      checkAmazonStatus();
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  // ─── Amazon カート追加・購入 ───
+  let currentAmazonProduct = null;
+  const btnAmazonFind = document.getElementById('btn-amazon-find');
+  const btnAmazonCart = document.getElementById('btn-amazon-cart');
+  const btnAmazonBuy = document.getElementById('btn-amazon-buy');
+  const btnAmazonAnother = document.getElementById('btn-amazon-another');
+  const amazonProductResult = document.getElementById('amazon-product-result');
+  const amazonCartStatus = document.getElementById('amazon-cart-status');
+
+  btnAmazonFind.addEventListener('click', async function() {
+    const category = document.getElementById('amazon-category').value;
+    const maxPrice = parseInt(document.getElementById('amazon-budget').value);
+    this.disabled = true;
+    this.textContent = '🔍 探し中...';
+    amazonCartStatus.textContent = '';
+    amazonProductResult.style.display = 'none';
+    try {
+      const r = await api('/amazon/add-to-cart', {
+        method: 'POST',
+        body: { category: category, max_price: maxPrice }
+      });
+      if (r.success && r.product) {
+        currentAmazonProduct = r.product;
+        document.getElementById('amazon-product-title').textContent = r.product.title;
+        document.getElementById('amazon-product-price').textContent = '¥' + Number(r.product.price).toLocaleString();
+        amazonProductResult.style.display = 'block';
+        amazonCartStatus.innerHTML = '<span style="color:#155724;">✨ ご褒美見つけたよ～🌿</span>';
+      } else {
+        amazonCartStatus.innerHTML = '<span style="color:#d33;">' + (r.error || '商品が見つかりませんでした') + '</span>';
+      }
+    } catch (e) {
+      amazonCartStatus.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '🔍 ご褒美を探す';
+    }
+  });
+
+  btnAmazonCart.addEventListener('click', async function() {
+    if (!currentAmazonProduct) return;
+    this.disabled = true;
+    this.textContent = '🛒 追加中...';
+    try {
+      // Amazon カート追加URLを開く
+      const cartUrl = currentAmazonProduct.add_to_cart_url;
+      window.open(cartUrl, '_blank');
+      amazonCartStatus.innerHTML = '<span style="color:#155724;">✅ Amazonカートに追加しました！ブラウザで確認してね🌿</span>';
+    } catch (e) {
+      amazonCartStatus.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '🛒 Amazonカートに追加';
+    }
+  });
+
+  btnAmazonBuy.addEventListener('click', async function() {
+    if (!currentAmazonProduct) return;
+    this.disabled = true;
+    this.textContent = '💳 処理中...';
+    try {
+      const r = await api('/amazon/purchase', {
+        method: 'POST',
+        body: { asin: currentAmazonProduct.asin }
+      });
+      if (r.success && r.checkout_url) {
+        amazonCartStatus.innerHTML = '<span style="color:#155724;">✅ 購入ページを開きます。「注文を確定する」をタップしてね🌿</span>';
+        window.open(r.checkout_url, '_blank');
+      } else {
+        amazonCartStatus.innerHTML = '<span style="color:#d33;">' + (r.error || '購入に失敗しました') + '</span>';
+      }
+    } catch (e) {
+      amazonCartStatus.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '💳 今すぐ購入する';
+    }
+  });
+
+  btnAmazonAnother.addEventListener('click', function() {
+    currentAmazonProduct = null;
+    amazonProductResult.style.display = 'none';
+    amazonCartStatus.textContent = '';
+    btnAmazonFind.click();
   });
 
 })();

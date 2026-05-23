@@ -26,7 +26,7 @@ from handlers.character_reply import _infer_emotion
 from models.schemas import SK_PENDING_CLARIFICATION, SK_PENDING_EXPENSE
 
 from services.talk_starter import generate_talk_starter
-from services.recommend_flow import start_recommend, handle_recommend_reply
+from services.recommend_flow import start_recommend, handle_recommend_reply, try_handle_last_suggestion_purchase
 from services.quick_expense import show_quick_expense_options, handle_quick_expense_reply
 from services.monthly_report import generate_monthly_report
 from services.streak import update_streak
@@ -253,6 +253,20 @@ def _handle_text(user_id, text, reply_token):
                 streak_msg = update_streak(user_id, ddb)
                 if streak_msg:
                     logger.info("streak_achieved", user_id=user_id, message=streak_msg)
+            _update_daily_count(user_id, today, ddb)
+        except Exception as e:
+            logger.warning("post_reply_ops_failed", error=str(e))
+        return
+
+    # LAST_SUGGESTION チェック — 直前のおすすめ提案 + 「買った」テキストで支出記録に直行
+    try:
+        last_sug_messages = try_handle_last_suggestion_purchase(user_id, text, ddb)
+    except Exception as e:
+        logger.warning("last_suggestion_check_failed", error=str(e))
+        last_sug_messages = None
+    if last_sug_messages:
+        get_line_service().reply_message(reply_token, last_sug_messages)
+        try:
             _update_daily_count(user_id, today, ddb)
         except Exception as e:
             logger.warning("post_reply_ops_failed", error=str(e))

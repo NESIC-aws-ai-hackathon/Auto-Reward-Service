@@ -95,7 +95,7 @@ def generate_recommendation(
 def get_active_recommendation(user_id: str, ddb: DynamoDBService) -> Optional[dict]:
     """直近のアクティブなレコメンドを取得"""
     pk = f"USER#{user_id}"
-    recs = ddb.query_begins_with(pk=pk, sk_prefix=SK_PREFIX_RECOMMENDATION)
+    recs = ddb.query_by_pk(pk=pk, sk_prefix=SK_PREFIX_RECOMMENDATION)
 
     active_statuses = {
         "RECOMMENDED", "NOTIFICATION_SENT", "CART_ADDING", "CART_ADDED",
@@ -202,5 +202,5 @@ def _get_current_monthly_summary(pk: str, ddb: DynamoDBService) -> Optional[dict
 
 def _get_declined_urls(pk: str, ddb: DynamoDBService) -> set:
     """DECLINED されたレコメンドの商品URLを取得"""
-    recs = ddb.query_begins_with(pk=pk, sk_prefix=SK_PREFIX_RECOMMENDATION)
+    recs = ddb.query_by_pk(pk=pk, sk_prefix=SK_PREFIX_RECOMMENDATION)
     return {r.get("product_url") for r in recs if r.get("status") == "DECLINED"}

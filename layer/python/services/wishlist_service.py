@@ -11,15 +11,18 @@ from abc import ABC, abstractmethod
 from datetime import datetime, timezone
 from typing import Optional
 
+import requests
+from bs4 import BeautifulSoup
+
 from services.dynamodb_service import DynamoDBService
 from models.schemas import SK_PREFIX_WISHLIST_SOURCE, SK_PREFIX_WISHLIST_ITEM
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# URL バリデーション
+# URL バリデーション (amazon.jp, amazon.co.jp 両対応)
 AMAZON_WISHLIST_URL_PATTERN = re.compile(
-    r"^https?://(www\.)?amazon\.(co\.jp|com|co\.uk|de|fr|it|es|ca)/.*"
+    r"^https?://(www\.)?amazon\.(jp|co\.jp|com|co\.uk|de|fr|it|es|ca)/.*"
 )
 
 
@@ -99,21 +102,158 @@ class ManualProductProvider(ProductProvider):
 
 
 # ─────────────────────────────────────────
-# Amazon Public Wishlist Provider (Placeholder)
+# Amazon Public Wishlist Provider
 # ─────────────────────────────────────────
 class AmazonPublicWishlistProvider(ProductProvider):
     """
     Amazon公開ほしい物リストのHTMLスクレイピングプロバイダ
-
-    NOTE: Amazon の HTML 構造は頻繁に変わるため不安定。
-    取得失敗時は DemoProductProvider にフォールバックする運用を推奨。
     """
 
+    HEADERS = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "ja-JP,ja;q=0.9,en;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    }
+
+    def _normalize_url(self, wishlist_url: str) -> str:
+        """URL を正規化（amazon.jp → amazon.co.jp, クエリパラメータ除去）"""
+        url = wishlist_url.split("?")[0]
+        url = url.replace("amazon.jp/", "amazon.co.jp/")
+        return url
+
+    def _extract_list_id(self, wishlist_url: str) -> str | None:
+        """URLからリストIDを抽出"""
+        match = re.search(r"/(?:ls|wishlist)/([A-Z0-9]+)", wishlist_url)
+        return match.group(1) if match else None
+
+    def _fetch_page(self, url: str) -> str | None:
+        """ページを取得"""
+        try:
+            resp = requests.get(url, headers=self.HEADERS, timeout=15)
+            if resp.status_code == 200:
+                return resp.text
+            logger.warning("amazon_wishlist_fetch_failed", status=resp.status_code, url=url)
+        except requests.RequestException as e:
+            logger.error("amazon_wishlist_request_error", error=str(e))
+        return None
+
+    def _parse_items_from_html(self, html: str) -> list[dict]:
+        """HTMLからアイテムをパース"""
+        soup = BeautifulSoup(html, "html.parser")
+        g_items = soup.find("ul", id="g-items")
+        if not g_items:
+            return []
+
+        results = []
+        items = g_items.find_all("li", attrs={"data-itemid": True})
+        for item in items:
+            try:
+                data = self._parse_single_item(item)
+                if data:
+                    results.append(data)
+            except Exception as e:
+                logger.warning("amazon_item_parse_error", error=str(e))
+                continue
+        return results
+
+    def _parse_single_item(self, item) -> dict | None:
+        """1つのli要素から商品情報を抽出"""
+        item_id = item.get("data-itemid", "")
+        price_str = item.get("data-price", "")
+
+        # 商品名とURL
+        name_link = item.find("a", id=lambda x: x and "itemName_" in str(x))
+        if not name_link:
+            return None
+
+        title = name_link.get_text(strip=True)
+        href = name_link.get("href", "")
+        if href and not href.startswith("http"):
+            href = f"https://www.amazon.co.jp{href}"
+
+        # 画像
+        img = item.find("img")
+        image_url = img.get("src", "") if img else ""
+        # 大きい画像に差し替え (_SS135_ → _SS300_)
+        if image_url:
+            image_url = re.sub(r"_SS\d+_", "_SS300_", image_url)
+
+        # 価格
+        price = None
+        if price_str:
+            try:
+                price = int(float(price_str))
+            except (ValueError, TypeError):
+                pass
+
+        if not title:
+            return None
+
+        return {
+            "product_title": title,
+            "product_url": href,
+            "product_image_url": image_url,
+            "price": price,
+            "category": None,
+            "amazon_item_id": item_id,
+        }
+
     def sync_wishlist(self, wishlist_url: str) -> list[dict]:
-        # TODO: requests / BeautifulSoup で公開ページを取得・パース
-        # 現段階では Demo にフォールバック
-        logger.warning("amazon_public_wishlist_not_implemented_fallback_to_demo")
-        return DemoProductProvider().sync_wishlist(wishlist_url)
+        """公開ほしい物リストから商品を取得"""
+        url = self._normalize_url(wishlist_url)
+        logger.info("amazon_wishlist_sync_start", url=url)
+
+        html = self._fetch_page(url)
+        if not html:
+            logger.warning("amazon_wishlist_empty_response_fallback_to_demo")
+            return DemoProductProvider().sync_wishlist(wishlist_url)
+
+        items = self._parse_items_from_html(html)
+
+        # ページネーション: showMoreUrl でさらに取得
+        list_id = self._extract_list_id(url)
+        if list_id:
+            items = self._fetch_remaining_items(html, list_id, items)
+
+        if not items:
+            logger.warning("amazon_wishlist_no_items_found_fallback_to_demo")
+            return DemoProductProvider().sync_wishlist(wishlist_url)
+
+        logger.info("amazon_wishlist_sync_done", count=len(items))
+        return items
+
+    def _fetch_remaining_items(self, initial_html: str, list_id: str, current_items: list[dict]) -> list[dict]:
+        """ページネーションで残りのアイテムを取得（最大3ページ）"""
+        # showMoreUrl からトークンを探す
+        token_match = re.search(
+            r'"paginationToken":"([^"]*)"',
+            initial_html,
+        )
+        if not token_match or not token_match.group(1):
+            return current_items
+
+        for _ in range(3):  # 最大3ページ追加
+            token = token_match.group(1) if token_match else ""
+            if not token:
+                break
+            next_url = (
+                f"https://www.amazon.co.jp/hz/wishlist/slv/items"
+                f"?filter=unpurchased&paginationToken={token}"
+                f"&itemsLayout=LIST&sort=date-added&type=wishlist&lid={list_id}"
+            )
+            html = self._fetch_page(next_url)
+            if not html:
+                break
+            new_items = self._parse_items_from_html(html)
+            if not new_items:
+                break
+            current_items.extend(new_items)
+            # 次のトークン
+            token_match = re.search(r'"paginationToken":"([^"]*)"', html)
+            if not token_match or not token_match.group(1):
+                break
+
+        return current_items
 
 
 # ─────────────────────────────────────────
@@ -221,7 +361,7 @@ def get_wishlist_items(
 ) -> list[dict]:
     """ユーザーの欲望在庫を取得する"""
     pk = f"USER#{user_id}"
-    items = ddb.query_begins_with(pk=pk, sk_prefix=SK_PREFIX_WISHLIST_ITEM)
+    items = ddb.query_by_pk(pk=pk, sk_prefix=SK_PREFIX_WISHLIST_ITEM)
 
     if status_filter:
         items = [i for i in items if i.get("status") == status_filter]
@@ -264,7 +404,7 @@ def _find_existing_item(pk: str, product_url: str, ddb: DynamoDBService) -> Opti
     """同じ product_url を持つ既存アイテムを探す"""
     if not product_url:
         return None
-    items = ddb.query_begins_with(pk=pk, sk_prefix=SK_PREFIX_WISHLIST_ITEM)
+    items = ddb.query_by_pk(pk=pk, sk_prefix=SK_PREFIX_WISHLIST_ITEM)
     for item in items:
         if item.get("product_url") == product_url:
             return item

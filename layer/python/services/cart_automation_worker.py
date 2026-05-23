@@ -242,13 +242,89 @@ class NovaActCartAutomationWorker(CartAutomationWorker):
 # ─────────────────────────────────────────
 def get_cart_worker() -> CartAutomationWorker:
     """環境変数 CART_AUTOMATION_MODE に応じたワーカーを返す"""
-    mode = os.getenv("CART_AUTOMATION_MODE", "stub")
+    mode = os.getenv("CART_AUTOMATION_MODE", "amazon_url")
     if mode == "nova_act":
         return NovaActCartAutomationWorker()
     elif mode == "hybrid":
         return HybridCartAutomationWorker()
+    elif mode == "amazon_url":
+        return AmazonURLCartWorker()
     else:
         return StubCartAutomationWorker()
+
+
+# ─────────────────────────────────────────
+# Amazon URL Worker (ECS不要・実購入対応)
+# ─────────────────────────────────────────
+class AmazonURLCartWorker(CartAutomationWorker):
+    """
+    Amazon の公開 URL スキームを使ったカート操作。
+    サーバー側でブラウザ操作は行わず、URL を生成してフロントに返す。
+    ユーザーのブラウザで Amazon にログイン済みなら即座にカートに入る。
+    """
+
+    def add_to_cart(self, *, user_id, recommendation_id, product_url, quantity=1):
+        from services.amazon_cart_service import build_cart_urls, extract_asin, generate_add_to_cart_url
+
+        logger.info(
+            "amazon_url_add_to_cart",
+            user_id=user_id,
+            recommendation_id=recommendation_id,
+            product_url=product_url,
+        )
+
+        urls = build_cart_urls(product_url)
+        if urls:
+            result = _make_result(True, "CART_ADDED", message="カートに追加します")
+            result["cart_url"] = urls["add_to_cart_url"]
+            result["checkout_url"] = urls["checkout_url"]
+            result["asin"] = urls["asin"]
+            return result
+
+        # Amazon URL でない場合 → 外部URLとして直接返す
+        result = _make_result(True, "CART_ADDED", message="商品ページを開きます")
+        result["cart_url"] = product_url
+        result["checkout_url"] = product_url
+        return result
+
+    def remove_from_cart(self, *, user_id, recommendation_id, product_url):
+        logger.info(
+            "amazon_url_remove_from_cart",
+            user_id=user_id,
+            recommendation_id=recommendation_id,
+        )
+        # Amazon URL方式ではカート削除は直接できないため、カート画面URLを返す
+        from services.amazon_cart_service import CART_VIEW_URL
+        result = _make_result(True, "REMOVED_FROM_CART", message="カートを開いて削除してください")
+        result["cart_url"] = CART_VIEW_URL
+        return result
+
+    def purchase(self, *, user_id, recommendation_id):
+        from services.amazon_cart_service import generate_checkout_url
+
+        logger.info(
+            "amazon_url_purchase",
+            user_id=user_id,
+            recommendation_id=recommendation_id,
+        )
+
+        if not ENABLE_REAL_PURCHASE:
+            result = _make_result(
+                True,
+                "READY_TO_PURCHASE",
+                message="購入準備完了。チェックアウトページを開きます。",
+            )
+            result["checkout_url"] = generate_checkout_url()
+            return result
+
+        # 実購入 = チェックアウトURL を返す（ユーザーが最終確認）
+        result = _make_result(
+            True,
+            "PURCHASED",
+            message="チェックアウトページを開きます。注文を確定してください。",
+        )
+        result["checkout_url"] = generate_checkout_url()
+        return result
 
 
 class HybridCartAutomationWorker(CartAutomationWorker):

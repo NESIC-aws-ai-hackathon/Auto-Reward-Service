@@ -37,9 +37,7 @@ LINEで **ふれまーるちゃん** と話しているだけで、愚痴・支�
 | ターゲット | 忙しい社会人・育児中の親・フリーランス |
 | コアバリュー | 会話するだけで家計が育ち、AI キャラが「買っていい理由」を作って自動購入まで代行 |
 | UI | LINE Bot（ふれまーるちゃん）+ PWA（ダッシュボード・通知） |
-| キャラクター | ふれまーるちゃん — 甘やかし特化の AI アシスタント |
-
----
+| キャラクター | ふれまーるちゃん — 甘やかし特化の AI アシスタント |---
 
 ## 成功シナリオ
 
@@ -52,6 +50,46 @@ LINEで **ふれまーるちゃん** と話しているだけで、愚痴・支�
 > **ふれまーるちゃん**: はーい！注文確定したよ〜 🎉 明日届くからね！
 >
 > 家計簿をつけたつもりはないのに、支出も感情も好みも自然に記録されている。
+
+---
+
+## アーキテクチャ方針（要件整理.md §16 準拠）
+
+### MVP 対象（ハッカソン提出版）
+
+| 領域 | 採用判断 | 備考 |
+|------|---------|------|
+| **LINE Bot 中心 UI** | ✅ 採用 | 全主要機能を LINE 上で完結（支出記録／ご褒美提案／カート確認） |
+| **PWA（補助 UI）** | ✅ 採用 | **Web Push 通知の受信導線**＋設定画面（メイン UI ではない） |
+| **AWS Bedrock (Nova)** | ✅ 採用 | 会話理解／Intent 分類／キャラ口調 |
+| **DynamoDB シングルテーブル** | ✅ 採用 | PK=USER#{userId}, SK でレコード種別 |
+| **Nova Act（候補探索）** | ✅ 採用（スモーク導線） | SDK 未導入時は外部API→静的フォールバック |
+| **PWA Web Push（VAPID）** | ✅ 採用 | LINE Push の代替として全プッシュ通知を担当 |
+| **EventBridge スケジューラ** | ✅ 採用 | 朝・夜の定時通知トリガ |
+| **LIFF Login（id_token）** | ✅ 採用 | LINE 公式アプリ内ブラウザでの認証 |
+
+### 廃止／非採用
+
+| 項目 | 理由 |
+|------|------|
+| **LINE Push API** | 認可制限・コスト・到達率の観点で PWA Web Push に一本化 |
+| **Google カレンダー連携** | MVP では Feature Flag で OFF（コード基盤のみ保持） |
+| **独自 PWA ダッシュボード単独運用** | LINE Bot 中心方針に統合（PWA は補助） |
+
+### Feature Flag による安定化
+
+要件整理.md §13 に従い、すべての主要機能はランタイム Feature Flag で個別に ON/OFF できます。
+
+```yaml
+ENABLE_PWA_WEB_PUSH: "true"      # PWA Web Push 通知
+ENABLE_LINE_PUSH: "false"        # LINE Push（廃止）
+ENABLE_NOVA_ACT: "true"          # Nova Act 候補探索
+ENABLE_NOVA_ACT_SMOKE: "true"    # /api/nova-act/smoke 検証導線
+ENABLE_EXTERNAL_REWARD_API: "true"  # 楽天等の外部API
+ENABLE_STATIC_REWARD_FALLBACK: "true"  # 静的候補フォールバック
+ENABLE_LINE_BOT: "true"          # LINE Bot 機能
+ENABLE_GOOGLE_CALENDAR: "false"  # Googleカレンダー（OFF）
+```
 
 ---
 

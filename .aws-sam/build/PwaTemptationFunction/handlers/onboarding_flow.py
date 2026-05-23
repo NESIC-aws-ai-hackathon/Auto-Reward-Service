@@ -295,9 +295,29 @@ def handle_onboarding(
     # ─ WAITING_INCOME ─
     if step == STEP_WAITING_INCOME:
         amount = extract_amount(text)
-        if amount is None or amount < 50000:  # 5万未満は誤入力とみなす
+
+        # 数値が読めなかった場合のみエラー
+        if amount is None:
             return MSG_PARSE_ERROR_INCOME
 
+        # 直前に低額確認を出していて、ユーザーが「はい/その通り」と肯定した場合は採用
+        pending_confirm = state.get("pending_low_income")
+        if pending_confirm and _is_affirmative(text):
+            amount = int(pending_confirm)
+        elif amount < 50000:
+            # 低額（1万円など）は「ご褒美予算/週収と勘違い」の可能性が高いので確認
+            state["pending_low_income"] = amount
+            _save_onboarding_state(user_id, state, ddb_service)
+            return (
+                f"{amount:,}円かなぁ〜？🌿\n"
+                "「月の手取り収入（給料）」を聞いてるんだけど、\n"
+                "もしかしてご褒美予算や週収だったりするかなぁ？\n\n"
+                "・月の手取りで合ってたら「はい」って返してね\n"
+                "・違う場合はもう一度教えてくれるかなぁ〜（例: 25万）"
+            )
+
+        # 採用 → 次ステップへ
+        state.pop("pending_low_income", None)
         state["monthly_income"] = amount
         state["step"] = STEP_WAITING_FIXED_COSTS
         _save_onboarding_state(user_id, state, ddb_service)

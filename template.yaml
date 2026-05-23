@@ -21,10 +21,30 @@ Globals:
         DAILY_CHAT_LIMIT: "50"
         LIFF_URL: ""
         # カート搬送 / Nova Act 設定 (変更依頼書_2 §8, §14)
-        CART_AUTOMATION_MODE: "stub"
-        ENABLE_REAL_PURCHASE: "false"
+        CART_AUTOMATION_MODE: "amazon_url"
+        ENABLE_REAL_PURCHASE: "true"
         NOVA_ACT_DEMO_MODE: "true"
-        MAX_PURCHASE_AMOUNT: "1000"
+        MAX_PURCHASE_AMOUNT: "5000"
+        # PWA通知頻度設定
+        PUSH_COOLDOWN_HOURS: "1"
+        PUSH_SUGGEST_THRESHOLD: "40"
+        # 要件整理.md §7 PWA Web Push (LINE PUSH は廃止、PWA へ移行)
+        ENABLE_PWA_WEB_PUSH: "true"
+        ENABLE_LINE_PUSH: "false"
+        VAPID_SECRET_ID: "ars/webpush"
+        # 要件整理.md §10 Nova Act
+        ENABLE_NOVA_ACT: "true"
+        ENABLE_NOVA_ACT_SMOKE: "true"
+        NOVA_ACT_SYNC_IN_LINE_CHAT: "false"
+        # 要件整理.md §9 外部 API
+        ENABLE_EXTERNAL_REWARD_API: "true"
+        ENABLE_STATIC_REWARD_FALLBACK: "true"
+        ENABLE_REWARD_POOL_CACHE: "true"
+        # 要件整理.md §13 LINE Bot 中心動作
+        ENABLE_LINE_BOT: "true"
+        ENABLE_LINE_RICH_MENU: "true"
+        ENABLE_RECEIPT_ANALYSIS: "true"
+        ENABLE_GOOGLE_CALENDAR: "false"
     Layers:
       - !Ref ArsCommonLayer
     Tracing: PassThrough
@@ -141,6 +161,7 @@ Resources:
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/google*"
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/rakuten*"
                   - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/hotpepper*"
+                  - !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/webpush*"
         - PolicyName: ArsSQSPolicy
           PolicyDocument:
             Version: '2012-10-17'
@@ -264,6 +285,7 @@ Resources:
                   - !GetAtt RewardPoolUpdaterFunction.Arn
                   - !GetAtt ReceiptProcessorFunction.Arn
                   - !GetAtt PwaTemptationFunction.Arn
+                  - !GetAtt ScheduledPushFunction.Arn
 
   WarmupWebhookScheduler:
     Type: AWS::Scheduler::Schedule
@@ -361,6 +383,57 @@ Resources:
         Arn: !GetAtt RewardPoolUpdaterFunction.Arn
         RoleArn: !GetAtt SchedulerExecutionRole.Arn
         Input: '{"source": "scheduler"}'
+
+  # ─────────────────────────────────────────
+  # Lambda Functions（定期 Push 通知）
+  # ─────────────────────────────────────────
+  ScheduledPushFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ScheduledPushFunction
+      Handler: handlers.scheduled_push.handler
+      CodeUri: src/
+      MemorySize: 256
+      Timeout: 60
+      Role: !GetAtt ArsLambdaRole.Arn
+      Environment:
+        Variables:
+          DAILY_PUSH_LIMIT: "2"
+      Tags:
+        Project: auto-reward-service
+        Stage: prod
+
+  ScheduledPushFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${ScheduledPushFunction}"
+      RetentionInDays: 14
+
+  # 18:00 JST = 09:00 UTC
+  ScheduledPushEvening:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: ScheduledPushEvening
+      ScheduleExpression: "cron(0 9 * * ? *)"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt ScheduledPushFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"source": "scheduler", "slot": "evening"}'
+
+  # 21:00 JST = 12:00 UTC
+  ScheduledPushNight:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: ScheduledPushNight
+      ScheduleExpression: "cron(0 12 * * ? *)"
+      FlexibleTimeWindow:
+        Mode: "OFF"
+      Target:
+        Arn: !GetAtt ScheduledPushFunction.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"source": "scheduler", "slot": "night"}'
 
   # ─────────────────────────────────────────
   # Lambda Functions（PWA 寄り道レーン API）
@@ -461,6 +534,24 @@ Resources:
           Properties:
             ApiId: !Ref WebhookApi
             Path: /liff/temptation
+            Method: GET
+        LiffAmazonLogin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /liff/amazon-login
+            Method: GET
+        PwaServiceWorker:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /service-worker.js
+            Method: GET
+        PwaManifest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref WebhookApi
+            Path: /manifest.json
             Method: GET
         CalendarCallback:
           Type: HttpApi

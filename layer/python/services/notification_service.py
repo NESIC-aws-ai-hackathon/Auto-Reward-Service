@@ -61,6 +61,28 @@ def create_notification(
         user_id=user_id,
     )
 
+    # ─── PWA Web Push 配信 (要件整理.md §7) ───
+    import os
+    if os.environ.get("ENABLE_PWA_WEB_PUSH", "true").lower() == "true":
+        try:
+            from services.webpush_service import send_webpush
+            push_payload = {
+                "title": title,
+                "body": message_text,
+                "url": "/liff",
+                "notification_id": notification_id,
+                "type": notification_type,
+            }
+            result = send_webpush(user_id, push_payload, ddb)
+            logger.info(
+                "webpush_sent_via_notification",
+                notification_id=notification_id,
+                sent=result.get("sent", 0),
+                failed=result.get("failed", 0),
+            )
+        except Exception as e:
+            logger.warning("webpush_send_failed", error=str(e), notification_id=notification_id)
+
     return data
 
 
@@ -72,7 +94,7 @@ def get_notifications(
 ) -> list[dict]:
     """ユーザーの通知一覧を取得（新しい順）"""
     pk = f"USER#{user_id}"
-    items = ddb.query_begins_with(pk=pk, sk_prefix=SK_PREFIX_NOTIFICATION)
+    items = ddb.query_by_pk(pk=pk, sk_prefix=SK_PREFIX_NOTIFICATION)
 
     # 期限切れを除外
     now = datetime.now(timezone.utc).isoformat()

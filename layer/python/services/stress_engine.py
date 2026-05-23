@@ -9,13 +9,14 @@
   - 帰宅時間帯かどうか（17〜21時、平日）   : 0〜25点
   - 直近の「回復系」支出パターン           : 0〜25点
   - 直近チャットログのストレスシグナル     : 0〜25点
-  合計 60点以上 → 寄り道を提案
+  合計 SUGGEST_THRESHOLD 点以上 → 寄り道を提案
 
 スパム防止: 直近 COOLDOWN_HOURS 時間以内に提案済みなら提案しない。
 """
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import datetime, timezone, timedelta
 
@@ -28,8 +29,9 @@ logger = get_logger(__name__)
 _JST = timezone(timedelta(hours=9))
 _bedrock = BedrockService()
 
-COOLDOWN_HOURS = 4      # 再提案まで最低何時間空けるか
-SUGGEST_THRESHOLD = 60  # 合計スコアがこれ以上なら提案
+# 環境変数で頻度調整可能（PWA通知なので高頻度OK）
+COOLDOWN_HOURS = int(os.environ.get("PUSH_COOLDOWN_HOURS", "1"))
+SUGGEST_THRESHOLD = int(os.environ.get("PUSH_SUGGEST_THRESHOLD", "40"))
 
 # 直近チャット検索に使うストレス語彙（弱シグナル）
 _STRESS_WORDS = {
@@ -53,8 +55,11 @@ def should_suggest_detour(user_id: str, message: str, ddb: DynamoDBService) -> d
     Returns:
         dict: {"suggest": bool, "score": int, "reason": str}
     """
+    # ユーザー設定を取得（プロフィールに保存された頻度設定を優先）
+    user_cooldown, user_threshold = _get_user_push_settings(user_id, ddb)
+
     # クールダウン中なら即返却
-    if _is_in_cooldown(user_id, ddb):
+    if _is_in_cooldown(user_id, ddb, cooldown_hours=user_cooldown):
         logger.info("stress_cooldown", user_id=user_id)
         return {"suggest": False, "score": 0, "reason": "cooldown"}
 
@@ -74,11 +79,12 @@ def should_suggest_detour(user_id: str, message: str, ddb: DynamoDBService) -> d
         chat=chat_score,
         msg_score=message_score,
         total=total,
-        suggest=(total >= SUGGEST_THRESHOLD),
+        threshold=user_threshold,
+        suggest=(total >= user_threshold),
     )
 
     return {
-        "suggest": total >= SUGGEST_THRESHOLD,
+        "suggest": total >= user_threshold,
         "score": total,
         "reason": bedrock_reason,
     }
@@ -88,12 +94,30 @@ def should_suggest_detour(user_id: str, message: str, ddb: DynamoDBService) -> d
 # Internal helpers
 # ─────────────────────────────────────────
 
-def _is_in_cooldown(user_id: str, ddb: DynamoDBService) -> bool:
-    """直近 COOLDOWN_HOURS 時間以内にTEMPTATION_SESSIONが存在するかチェック。"""
+def _get_user_push_settings(user_id: str, ddb: DynamoDBService) -> tuple[int, int]:
+    """ユーザーのプッシュ通知設定を取得。未設定なら環境変数のデフォルトを使用。"""
     try:
         pk = f"USER#{user_id}"
-        sessions = ddb.query_by_pk(pk=pk, sk_prefix="TEMPTATION_SESSION#", limit=5, descending=True)
-        cutoff = datetime.now(_JST) - timedelta(hours=COOLDOWN_HOURS)
+        profile = ddb.get_item(pk=pk, sk="PROFILE#")
+        if profile:
+            cooldown = int(profile.get("push_cooldown_hours", COOLDOWN_HOURS))
+            threshold = int(profile.get("push_suggest_threshold", SUGGEST_THRESHOLD))
+            return cooldown, threshold
+    except Exception as e:
+        logger.warning("get_user_push_settings_failed", error=str(e))
+    return COOLDOWN_HOURS, SUGGEST_THRESHOLD
+
+def _is_in_cooldown(user_id: str, ddb: DynamoDBService, *, cooldown_hours: int = None) -> bool:
+    """直近 cooldown_hours 時間以内に寄り道提案（セッション or 通知）があればTrue。"""
+    hours = cooldown_hours if cooldown_hours is not None else COOLDOWN_HOURS
+    if hours <= 0:
+        return False  # クールダウン無効
+    try:
+        pk = f"USER#{user_id}"
+        cutoff = datetime.now(_JST) - timedelta(hours=hours)
+
+        # TEMPTATION_SESSION チェック
+        sessions = ddb.query_by_pk(pk=pk, sk_prefix="TEMPTATION_SESSION#", limit=3, descending=True)
         for s in sessions:
             raw = s.get("created_at", "")
             if not raw:
@@ -103,6 +127,24 @@ def _is_in_cooldown(user_id: str, ddb: DynamoDBService) -> bool:
                 if dt.tzinfo is None:
                     dt = dt.replace(tzinfo=_JST)
                 if dt > cutoff:
+                    return True
+            except (ValueError, TypeError):
+                continue
+
+        # 通知レコード (detour_suggest) チェック
+        from models.schemas import SK_PREFIX_NOTIFICATION
+        notifs = ddb.query_by_pk(pk=pk, sk_prefix=SK_PREFIX_NOTIFICATION, limit=5, descending=True)
+        for n in notifs:
+            if n.get("type") != "detour_suggest":
+                continue
+            raw = n.get("createdAt", "")
+            if not raw:
+                continue
+            try:
+                dt = datetime.fromisoformat(raw)
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if dt > cutoff.astimezone(timezone.utc):
                     return True
             except (ValueError, TypeError):
                 continue

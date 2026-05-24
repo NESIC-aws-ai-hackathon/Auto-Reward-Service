@@ -1,0 +1,620 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ars-u8-pwa - PWA Dashboard for Auto-Reward-Service
+
+Parameters:
+  Env:
+    Type: String
+    Default: dev
+  ArsTableName:
+    Type: String
+    Default: ArsTable
+  ArsTableArn:
+    Type: String
+    Default: ''
+  FrontendOrigin:
+    Type: String
+    Default: ''
+  VapidPrivateKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+  VapidPublicKey:
+    Type: String
+    Default: ''
+  VapidSubject:
+    Type: String
+    Default: 'mailto:admin@example.com'
+
+Globals:
+  Function:
+    Runtime: python3.13
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref ArsTableName
+        ENV: !Ref Env
+
+Resources:
+  # ─── Cognito ───
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ars-u8-user-pool-${Env}
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+      LambdaConfig:
+        PreSignUp: !GetAtt PreSignUpFunction.Arn
+
+  # ─── Lambda: Pre Sign-up (user limit) ───
+  PreSignUpFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ars-u8-pre-signup-${Env}
+      Handler: handlers.pre_signup_handler.lambda_handler
+      CodeUri: backend/
+      MemorySize: 128
+      Timeout: 10
+      Environment:
+        Variables:
+          MAX_USERS: '7'
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:ListUsers
+              Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*
+
+  PreSignUpPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt PreSignUpFunction.Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/*
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub ars-u8-client-${Env}
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+
+  # ─── API Gateway ───
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Env
+      CorsConfiguration:
+        AllowOrigins:
+          - !If [HasFrontendOrigin, !Ref FrontendOrigin, 'http://localhost:5173']
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+      Auth:
+        Authorizers:
+          CognitoAuthorizer:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+              audience:
+                - !Ref UserPoolClient
+
+  # ─── Lambda: Sync API ───
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ars-u8-api-${Env}
+      Handler: handlers.api_handler.lambda_handler
+      CodeUri: backend/
+      MemorySize: 256
+      Timeout: 29
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ArsTableName
+          ENV: !Ref Env
+          ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_CLIENT_ID: !Ref UserPoolClient
+          COGNITO_REGION: !Ref AWS::Region
+          BEDROCK_REGION: us-east-1
+          BEDROCK_MODEL_ID: anthropic.claude-3-5-sonnet-20241022-v2:0
+          RAKUTEN_APP_ID: ""
+          YOUTUBE_API_KEY: ""
+          HOTPEPPER_API_KEY: ""
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArsTableName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt AnalysisQueue.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:Converse
+              Resource: '*'
+      Events:
+        SettingsGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/settings
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        SettingsPut:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/settings
+            Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
+        UserResolve:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/user/me
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        VoiceSessionStart:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/voice-session/start
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        VoiceSessionEnd:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/voice-session/end
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        TranscriptTurn:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/transcript/turn
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        TranscriptBulk:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/transcript/bulk
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PushSubscribe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/push/subscribe
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        PushUnsubscribe:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/push/unsubscribe
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        RecoveryGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/recovery
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        RecoveryPermit:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/recovery/permit
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        RecoverySkip:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/recovery/skip
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        DashboardGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/dashboard
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        DiaryList:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/diary
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        DiaryDetail:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/diary/{date}
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ChatMessagesGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/chat/messages
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ChatSend:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/chat/send
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ProductSearch:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/search/products
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        HealthGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/health
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        HealthPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/health
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        OnboardingGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/onboarding
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        OnboardingPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/onboarding
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        YoutubeSearch:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/search/youtube
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+
+  # ─── WebSocket API: Voice Gateway ───
+  VoiceWebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ars-u8-voice-ws-${Env}
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+
+  VoiceWebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      StageName: !Ref Env
+      AutoDeploy: true
+
+  # WebSocket Routes
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub integrations/${VoiceGatewayIntegration}
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      RouteKey: $disconnect
+      Target: !Sub integrations/${VoiceGatewayIntegration}
+
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      RouteKey: $default
+      Target: !Sub integrations/${VoiceGatewayIntegration}
+
+  StartSessionRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      RouteKey: startSession
+      Target: !Sub integrations/${VoiceGatewayIntegration}
+
+  AudioChunkRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      RouteKey: audioChunk
+      Target: !Sub integrations/${VoiceGatewayIntegration}
+
+  TextMessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      RouteKey: textMessage
+      Target: !Sub integrations/${VoiceGatewayIntegration}
+
+  EndSessionRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      RouteKey: endSession
+      Target: !Sub integrations/${VoiceGatewayIntegration}
+
+  VoiceGatewayIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref VoiceWebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${VoiceGatewayFunction.Arn}/invocations
+
+  VoiceGatewayPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref VoiceGatewayFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${VoiceWebSocketApi}/*
+
+  # ─── Lambda: Voice Gateway ───
+  VoiceGatewayFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ars-u8-voice-gw-${Env}
+      Handler: handlers.voice_gateway.lambda_handler
+      CodeUri: backend/
+      MemorySize: 512
+      Timeout: 300
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ArsTableName
+          ENV: !Ref Env
+          ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
+          BEDROCK_REGION: us-east-1
+          NOVA_SONIC_MODEL_ID: amazon.nova-sonic-v1:0
+          COGNITO_USER_POOL_ID: !Ref UserPool
+          COGNITO_CLIENT_ID: !Ref UserPoolClient
+          COGNITO_REGION: !Ref AWS::Region
+          WEBSOCKET_API_ENDPOINT: !Sub https://${VoiceWebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArsTableName
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt AnalysisQueue.QueueName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - bedrock:InvokeModelWithResponseStream
+                - bedrock:InvokeModelWithBidirectionalStream
+                - bedrock:Converse
+              Resource: '*'
+        - Statement:
+            - Effect: Allow
+              Action:
+                - execute-api:ManageConnections
+              Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${VoiceWebSocketApi}/*
+
+  # ─── SQS: Analysis Queue ───
+  AnalysisQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ars-u8-analysis-queue-${Env}
+      VisibilityTimeout: 360
+      MessageRetentionPeriod: 86400
+
+  # ─── Lambda: Async Analysis ───
+  AnalysisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ars-u8-analysis-${Env}
+      Handler: handlers.analysis_handler.lambda_handler
+      CodeUri: backend/
+      MemorySize: 512
+      Timeout: 300
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ArsTableName
+          ENV: !Ref Env
+          BEDROCK_REGION: us-east-1
+          BEDROCK_MODEL_ID: anthropic.claude-3-5-sonnet-20241022-v2:0
+          VAPID_PRIVATE_KEY: !Ref VapidPrivateKey
+          VAPID_PUBLIC_KEY: !Ref VapidPublicKey
+          VAPID_SUBJECT: !Ref VapidSubject
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ArsTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: '*'
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt AnalysisQueue.Arn
+            BatchSize: 1
+        DiarySchedule:
+          Type: Schedule
+          Properties:
+            Schedule: cron(0 13 * * ? *)
+            Input: '{"trigger": "scheduled_diary"}'
+        ReprocessSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(5 minutes)
+            Input: '{"trigger": "reprocess"}'
+        ProactiveMessageSchedule:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Input: '{"trigger": "proactive_messages"}'
+
+  # ─── S3: Frontend Hosting ───
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ars-u8-frontend-${Env}-${AWS::AccountId}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${FrontendBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
+
+  # ─── CloudFront ───
+  CloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub ars-u8-oac-${Env}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        DefaultRootObject: index.html
+        Origins:
+          - Id: S3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !Ref CloudFrontOAC
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+Conditions:
+  HasFrontendOrigin: !Not [!Equals [!Ref FrontendOrigin, '']]
+
+Outputs:
+  ApiUrl:
+    Description: API Gateway URL
+    Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}
+  VoiceWebSocketUrl:
+    Description: Voice WebSocket URL
+    Value: !Sub wss://${VoiceWebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${Env}
+  UserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref UserPoolClient
+  CloudFrontUrl:
+    Description: CloudFront Distribution URL
+    Value: !Sub https://${CloudFrontDistribution.DomainName}
+  FrontendBucketName:
+    Description: S3 Bucket for frontend
+    Value: !Ref FrontendBucket

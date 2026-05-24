@@ -55,6 +55,30 @@ LINEで **ふれまーるちゃん** と話しているだけで、愚痴・支�
 
 ## アーキテクチャ方針（要件整理.md §16 準拠）
 
+### Unit 8: PWA 音声チャット + ダッシュボード
+
+Unit 8 では、音声チャット基盤を **Amazon Nova Sonic / Amazon Bedrock** に変更しました。
+
+これにより、音声会話、会話理解、応答生成を AWS 内に閉じた構成で実現します。
+OpenAI Realtime API は利用しません。
+
+**音声チャット構成:**
+```
+PWA VoiceChat
+  ↓ WebSocket (API Gateway WebSocket API)
+Backend Voice Gateway (Lambda)
+  ↓ InvokeModelWithBidirectionalStream
+Amazon Nova Sonic (Bedrock)
+  ↓ 音声 + Transcript
+Backend Voice Gateway
+  ↓ WebSocket
+PWA VoiceChat
+```
+
+音声会話の Transcript を保存し、ライフログ抽出、家計簿更新、ストレス判定、日記サマリ生成は非同期 AnalysisWorker で実行します。
+
+**テキストフォールバック:** Nova Sonic が利用できない場合は、Bedrock Claude Sonnet によるテキストチャットにフォールバックします。
+
 ### MVP 対象（ハッカソン提出版）
 
 | 領域 | 採用判断 | 備考 |

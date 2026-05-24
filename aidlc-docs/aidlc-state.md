@@ -5,7 +5,7 @@
 - **プロジェクト種別**: グリーンフィールド（新規開発）
 - **開始日**: 2026-05-07
 - **コンセプト変更日**: 2026-05-15
-- **現在のステージ**: INCEPTION フェーズ — Unit 8: PWAダッシュボード強化（Units Generation 完了）
+- **現在のステージ**: CONSTRUCTION フェーズ — U8-E: ダッシュボード統合（Code Generation 完了）— Unit 8 全サブユニット完了
 
 ## コンセプト変更サマリー
 - **変更根拠**: `docs/コンセプト変更定義書.md`
@@ -115,18 +115,20 @@
 - [x] Units Generation ✅ 2026-05-23
 
 ### 🟢 CONSTRUCTION フェーズ（Unit 8）
-- [ ] U8-A: PWA基盤 + Cognito認証
-  - [ ] Functional Design
-  - [ ] Code Generation
-- [ ] U8-B: 音声チャット
-  - [ ] Functional Design
-  - [ ] Code Generation
+- [x] U8-A: PWA基盤 + Cognito認証
+  - [x] Functional Design ✅ 2026-05-24
+  - [x] Code Generation ✅ 2026-05-24／24テスト PASS
+- [x] U8-B: 音声チャット
+  - [x] Functional Design ✅ 2026-05-24
+  - [x] Code Generation ✅ 2026-05-24／39テスト PASS
 - [ ] U8-C: ライフログ + 日記サマリ
-  - [ ] Functional Design
-  - [ ] Code Generation
+  - [x] Functional Design ✅ 2026-05-24
+  - [x] Code Generation ✅ 2026-05-24／49テスト PASS
 - [ ] U8-D: ストレス判定 + 回復提案
-  - [ ] Functional Design
-  - [ ] Code Generation
-- [ ] U8-E: ダッシュボード統合
+  - [x] Functional Design ✅ 2026-05-24
+  - [x] Code Generation ✅ 2026-05-24／56テスト PASS
+- [x] U8-E: ダッシュボード統合
+  - [x] Functional Design ✅ 2026-05-24
+  - [x] Code Generation ✅ 2026-05-24／61テスト PASS
   - [ ] Functional Design
   - [ ] Code Generation

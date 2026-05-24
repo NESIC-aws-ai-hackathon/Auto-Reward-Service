@@ -1,0 +1,72 @@
+.budget-card { margin-top: 14px; padding: 14px; background: rgba(255, 253, 247, 0.82); border: 1px solid rgba(232, 223, 206, 0.82); border-radius: 22px; box-shadow: var(--shadow); }
+.metrics { display: grid; gap: 10px; margin-top: 12px; }
+.metrics.three { grid-template-columns: repeat(3, 1fr); }
+.metrics article { background: #fff; border-radius: 16px; border: 1px solid rgba(232, 223, 206, 0.88); padding: 12px; text-align: center; box-shadow: 0 6px 16px rgba(87, 68, 38, 0.06); }
+.metrics .icon { font-size: 30px; display: block; }
+.metrics small { display: block; color: #6b6258; font-weight: 800; margin: 6px 0; font-size: 12px; }
+.metrics strong { display: block; font-size: 23px; color: var(--green-dark); letter-spacing: 0.01em; }
+
+.compact-hero {
+  height: 152px; overflow: hidden; display: flex; align-items: center; gap: 10px; padding: 14px;
+  background: linear-gradient(135deg, rgba(220, 238, 202, 0.95), rgba(255, 249, 229, 0.92));
+  border-radius: 22px; border: 1px solid rgba(232, 223, 206, 0.82); box-shadow: var(--shadow);
+  position: relative;
+}
+.compact-hero::after {
+  content: ""; position: absolute; inset: 0;
+  background: radial-gradient(circle at 28% 25%, rgba(255, 255, 255, 0.8), transparent 22%),
+    radial-gradient(circle at 85% 28%, rgba(104, 169, 119, 0.16), transparent 24%);
+  pointer-events: none;
+}
+.compact-hero > img { width: 134px; height: 134px; border-radius: 50%; object-fit: cover; position: relative; z-index: 1; }
+.compact-hero .speech-bubble { margin-left: 0; width: auto; flex: 1; padding: 14px; position: relative; z-index: 1; }
+.compact-hero .speech-bubble span { font-size: 13px; }
+
+.dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+.chart-card {
+  padding: 14px; min-height: 208px; position: relative;
+  background: rgba(255, 253, 247, 0.82); border: 1px solid rgba(232, 223, 206, 0.82);
+  border-radius: 22px; box-shadow: var(--shadow);
+}
+.chart-card h2 { margin: 0 0 10px; color: var(--green-dark); font-size: 16px; }
+.bar-chart {
+  height: 116px; border-bottom: 1px dashed #d8ceb9; border-left: 1px dashed #d8ceb9;
+  display: flex; align-items: flex-end; gap: 14px; padding: 10px 10px 0;
+}
+.bar-chart b { flex: 1; border-radius: 8px 8px 0 0; background: linear-gradient(180deg, #a7d8ad, #76ad7a); box-shadow: inset 0 8px 10px rgba(255, 255, 255, 0.3); }
+.chart-card button { margin: 12px auto 0; display: block; border-radius: 999px; background: #f8f1e6; border: 1px solid #e3d7c4; padding: 8px 13px; font-size: 12px; }
+
+.donut {
+  width: 128px; height: 128px; margin: 6px auto 8px; border-radius: 50%;
+  background: conic-gradient(#83c58c 0 72%, #ffc784 72% 100%);
+  display: grid; place-items: center; position: relative;
+}
+.donut::before { content: ""; position: absolute; width: 82px; height: 82px; background: #fffaf3; border-radius: 50%; }
+.donut span { position: relative; z-index: 2; font-size: 32px; font-weight: 900; color: var(--green-dark); }
+.legend { font-size: 12px; font-weight: 700; }
+.legend p { margin: 5px 0; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+.legend .green { background: #83c58c; }
+.legend .orange { background: #ffc784; }
+.chart-card .mini-sloth { position: absolute; right: 12px; bottom: 8px; }
+.chart-card .mini-sloth img { width: 56px; height: 56px; object-fit: cover; border-radius: 16px; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.08)); }
+
+.activity-list {
+  margin-top: 12px; padding: 14px;
+  background: rgba(255, 253, 247, 0.82); border: 1px solid rgba(232, 223, 206, 0.82);
+  border-radius: 22px; box-shadow: var(--shadow);
+}
+.activity-list ul { list-style: none; margin: 10px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.activity-list li {
+  display: grid; grid-template-columns: 32px 58px 1fr auto; align-items: center; gap: 8px;
+  background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px;
+}
+.activity-list li span { font-size: 26px; }
+.activity-list li b { font-size: 12px; color: var(--green-dark); background: #eef7e9; border-radius: 999px; padding: 4px 7px; text-align: center; }
+.activity-list li p { font-size: 13px; margin: 0; }
+.activity-list li em { font-style: normal; color: var(--green-dark); font-weight: 800; }
+
+@media (max-width: 390px) {
+  .metrics strong { font-size: 20px; }
+  .dashboard-grid { grid-template-columns: 1fr; }
+}

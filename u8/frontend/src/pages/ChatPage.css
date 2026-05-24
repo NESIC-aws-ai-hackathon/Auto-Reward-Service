@@ -1,0 +1,339 @@
+.chat-hero {
+  height: 214px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 18px;
+  background: linear-gradient(135deg, rgba(220, 238, 202, 0.95), rgba(255, 249, 229, 0.92));
+  border-radius: 22px;
+  border: 1px solid rgba(232, 223, 206, 0.82);
+  box-shadow: var(--shadow);
+}
+
+.chat-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 28% 25%, rgba(255, 255, 255, 0.8), transparent 22%),
+    radial-gradient(circle at 85% 28%, rgba(104, 169, 119, 0.16), transparent 24%);
+  pointer-events: none;
+}
+
+.hero-character {
+  position: absolute;
+  left: 14px;
+  bottom: -20px;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  overflow: hidden;
+  z-index: 1;
+  border: 5px solid rgba(255, 255, 255, 0.65);
+  box-shadow: 0 15px 40px rgba(104, 169, 119, 0.2);
+}
+
+.hero-character img { width: 100%; height: 100%; object-fit: cover; }
+
+.speech-bubble {
+  position: relative;
+  z-index: 2;
+  margin-left: auto;
+  width: 205px;
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 26px;
+  padding: 18px 20px;
+  box-shadow: 0 8px 22px rgba(87, 68, 38, 0.1);
+  line-height: 1.8;
+}
+
+.speech-bubble::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 40px;
+  border-width: 10px 14px 10px 0;
+  border-style: solid;
+  border-color: transparent rgba(255, 255, 255, 0.88) transparent transparent;
+}
+
+.speech-bubble strong { display: block; color: var(--green-dark); font-size: 18px; margin-bottom: 4px; }
+.speech-bubble span { display: block; font-size: 14px; font-weight: 600; }
+
+/* Voice Panel */
+.voice-panel {
+  margin-top: 14px;
+  min-height: 112px;
+  border-radius: 22px;
+  background: rgba(255, 253, 247, 0.88);
+  border: 1px solid rgba(232, 223, 206, 0.8);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+  overflow: hidden;
+}
+
+.mic-button {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--green-2), var(--green));
+  color: white;
+  font-size: 42px;
+  box-shadow: 0 12px 30px rgba(104, 169, 119, 0.38), inset 0 0 0 4px rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+  transition: transform 0.15s;
+}
+
+.mic-button:active { transform: scale(0.96); }
+.mic-button.recording { background: linear-gradient(135deg, #ff9a8a, #e06050); }
+
+.voice-status { flex: 1; min-width: 0; }
+.voice-status p {
+  margin: 0 0 10px;
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pulse-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--green-2);
+  box-shadow: 0 0 0 0 rgba(104, 169, 119, 0.6);
+  animation: pulse 1.4s infinite;
+}
+
+.wave-bar {
+  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.wave-bar i {
+  display: block;
+  width: 3px;
+  border-radius: 99px;
+  background: #8fc49b;
+  animation: wave 1.1s ease-in-out infinite;
+}
+
+.text-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6d6258;
+  cursor: pointer;
+}
+
+.text-toggle input { display: none; }
+.text-toggle b {
+  width: 38px; height: 22px; border-radius: 99px;
+  background: #e9e0d1; position: relative; display: inline-block;
+}
+.text-toggle b::after {
+  content: "";
+  position: absolute;
+  width: 18px; height: 18px;
+  left: 2px; top: 2px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.14);
+  transition: 0.2s;
+}
+.text-toggle input:checked + b { background: #9ed2a9; }
+.text-toggle input:checked + b::after { left: 18px; }
+
+.listening-buddy {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  align-self: flex-end;
+}
+
+.listening-buddy img { display: block; filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.08)); }
+.buddy-furemaru { width: 72px; height: 72px; object-fit: cover; border-radius: 18px; }
+.buddy-sloth { width: 56px; height: 56px; object-fit: cover; border-radius: 14px; }
+
+/* Chat Thread */
+.chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.message {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  animation: fadeIn 0.3s ease;
+}
+
+.message .emotion-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.message .msg-wrap {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(232, 223, 206, 0.9);
+  border-radius: 18px;
+  padding: 10px 12px;
+  box-shadow: 0 4px 14px rgba(87, 68, 38, 0.07);
+  max-width: 272px;
+}
+
+.message .msg-wrap small {
+  display: block;
+  color: var(--green-dark);
+  font-weight: 800;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.message .msg-wrap p { margin: 0; font-size: 13px; line-height: 1.6; }
+.message time { font-size: 11px; color: #a69c8c; flex-shrink: 0; }
+
+.message.user { justify-content: flex-end; }
+.message.user p {
+  background: #cde8ce;
+  padding: 10px 14px;
+  border-radius: 18px 18px 6px 18px;
+  font-size: 13px;
+  max-width: 300px;
+  box-shadow: 0 4px 14px rgba(104, 169, 119, 0.13);
+  margin: 0;
+}
+
+/* Text Input Panel */
+.text-input-panel {
+  margin-top: 12px;
+  background: rgba(255, 253, 247, 0.86);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.text-input-panel .chat-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.text-input-panel textarea {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: #fffaf3;
+  border-radius: 14px;
+  padding: 12px;
+  resize: none;
+  color: var(--text);
+  font-size: 14px;
+  flex: 1;
+  min-height: 44px;
+  max-height: 120px;
+}
+
+.text-input-panel .send-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--green), var(--green-dark));
+  color: #fff;
+  font-size: 18px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(104, 169, 119, 0.3);
+}
+
+.text-input-panel .send-btn:disabled { opacity: 0.4; }
+
+/* Quick Section */
+.quick-section {
+  margin-top: 16px;
+  padding: 14px;
+  background: rgba(255, 253, 247, 0.82);
+  border: 1px solid rgba(232, 223, 206, 0.82);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+}
+
+.quick-section h2 { font-size: 16px; color: var(--green-dark); margin: 0 0 10px; }
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.quick-card {
+  background: #fff;
+  border: 1px solid rgba(232, 223, 206, 0.88);
+  border-radius: 16px;
+  padding: 10px;
+  text-align: left;
+  box-shadow: 0 6px 16px rgba(87, 68, 38, 0.06);
+}
+
+.quick-card span { font-size: 28px; display: block; }
+.quick-card strong { display: block; color: var(--green-dark); font-size: 14px; margin: 5px 0; }
+.quick-card small { display: block; color: #655d52; font-size: 10px; line-height: 1.35; }
+
+/* Typing indicator */
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  align-items: center;
+}
+
+.typing-indicator span {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--green-2);
+  animation: typingBounce 1.4s ease-in-out infinite;
+}
+.typing-indicator span:nth-child(2) { animation-delay: 0.2s; }
+.typing-indicator span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}
+
+/* Voice active state */
+.voice-panel.active .mic-button {
+  background: linear-gradient(135deg, #ff9a8a, #e06050);
+  animation: breathe 2s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.06); }
+}
+
+@media (max-width: 390px) {
+  .chat-hero { height: 195px; padding: 12px; }
+  .hero-character { left: 6px; width: 160px; height: 160px; }
+  .speech-bubble { width: 180px; padding: 14px; }
+  .speech-bubble strong { font-size: 16px; }
+  .speech-bubble span { font-size: 12px; }
+  .quick-grid { gap: 7px; }
+  .quick-card { padding: 8px; }
+}

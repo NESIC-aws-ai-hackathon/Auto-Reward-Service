@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+.aws-sam/
+u8/.aws-sam/
+u8/frontend/dist/
+u8/frontend/tsconfig.tsbuildinfo
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Archives / temp
+*.zip
+deploy-output.txt
+out.json
+tmp_*.txt
+temp_*.html
+
+# Old code (deprecated)
+old/

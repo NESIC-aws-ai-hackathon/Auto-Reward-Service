@@ -1,0 +1,11 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "ars-u8-pwa"
+resolve_s3 = true
+s3_prefix = "ars-u8-pwa"
+region = "ap-northeast-1"
+profile = "share"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "Env=dev ArsTableName=ArsTable FrontendOrigin=https://d39spqovcq7od.cloudfront.net"

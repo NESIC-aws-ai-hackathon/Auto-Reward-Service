@@ -9,7 +9,7 @@
 | **同期API** | API Gateway HTTP API + Lambda (`ars-u8-api`) |
 | **非同期分析** | SQS + Lambda (`ars-u8-analysis`) |
 | **認証** | Amazon Cognito User Pool + JWT Authorizer |
-| **音声** | OpenAI Realtime API (WebRTC, ephemeral key) |
+| **音声** | Amazon Nova Sonic (Bedrock InvokeModelWithBidirectionalStream) ※方針変更済み |
 | **分析LLM** | Claude 3.5 Sonnet via Bedrock |
 | **Push** | Web Push API (VAPID) |
 | **DB** | DynamoDB (既存ArsTable拡張) |

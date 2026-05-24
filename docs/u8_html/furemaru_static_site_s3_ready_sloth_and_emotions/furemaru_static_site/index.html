@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#111111" />
+  <meta name="description" content="ふれまーるちゃん - 話すだけで、日々とお金がふんわり残るPWAデモ" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./assets/furemaru-avatar.png" />
+  <link rel="apple-touch-icon" href="./assets/furemaru-avatar.png" />
+  <link rel="stylesheet" href="./styles.css" />
+  <title>ふれまーるちゃん</title>
+</head>
+<body>
+  <main class="phone-shell" aria-label="ふれまーるちゃん アプリ">
+    <div class="phone-inner">
+      <header class="app-header">
+        <div class="brand">
+          <img src="./assets/furemaru-avatar.png" alt="ふれまーるちゃんのロゴアバター" class="brand-avatar" />
+          <div>
+            <h1>ふれまーるちゃん<span>🌿</span></h1>
+            <p>お金のこと、もっとやさしく、もっと楽しく。</p>
+          </div>
+        </div>
+        <div class="header-actions" aria-label="ヘッダー操作">
+          <button class="icon-button" type="button" aria-label="通知">🔔<span class="dot"></span></button>
+          <button class="icon-button" type="button" aria-label="きらきら">✨</button>
+        </div>
+      </header>
+
+      <section class="page active" id="page-chat" data-page="chat">
+        <section class="hero-card chat-hero">
+          <div class="hero-character">
+            <img src="./assets/furemaru-fullbody.png" alt="ふれまーるちゃん 全身イラスト" />
+          </div>
+          <div class="speech-bubble">
+            <strong>こんにちは！</strong>
+            <span>ふれまーるちゃんだよ〜！</span>
+            <span>今日も一緒に、お金のことをやさしく整えてこ？ 🍀</span>
+          </div>
+        </section>
+
+        <section class="voice-panel listening" aria-label="音声チャット">
+          <button class="mic-button" type="button" id="micButton"><span>🎙</span></button>
+          <div class="voice-status">
+            <p><span class="pulse-dot"></span>ただいま聞いてるよ</p>
+            <div class="wave" aria-hidden="true">
+              <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+            </div>
+            <label class="text-toggle"><span>文字で入力する</span><input type="checkbox" id="textToggle"><b></b></label>
+          </div>
+          <div class="listening-buddy" aria-hidden="true">
+            <img src="./assets/furemaru-support.png" alt="" class="buddy-furemaru" />
+            <img src="./assets/sloth-buddy.png" alt="" class="buddy-sloth" />
+          </div>
+        </section>
+
+        <section class="chat-thread" aria-label="チャット">
+          <article class="message assistant">
+            <img src="./assets/furemaru-happy.png" alt="" class="emotion-avatar" data-emotion="happy" />
+            <div>
+              <small>ふれまーるちゃん</small>
+              <p>最近、出費がかさんで疲れてない？どんなことでも、話してくれたらうれしいな。</p>
+            </div>
+            <time>10:32</time>
+          </article>
+          <article class="message user"><p>今月ちょっと使いすぎちゃって不安かも……</p><time>10:33</time></article>
+          <article class="message assistant">
+            <img src="./assets/furemaru-support.png" alt="" class="emotion-avatar" data-emotion="support" />
+            <div>
+              <small>ふれまーるちゃん</small>
+              <p>大丈夫だよ〜！そんな日もあるよね。いっしょに、ムリなく整えてこ？</p>
+            </div>
+            <time>10:33</time>
+          </article>
+        </section>
+
+        <section class="text-input-panel" id="textInputPanel" hidden>
+          <textarea id="chatInput" rows="3" placeholder="今日あったこと、買ったもの、気分などを入力してね"></textarea>
+          <button class="primary-btn" type="button" id="sendButton">ふれまーるちゃんに話す</button>
+        </section>
+
+        <section class="quick-section">
+          <h2>🌿 話してみる？</h2>
+          <div class="quick-grid">
+            <button class="quick-card" data-fill="今日はちょっと疲れた。回復費を考えたい"><span>👛</span><strong>回復費</strong><small>心がラクになる使い方を考えよう</small></button>
+            <button class="quick-card" data-fill="今日の気分を記録したい"><span>💗</span><strong>今日の気分</strong><small>いまの気持ちを教えてね</small></button>
+            <button class="quick-card" data-fill="今日あった出来事をライフログにしたい"><span>📒</span><strong>ライフログ</strong><small>習慣や出来事を記録しよう</small></button>
+          </div>
+        </section>
+      </section>
+
+      <section class="page" id="page-dashboard" data-page="dashboard">
+        <section class="hero-card compact-hero">
+          <img src="./assets/furemaru-support.png" alt="ふれまーるちゃん" />
+          <div class="speech-bubble compact">
+            <strong>こんにちは！</strong>
+            <span>今月も一緒に、お金のことをやさしく整えてこ？</span>
+          </div>
+        </section>
+        <section class="budget-card">
+          <div class="section-title-row"><h2>🌿 今月のごほうび予算</h2><button>予算を編集する ›</button></div>
+          <div class="metrics three">
+            <article><span class="icon">👛</span><small>今月の予算</small><strong>¥30,000</strong></article>
+            <article><span class="icon">🍮</span><small>使った金額</small><strong>¥12,450</strong></article>
+            <article><span class="icon">✨</span><small>残りの金額</small><strong>¥17,550</strong></article>
+          </div>
+        </section>
+        <section class="dashboard-grid">
+          <article class="chart-card"><h2>🌿 回復支出の推移</h2><div class="bar-chart"><b style="height:45%"></b><b style="height:70%"></b><b style="height:63%"></b><b style="height:74%"></b><b style="height:82%"></b></div><button>もっと詳しく見る ›</button></article>
+          <article class="chart-card"><h2>🌿 ストレス・回復バランス</h2><div class="donut"><span>72%</span></div><div class="legend"><p><i class="green"></i>回復 72%</p><p><i class="orange"></i>ストレス 28%</p></div><div class="mini-sloth"><img src="./assets/sloth-buddy.png" alt="ナマケモノ" /></div></article>
+        </section>
+        <section class="activity-list"><div class="section-title-row"><h2>🦥 最近のアクティビティ</h2><button>すべて見る ›</button></div><ul><li><span>🍮</span><b>ごほうび</b><p>カフェでケーキ ☕🍰</p><em>¥850</em></li><li><span>👜</span><b>回復</b><p>アロマオイルを購入 🌿</p><em>¥2,480</em></li><li><span>📖</span><b>自己投資</b><p>読書：心が軽くなる習慣 ✨</p><em>¥1,540</em></li></ul></section>
+      </section>
+
+      <section class="page" id="page-diary" data-page="diary">
+        <section class="diary-hero">
+          <div>
+            <time>2025.05.12 月</time>
+            <h2>今日のダイアリー🌿</h2>
+            <p>今日はゆったり過ごせた、穏やかでやさしい一日だったよ〜🍀</p>
+            <div class="diary-stats"><span>💗 今日の気分<br><b>やさしい気持ち</b></span><span>🌿 ふれまーる度<br><b>82%</b></span></div>
+          </div>
+          <img src="./assets/furemaru-happy.png" alt="ふれまーるちゃん" />
+        </section>
+        <section class="mood-card"><h2>🌿 気分のうつろい</h2><div class="mood-line"><span>😢</span><span>😐</span><span>🙂</span><span>😶</span><span>😊</span></div><p>今日の気分：やさしい気持ち</p></section>
+        <section class="life-log-list"><div class="section-title-row"><h2>🌿 会話から生まれたライフログ</h2><button>すべて見る ›</button></div><article><img src="./assets/furemaru-happy.png" alt=""><p>「最近、出費がかさんで疲れてない？」<br><span>→ 節約の工夫をいくつか提案したよ 🍀</span></p><em>10:32</em></article><article><img src="./assets/furemaru-support.png" alt=""><p>「今月ちょっと使いすぎちゃって不安かも……」<br><span>→ 支出の見直しポイントを一緒にチェック ✨</span></p><em>13:45</em></article><article><img src="./assets/furemaru-shy.png" alt=""><p>「大丈夫だよ〜！そんな日もあるよね」<br><span>→ 応援して、気持ちが軽くなるお手伝いをしたよ 💚</span></p><em>19:08</em></article></section>
+        <section class="highlight-grid"><h2>🌿 今日のハイライト</h2><div><span>👟<b>6,842歩</b><small>目標 8,000歩</small></span><span>🪴<b>2.4時間</b><small>集中モード</small></span><span>👜<b>カフェ</b><small>リラックス時間</small></span><span>🥗<b>バランス◎</b><small>野菜たっぷり</small></span><span>🌙<b>7時間15分</b><small>ぐっすり</small></span></div></section>
+      </section>
+
+      <section class="page" id="page-recovery" data-page="recovery">
+        <section class="recovery-hero"><img src="./assets/furemaru-happy.png" alt="ふれまーるちゃん"><div><small>おすすめの回復を提案するよ♪</small><h2>つかれた日は、<br><b>甘いプリン</b>で<br>ほっと一息っこ?</h2><p>心がふわっとゆるむよ〜🌿</p><button class="primary-btn">詳しく見る →</button></div></section>
+        <h2 class="section-heading">🌿 かんたん回復メニュー</h2>
+        <section class="recovery-grid"><article><span>👛</span><h3>0円回復</h3><p>お金をかけずに気持ちをゆるめるアイデア集</p></article><article><span>💗</span><h3>小さなご褒美</h3><p>がんばった自分にやさしいごほうびをプレゼント♪</p></article><article><span>▶️</span><h3>おすすめ動画</h3><p>ふれまーるちゃんセレクトの癒し動画でほっとひと息</p></article><article><span>📖</span><h3>おすすめ記事</h3><p>心が軽くなる読み物で気持ちをリセットしよう</p></article></section>
+        <section class="route-card"><h2>今日の回復ルート</h2><div class="route"><span>☁️<small>深呼吸<br>1分</small></span><i></i><span>🍵<small>あたたかい飲み物<br>5分</small></span><i></i><span>🎵<small>やさしい音楽<br>10分</small></span><i></i><span>💗<small>自分をほめる<br>3分</small></span><b>合計<br>19分</b></div><button>はじめる</button><p>今日も、あなたのペースで大丈夫だよ〜🌿</p></section>
+      </section>
+
+      <section class="page" id="page-settings" data-page="settings">
+        <section class="profile-card"><img src="./assets/furemaru-shy.png" alt="ふれまーるちゃん"><div><small>プロフィール</small><h2>ふれまーるちゃん ✎</h2><p>一緒に楽しくお金のことを学ぼうね♪</p><span>会員ID：FUREMARU-2024 ⧉</span></div><div class="mini-sloth profile-sloth"><img src="./assets/sloth-buddy.png" alt="ナマケモノ" /></div></section>
+        <section class="settings-list"><button><span>🔔</span><b>通知設定</b><small>リマインダーやお知らせの受け取りを設定できます</small><em>›</em></button><button><span>⏰</span><b>ダイアリーのまとめ時間</b><small>毎日のふりかえり時間を設定できます</small><strong>21:00</strong><em>›</em></button><button><span>👛</span><b>今月のごほうび予算</b><small>ごほうびに使える金額の上限を設定します</small><strong>¥3,000</strong><em>›</em></button><button><span>🎨</span><b>テーマ</b><small>アプリの見た目をカスタマイズできます</small><i class="palette"><u></u><u></u><u></u></i><em>›</em></button></section>
+        <section class="settings-cards"><article><h3>🛡 プライバシーとアカウント</h3><p>プライバシーポリシー</p><p>利用規約</p><p>ログアウト</p></article><article><h3>🧸 アバターをカスタマイズ</h3><p>ふれまーるちゃんの見た目や衣装を変更できるよ♪</p><button>カスタマイズする</button></article></section>
+        <section class="coming-card"><h3>🌿 3Dふれまーるちゃん（開発中）</h3><p>もっといっしょにお話しできるよ！3Dキャラクター機能をお楽しみに♪</p><button>詳しく見る</button></section>
+      </section>
+
+      <nav class="tabbar" aria-label="メインメニュー">
+        <button class="tab active" data-target="chat"><span>💬</span><small>Chat</small></button>
+        <button class="tab" data-target="dashboard"><span>📊</span><small>ダッシュボード</small></button>
+        <button class="tab center" data-target="chat"><img src="./assets/furemaru-avatar.png" alt="ふれまーるちゃんホーム"></button>
+        <button class="tab" data-target="diary"><span>📖</span><small>ダイアリー</small></button>
+        <button class="tab" data-target="recovery"><span>💞</span><small>回復</small></button>
+        <button class="tab" data-target="settings"><span>⚙️</span><small>設定</small></button>
+      </nav>
+    </div>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

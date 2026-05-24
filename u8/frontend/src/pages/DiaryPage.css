@@ -1,0 +1,76 @@
+.diary-hero {
+  background: rgba(255, 253, 247, 0.84); border: 1px solid var(--line); border-radius: 22px;
+  padding: 16px; display: grid; grid-template-columns: 1.25fr 0.9fr; gap: 8px;
+  align-items: center; box-shadow: var(--shadow);
+}
+.diary-hero time { font-weight: 800; color: var(--green-dark); font-size: 13px; }
+.diary-hero h2 { margin: 8px 0; color: var(--green-dark); font-size: 24px; }
+.diary-hero p { margin: 0; line-height: 1.65; font-size: 13px; }
+.diary-hero img { width: 130px; height: 130px; border-radius: 18px; object-fit: cover; }
+.diary-stats { display: flex; gap: 8px; margin-top: 12px; }
+.diary-stats span { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; font-size: 11px; }
+.diary-stats b { color: var(--green-dark); font-size: 16px; display: block; }
+
+.mood-card {
+  padding: 14px; margin-top: 12px;
+  background: rgba(255, 253, 247, 0.82); border: 1px solid rgba(232, 223, 206, 0.82);
+  border-radius: 22px; box-shadow: var(--shadow);
+}
+.mood-card h2 { margin: 0 0 12px; color: var(--green-dark); font-size: 16px; }
+.mood-line {
+  height: 70px; border-radius: 16px; background: linear-gradient(180deg, #fff, #fbf7ee);
+  display: flex; align-items: center; justify-content: space-around;
+  border: 1px solid var(--line);
+}
+.mood-line span { font-size: 26px; }
+.mood-card p { margin: 10px 0 0; text-align: right; color: #6a6258; font-size: 13px; font-weight: 700; }
+
+.mood-timeline { padding: 8px 0; }
+.mood-chart {
+  position: relative; height: 100px; margin: 0 10px;
+}
+.mood-point {
+  position: absolute; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%);
+}
+.mood-dot { font-size: 18px; }
+.mood-point small { font-size: 9px; color: #7d7467; margin-top: 2px; }
+.mood-line-svg {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  overflow: visible;
+}
+.mood-labels {
+  display: flex; justify-content: space-between; font-size: 10px; color: #a69c8c; margin-top: 8px; padding: 0 10px;
+}
+
+.health-hint {
+  margin-top: 10px; font-size: 11px; color: #a69c8c; text-align: center;
+}
+
+.life-log-list {
+  padding: 14px; margin-top: 12px;
+  background: rgba(255, 253, 247, 0.82); border: 1px solid rgba(232, 223, 206, 0.82);
+  border-radius: 22px; box-shadow: var(--shadow);
+}
+.life-log-list h2 { margin: 0 0 12px; color: var(--green-dark); font-size: 16px; }
+.life-log-list article {
+  display: grid; grid-template-columns: 36px 1fr 46px; gap: 8px; align-items: center;
+  background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 10px; margin-top: 8px;
+}
+.life-log-list img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; }
+.life-log-list p { margin: 0; font-size: 12px; line-height: 1.5; }
+.life-log-list .hl { color: var(--green-dark); }
+.life-log-list em { font-size: 11px; color: #a69c8c; font-style: normal; }
+
+.highlight-grid {
+  padding: 14px; margin-top: 12px;
+  background: rgba(255, 253, 247, 0.82); border: 1px solid rgba(232, 223, 206, 0.82);
+  border-radius: 22px; box-shadow: var(--shadow);
+}
+.highlight-grid h2 { margin: 0 0 12px; color: var(--green-dark); font-size: 16px; }
+.highlight-grid > div { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.highlight-grid span {
+  background: #fff; border: 1px solid var(--line); border-radius: 14px;
+  text-align: center; padding: 10px 5px; font-size: 20px; display: block;
+}
+.highlight-grid b { display: block; font-size: 14px; color: var(--text); margin: 5px 0; }
+.highlight-grid small { display: block; font-size: 9px; color: #7d7467; }

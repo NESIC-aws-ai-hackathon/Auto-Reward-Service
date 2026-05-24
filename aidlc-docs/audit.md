@@ -4,6 +4,43 @@
 
 ---
 
+## [CONSTRUCTION] Unit 8-B — 音声チャット方針変更 (Nova Sonic 移行)
+**Timestamp**: 2026-05-24T18:00:00+09:00
+**Status**: Complete
+**変更理由**: AWS内完結アーキテクチャの実現（OpenAI API Key不要化）
+
+### 方針変更内容
+| 項目 | 旧（OpenAI） | 新（Nova Sonic） |
+|------|------------|----------------|
+| 音声エンジン | OpenAI Realtime API (gpt-4o-realtime) | Amazon Nova Sonic (amazon.nova-sonic-v1:0) |
+| 接続方式 | PWA → WebRTC → OpenAI直接 | PWA → WebSocket → Lambda → Bedrock |
+| 認証 | ephemeral key (バックエンド発行) | JWT query param ($connect検証) |
+| Transcript保存 | フロントエンドから bulk 送信 | バックエンド側で自動保存 |
+| テキストフォールバック | なし | Claude Sonnet テキスト応答 |
+| 外部API依存 | OpenAI API Key 必須 | AWS IAM のみ（API Key不要） |
+
+### 影響ファイル（実装）
+- `u8/template.yaml` — WebSocket API + VoiceGatewayFunction 追加, OpenAiApiKey 削除
+- `u8/backend/handlers/voice_gateway.py` — 新規（WebSocket Lambda）
+- `u8/backend/services/sonic_voice_session.py` — 新規（Nova Sonic セッション管理）
+- `u8/backend/shared/config.py` — nova_sonic_model_id, websocket_api_endpoint
+- `u8/backend/shared/auth.py` — validate_jwt_token() 追加
+- `u8/frontend/src/hooks/useVoiceChat.ts` — WebRTC → WebSocket + VAD 全面書換
+- `u8/frontend/src/pages/ChatPage.tsx` — テキスト入力追加
+- `u8/frontend/src/lib/api.ts` — startVoiceSession() 削除
+
+### 影響ファイル（設計書）
+- `aidlc-docs/construction/u8-b/functional-design/business-logic-model.md` — 全面書換
+- `aidlc-docs/construction/u8-b/functional-design/business-rules.md` — 全面書換
+- `aidlc-docs/construction/u8-b/functional-design/frontend-components.md` — 全面書換
+- `aidlc-docs/construction/u8-b/functional-design/domain-entities.md` — VoiceSession属性更新
+- `aidlc-docs/inception/application-design/u8-application-design.md` — 音声欄修正
+
+### テスト結果
+- 全 70 テスト PASS（新規 9 テスト追加）
+
+---
+
 ## [INCEPTION] Unit 8: PWAダッシュボード強化 — Requirements Analysis 開始
 **Timestamp**: 2026-05-23T19:00:00+09:00
 **User Input (raw)**:
@@ -137,6 +174,19 @@ PWAサイトのトップは音声チャット画面、ここでふれまーる�
 - `aidlc-docs/inception/application-design/u8-unit-of-work.md`
 - `aidlc-docs/inception/application-design/u8-unit-of-work-dependency.md`
 - `aidlc-docs/inception/application-design/u8-unit-of-work-story-map.md`
+
+---
+
+## [INCEPTION] Unit 8 — Units Generation 承認
+**Timestamp**: 2026-05-24T10:00:00+09:00
+**User Response**: "承認します"（補正4件適用後に承認）
+**Status**: Approved
+**補正内容**:
+1. U8-AにDataAccess SK命名規則定義追加
+2. U8-C Push範囲明確化（ストレス通知はU8-D）
+3. U8-D 0円回復案優先
+4. U8-E E2Eデモシナリオ追加
+**Next Phase**: CONSTRUCTION — U8-A Functional Design
 
 ---
 

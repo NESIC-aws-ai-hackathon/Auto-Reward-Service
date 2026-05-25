@@ -124,11 +124,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               reject(new Error('Session expired'));
               return;
             }
-            resolve(newSession.getAccessToken().getJwtToken());
+            resolve(newSession.getIdToken().getJwtToken());
           });
           return;
         }
-        resolve(session.getAccessToken().getJwtToken());
+        resolve(session.getIdToken().getJwtToken());
       });
     });
   }, []);

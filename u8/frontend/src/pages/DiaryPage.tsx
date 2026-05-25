@@ -1,18 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
+import { getJstDateString } from '../lib/datetime';
 import './DiaryPage.css';
 
 interface DiaryEntry {
   date: string;
   content: string;
   life_log_count: number;
+  chat_count?: number;
 }
 
 interface DiaryDetail {
   date: string;
   content: string | null;
   life_log_count: number;
-  life_logs: { category: string; content: string }[];
+  chat_count?: number;
+  life_logs: { category: string; content: string; emotion?: string; timestamp?: string }[];
   stress: { level: number; mood: string } | null;
 }
 
@@ -54,7 +58,7 @@ export function DiaryPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      const todayStr = getJstDateString();
       const [listResult, detailResult, healthResult] = await Promise.allSettled([
         api.getDiaryList(),
         api.getDiaryDetail(todayStr),
@@ -136,6 +140,7 @@ export function DiaryPage() {
       <section className="life-log-list">
         <div className="section-title-row">
           <h2>🌿 会話から生まれたライフログ</h2>
+          <Link to="/" className="life-log-cta">💬 もっと話す</Link>
         </div>
         {lifeLogs.length > 0 ? (
           lifeLogs.map((log, i) => (
@@ -178,7 +183,117 @@ export function DiaryPage() {
         )}
       </section>
 
+      {/* Past Diaries */}
+      <PastDiariesSection entries={entries} todayDate={getJstDateString()} />
+
       {loading && <div className="loading-state">読み込み中...</div>}
     </div>
+  );
+}
+
+function PastDiariesSection({ entries, todayDate }: { entries: DiaryEntry[]; todayDate: string }) {
+  const api = useApi();
+  const past = entries.filter(e => e.date !== todayDate);
+  const [openDate, setOpenDate] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, DiaryDetail | null>>({});
+
+  const toggle = async (date: string) => {
+    if (openDate === date) {
+      setOpenDate(null);
+      return;
+    }
+    setOpenDate(date);
+    if (!details[date]) {
+      try {
+        const d = await api.getDiaryDetail(date);
+        setDetails(prev => ({ ...prev, [date]: d }));
+      } catch {
+        setDetails(prev => ({ ...prev, [date]: null }));
+      }
+    }
+  };
+
+  if (past.length === 0) {
+    return (
+      <section className="life-log-list">
+        <h2>📚 過去のダイアリー</h2>
+        <p style={{ fontSize: 12, color: '#8e8270', padding: 12, textAlign: 'center' }}>
+          過去の日記はまだないよ。話しかけ続けると、毎日の振り返りがここに溜まっていくよ📔
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="life-log-list">
+      <h2>📚 過去のダイアリー ({past.length}日分)</h2>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {past.map(e => {
+          const isOpen = openDate === e.date;
+          const detail = details[e.date];
+          return (
+            <article key={e.date} style={{ display: 'block', padding: 0, background: '#fff' }}>
+              <button
+                onClick={() => toggle(e.date)}
+                style={{
+                  width: '100%',
+                  border: 'none',
+                  background: 'transparent',
+                  textAlign: 'left',
+                  padding: '12px 14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ fontSize: 22 }}>📔</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <b style={{ fontSize: 13 }}>{e.date}</b>
+                  <small style={{ display: 'block', color: '#8e8270', fontSize: 11, lineHeight: 1.4, marginTop: 2 }}>
+                    {(e.content || '').slice(0, 60)}{(e.content || '').length > 60 ? '…' : ''}
+                  </small>
+                </div>
+                <em style={{ fontStyle: 'normal', fontSize: 11, color: '#a69c8c' }}>
+                  💬{e.chat_count ?? 0} / 📝{e.life_log_count}
+                </em>
+                <span style={{ fontSize: 12, color: '#aaa' }}>{isOpen ? '▾' : '▸'}</span>
+              </button>
+              {isOpen && (
+                <div style={{ padding: '0 14px 14px', borderTop: '1px solid #f0e6d2' }}>
+                  {detail === undefined ? (
+                    <p style={{ fontSize: 12, color: '#8e8270', padding: 8 }}>読み込み中...</p>
+                  ) : detail === null ? (
+                    <p style={{ fontSize: 12, color: '#c08c5c', padding: 8 }}>日記を取得できませんでした</p>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: 13, lineHeight: 1.7, color: '#5a4d3a', padding: '8px 0', whiteSpace: 'pre-wrap' }}>
+                        {detail.content || '(この日の日記はまだ生成されていません)'}
+                      </p>
+                      {detail.life_logs && detail.life_logs.length > 0 && (
+                        <details style={{ marginTop: 4 }}>
+                          <summary style={{ cursor: 'pointer', fontSize: 11, color: '#8e8270' }}>
+                            ライフログ {detail.life_logs.length}件を見る
+                          </summary>
+                          <ul style={{ listStyle: 'none', padding: '8px 0 0', margin: 0, fontSize: 12 }}>
+                            {detail.life_logs.map((l, idx) => (
+                              <li key={idx} style={{ padding: '4px 0', borderBottom: '1px dashed #f0e6d2' }}>
+                                <span style={{ marginRight: 6 }}>{getCategoryEmoji(l.category)}</span>
+                                <b style={{ fontSize: 11, color: '#8e7e5e', marginRight: 6 }}>{l.category}</b>
+                                {l.content}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </article>
+          );
+        })}
+      </div>
+    </section>
   );
 }

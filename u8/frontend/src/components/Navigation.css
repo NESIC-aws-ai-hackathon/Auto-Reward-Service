@@ -4,7 +4,7 @@
   background: rgba(255, 253, 247, 0.94);
   border-top: 1px solid rgba(232, 223, 206, 0.85);
   display: grid;
-  grid-template-columns: 1fr 1fr 70px 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 70px 1fr 1fr;
   gap: 4px;
   z-index: 6;
   backdrop-filter: blur(18px);

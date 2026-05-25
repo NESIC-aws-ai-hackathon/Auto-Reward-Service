@@ -63,27 +63,24 @@ function reducer(state: VoiceChatState, action: VoiceChatAction): VoiceChatState
 }
 
 const MAX_SESSION_DURATION = 30 * 60; // 30 minutes
-const SILENCE_THRESHOLD = 0.01;
-const SILENCE_DURATION_MS = 1500; // 1.5s silence = end of utterance
 const WS_URL = import.meta.env.VITE_VOICE_WS_URL || '';
+
+// SpeechRecognition type
+interface SpeechRecognitionEvent {
+  results: { [index: number]: { [index: number]: { transcript: string }; isFinal: boolean }; length: number };
+  resultIndex: number;
+}
 
 export function useVoiceChat() {
   const { getAccessToken } = useAuth();
   const [state, dispatch] = useReducer(reducer, initialState);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
-  const audioBufferRef = useRef<Int16Array[]>([]);
-  const silenceStartRef = useRef<number>(0);
-  const isSpeakingRef = useRef(false);
+  const recognitionRef = useRef<unknown>(null);
   const durationTimerRef = useRef<number | null>(null);
   const startTimeRef = useRef<number>(0);
   const turnIndexRef = useRef<number>(0);
-  const audioPlayQueueRef = useRef<string[]>([]);
-  const isPlayingRef = useRef(false);
-  const audioContextPlayRef = useRef<AudioContext | null>(null);
+  const isListeningRef = useRef(false);
 
   const sendToWs = useCallback((data: Record<string, unknown>) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -96,150 +93,85 @@ export function useVoiceChat() {
       clearInterval(durationTimerRef.current);
       durationTimerRef.current = null;
     }
-    if (processorRef.current) {
-      processorRef.current.disconnect();
-      processorRef.current = null;
+    if (recognitionRef.current) {
+      try { (recognitionRef.current as { stop: () => void }).stop(); } catch { /* */ }
+      recognitionRef.current = null;
     }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    if (mediaStreamRef.current) {
-      mediaStreamRef.current.getTracks().forEach(t => t.stop());
-      mediaStreamRef.current = null;
-    }
+    isListeningRef.current = false;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
-    if (audioContextPlayRef.current) {
-      audioContextPlayRef.current.close();
-      audioContextPlayRef.current = null;
-    }
-    audioBufferRef.current = [];
-    audioPlayQueueRef.current = [];
-    isPlayingRef.current = false;
   }, []);
 
-  const playNextAudioChunk = useCallback(async () => {
-    if (isPlayingRef.current) return;
-    if (audioPlayQueueRef.current.length === 0) return;
+  const startSpeechRecognition = useCallback(() => {
+    // Use browser Speech Recognition API
+    const SpeechRecognition = (window as unknown as Record<string, unknown>).SpeechRecognition ||
+      (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
 
-    isPlayingRef.current = true;
-
-    if (!audioContextPlayRef.current) {
-      audioContextPlayRef.current = new AudioContext({ sampleRate: 24000 });
+    if (!SpeechRecognition) {
+      dispatch({ type: 'SET_ERROR', error: 'このブラウザは音声認識に対応していません。Chrome/Edgeをお使いください。' });
+      return;
     }
 
-    while (audioPlayQueueRef.current.length > 0) {
-      const chunk = audioPlayQueueRef.current.shift()!;
-      try {
-        const binaryStr = atob(chunk);
-        const bytes = new Uint8Array(binaryStr.length);
-        for (let i = 0; i < binaryStr.length; i++) {
-          bytes[i] = binaryStr.charCodeAt(i);
+    const recognition = new (SpeechRecognition as new () => {
+      lang: string; continuous: boolean; interimResults: boolean;
+      onresult: ((e: SpeechRecognitionEvent) => void) | null;
+      onend: (() => void) | null;
+      onerror: ((e: { error: string }) => void) | null;
+      start: () => void; stop: () => void;
+    })();
+    recognition.lang = 'ja-JP';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
+      let interimText = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]!;
+        const transcript = result[0]!.transcript;
+        if (result.isFinal) {
+          // Final transcript - send to server
+          if (transcript.trim()) {
+            dispatch({ type: 'SET_STATUS', status: 'listening' });
+            dispatch({
+              type: 'ADD_TRANSCRIPT',
+              turn: { role: 'user', content: transcript.trim(), timestamp: new Date().toISOString(), turnIndex: turnIndexRef.current++ },
+            });
+            sendToWs({ action: 'textMessage', text: transcript.trim() });
+          }
+        } else {
+          interimText += transcript;
         }
-        const int16 = new Int16Array(bytes.buffer);
-        const float32 = new Float32Array(int16.length);
-        for (let i = 0; i < int16.length; i++) {
-          float32[i] = int16[i]! / 32768.0;
-        }
-        const audioBuffer = audioContextPlayRef.current.createBuffer(1, float32.length, 24000);
-        audioBuffer.getChannelData(0).set(float32);
-        const source = audioContextPlayRef.current.createBufferSource();
-        source.buffer = audioBuffer;
-        source.connect(audioContextPlayRef.current.destination);
-        await new Promise<void>((resolve) => {
-          source.onended = () => resolve();
-          source.start();
-        });
-      } catch { /* skip corrupted chunks */ }
-    }
-
-    isPlayingRef.current = false;
-    dispatch({ type: 'SET_STATUS', status: 'connected' });
-  }, []);
-
-  const sendAudioBuffer = useCallback(() => {
-    if (audioBufferRef.current.length === 0) return;
-
-    const totalLength = audioBufferRef.current.reduce((sum, arr) => sum + arr.length, 0);
-    const combined = new Int16Array(totalLength);
-    let offset = 0;
-    for (const chunk of audioBufferRef.current) {
-      combined.set(chunk, offset);
-      offset += chunk.length;
-    }
-    audioBufferRef.current = [];
-
-    // Convert to base64
-    const uint8 = new Uint8Array(combined.buffer);
-    let binaryStr = '';
-    for (let i = 0; i < uint8.length; i++) {
-      binaryStr += String.fromCharCode(uint8[i]!);
-    }
-    const base64 = btoa(binaryStr);
-
-    sendToWs({ action: 'audioChunk', audio: base64, is_final: true });
-    dispatch({ type: 'SET_STATUS', status: 'listening' });
-  }, [sendToWs]);
-
-  const processAudioFrame = useCallback((float32Data: Float32Array) => {
-    const int16Data = new Int16Array(float32Data.length);
-    for (let i = 0; i < float32Data.length; i++) {
-      const s = Math.max(-1, Math.min(1, float32Data[i]!));
-      int16Data[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-    }
-
-    let sum = 0;
-    for (let i = 0; i < float32Data.length; i++) {
-      sum += float32Data[i]! * float32Data[i]!;
-    }
-    const rms = Math.sqrt(sum / float32Data.length);
-    const now = Date.now();
-
-    if (rms > SILENCE_THRESHOLD) {
-      if (!isSpeakingRef.current) {
-        isSpeakingRef.current = true;
+      }
+      if (interimText) {
         dispatch({ type: 'SET_STATUS', status: 'speaking' });
       }
-      silenceStartRef.current = now;
-      audioBufferRef.current.push(int16Data);
-    } else {
-      if (isSpeakingRef.current) {
-        audioBufferRef.current.push(int16Data);
-        if (now - silenceStartRef.current > SILENCE_DURATION_MS) {
-          isSpeakingRef.current = false;
-          sendAudioBuffer();
-        }
+    };
+
+    recognition.onend = () => {
+      // Auto-restart if still in session
+      if (isListeningRef.current && wsRef.current?.readyState === WebSocket.OPEN) {
+        try { recognition.start(); } catch { /* */ }
       }
-    }
-  }, [sendAudioBuffer]);
+    };
 
-  const startMicrophone = useCallback(async () => {
+    recognition.onerror = (e: { error: string }) => {
+      if (e.error === 'not-allowed') {
+        dispatch({ type: 'SET_ERROR', error: 'マイクへのアクセスが許可されませんでした' });
+      }
+      // 'no-speech' and 'aborted' are recoverable - onend will restart
+    };
+
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { sampleRate: 16000, channelCount: 1, echoCancellation: true, noiseSuppression: true },
-      });
-      mediaStreamRef.current = stream;
-
-      const audioContext = new AudioContext({ sampleRate: 16000 });
-      audioContextRef.current = audioContext;
-      const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      processor.onaudioprocess = (e) => {
-        const inputData = e.inputBuffer.getChannelData(0);
-        processAudioFrame(inputData);
-      };
-
-      source.connect(processor);
-      processor.connect(audioContext.destination);
+      recognition.start();
+      recognitionRef.current = recognition;
+      isListeningRef.current = true;
+      dispatch({ type: 'SET_STATUS', status: 'connected' });
     } catch {
-      dispatch({ type: 'SET_ERROR', error: 'マイクへのアクセスが許可されませんでした' });
+      dispatch({ type: 'SET_ERROR', error: '音声認識の開始に失敗しました' });
     }
-  }, [processAudioFrame]);
+  }, [sendToWs]);
 
   const handleServerMessage = useCallback((data: Record<string, unknown>) => {
     const type = data.type as string;
@@ -248,7 +180,7 @@ export function useVoiceChat() {
       case 'sessionStarted':
         dispatch({ type: 'SET_SESSION', sessionId: data.session_id as string });
         dispatch({ type: 'SET_STATUS', status: 'connected' });
-        startMicrophone();
+        startSpeechRecognition();
         // Start duration timer
         startTimeRef.current = Date.now();
         durationTimerRef.current = window.setInterval(() => {
@@ -260,23 +192,10 @@ export function useVoiceChat() {
         }, 1000);
         break;
 
-      case 'audioResponse':
-        dispatch({ type: 'SET_STATUS', status: 'listening' });
-        if (data.audio) {
-          audioPlayQueueRef.current.push(data.audio as string);
-          playNextAudioChunk();
-        }
-        break;
-
       case 'transcript': {
         const role = data.role as 'user' | 'assistant';
         const content = data.content as string;
-        if (role === 'user') {
-          dispatch({
-            type: 'ADD_TRANSCRIPT',
-            turn: { role, content, timestamp: new Date().toISOString(), turnIndex: turnIndexRef.current++ },
-          });
-        } else if (role === 'assistant') {
+        if (role === 'assistant') {
           if (data.partial) {
             dispatch({ type: 'UPDATE_LAST_TRANSCRIPT', content });
           } else {
@@ -293,6 +212,10 @@ export function useVoiceChat() {
         dispatch({ type: 'SET_STATUS', status: 'connected' });
         break;
 
+      case 'expenseSaved':
+        // Could show a toast notification
+        break;
+
       case 'conversationEndRequested':
         endSession();
         break;
@@ -306,7 +229,7 @@ export function useVoiceChat() {
         dispatch({ type: 'RESET' });
         break;
     }
-  }, [startMicrophone, playNextAudioChunk, cleanup]);
+  }, [startSpeechRecognition, cleanup]);
 
   const startSession = useCallback(async () => {
     dispatch({ type: 'SET_STATUS', status: 'connecting' });
@@ -336,7 +259,6 @@ export function useVoiceChat() {
       };
 
       ws.onclose = () => {
-        // If unexpectedly closed while active
         if (wsRef.current) {
           cleanup();
           dispatch({ type: 'RESET' });
@@ -351,6 +273,7 @@ export function useVoiceChat() {
 
   const endSession = useCallback(() => {
     dispatch({ type: 'SET_STATUS', status: 'ending' });
+    isListeningRef.current = false;
     sendToWs({ action: 'endSession' });
     setTimeout(() => {
       cleanup();

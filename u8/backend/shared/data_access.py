@@ -47,6 +47,15 @@ class DataAccess:
         )
         return resp.get("Items", [])
 
+    def query_by_prefix_latest(self, pk: str, sk_prefix: str, limit: int = 20) -> list:
+        """Query items by SK prefix, returning most recent first (descending)."""
+        resp = self._table.query(
+            KeyConditionExpression=Key("PK").eq(pk) & Key("SK").begins_with(sk_prefix),
+            Limit=limit,
+            ScanIndexForward=False,
+        )
+        return resp.get("Items", [])
+
     def query_between(self, pk: str, sk_start: str, sk_end: str) -> list:
         resp = self._table.query(
             KeyConditionExpression=Key("PK").eq(pk) & Key("SK").between(sk_start, sk_end),

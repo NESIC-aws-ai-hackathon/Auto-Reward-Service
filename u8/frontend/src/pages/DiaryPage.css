@@ -74,3 +74,17 @@
 }
 .highlight-grid b { display: block; font-size: 14px; color: var(--text); margin: 5px 0; }
 .highlight-grid small { display: block; font-size: 9px; color: #7d7467; }
+
+/* === Life log CTA === */
+.life-log-cta {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: #f3f9f1;
+  color: #4a7a4d;
+  border: 1px solid #cde8ce;
+  border-radius: 14px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.life-log-cta:hover { background: #e6f2e3; }

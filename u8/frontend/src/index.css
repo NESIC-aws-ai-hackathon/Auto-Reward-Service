@@ -85,11 +85,11 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 .brand h1 span { font-size: 18px; }
 .brand p { margin: 6px 0 0; font-size: 11px; color: #655d52; font-weight: 600; white-space: nowrap; }
 
-.header-actions { display: flex; gap: 10px; }
+.header-actions { display: flex; gap: 8px; }
 .icon-button {
-  position: relative; width: 44px; height: 44px; border-radius: 50%;
+  position: relative; width: 40px; height: 40px; border-radius: 50%;
   background: rgba(255, 255, 255, 0.85); box-shadow: 0 4px 14px rgba(87, 68, 38, 0.12);
-  display: grid; place-items: center; font-size: 20px;
+  display: grid; place-items: center; font-size: 18px;
 }
 .icon-button .dot {
   position: absolute; width: 8px; height: 8px; border-radius: 50%;

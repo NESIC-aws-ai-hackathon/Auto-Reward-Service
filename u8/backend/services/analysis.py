@@ -114,8 +114,9 @@ class AnalysisService:
             # Extract life logs
             life_logs = self._extract_life_logs(conversation_text)
 
-            # Save life logs and expenses
-            today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            # Save life logs and expenses (日付の境界はJSTで判断)
+            jst = timezone(timedelta(hours=9))
+            today = datetime.now(jst).strftime("%Y-%m-%d")
             self._save_life_logs(user_id, today, life_logs)
 
             # Mark job completed

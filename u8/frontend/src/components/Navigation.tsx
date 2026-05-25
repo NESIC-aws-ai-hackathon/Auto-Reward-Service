@@ -15,7 +15,7 @@ export function Navigation() {
         <span>💬</span><small>Chat</small>
       </NavLink>
       <NavLink to="/dashboard" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
-        <span>📊</span><small>ダッシュボード</small>
+        <span>📊</span><small>家計簿</small>
       </NavLink>
       <button className="tab center" onClick={handleCenterClick} type="button">
         <img src="/assets/furemaru-avatar.png" alt="ふれまーるちゃん" />
@@ -25,9 +25,6 @@ export function Navigation() {
       </NavLink>
       <NavLink to="/recovery" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
         <span>💞</span><small>回復</small>
-      </NavLink>
-      <NavLink to="/settings" className={({ isActive }) => `tab${isActive ? ' active' : ''}`}>
-        <span>⚙️</span><small>設定</small>
       </NavLink>
     </nav>
   );

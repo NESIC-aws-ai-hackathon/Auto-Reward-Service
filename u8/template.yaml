@@ -139,7 +139,7 @@ Resources:
       FunctionName: !Sub ars-u8-api-${Env}
       Handler: handlers.api_handler.lambda_handler
       CodeUri: backend/
-      MemorySize: 256
+      MemorySize: 512
       Timeout: 29
       Environment:
         Variables:
@@ -149,8 +149,8 @@ Resources:
           COGNITO_USER_POOL_ID: !Ref UserPool
           COGNITO_CLIENT_ID: !Ref UserPoolClient
           COGNITO_REGION: !Ref AWS::Region
-          BEDROCK_REGION: us-east-1
-          BEDROCK_MODEL_ID: anthropic.claude-3-5-sonnet-20241022-v2:0
+          BEDROCK_REGION: ap-northeast-1
+          BEDROCK_MODEL_ID: jp.anthropic.claude-haiku-4-5-20251001-v1:0
           RAKUTEN_APP_ID: ""
           YOUTUBE_API_KEY: ""
           HOTPEPPER_API_KEY: ""
@@ -165,6 +165,11 @@ Resources:
                 - bedrock:InvokeModel
                 - bedrock:Converse
               Resource: '*'
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource:
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ars/*'
       Events:
         SettingsGet:
           Type: HttpApi
@@ -446,8 +451,10 @@ Resources:
           TABLE_NAME: !Ref ArsTableName
           ENV: !Ref Env
           ANALYSIS_QUEUE_URL: !Ref AnalysisQueue
-          BEDROCK_REGION: us-east-1
-          NOVA_SONIC_MODEL_ID: amazon.nova-sonic-v1:0
+          BEDROCK_REGION: ap-northeast-1
+          BEDROCK_MODEL_ID: jp.anthropic.claude-haiku-4-5-20251001-v1:0
+          NOVA_SONIC_MODEL_ID: amazon.nova-2-sonic-v1:0
+          NOVA_SONIC_REGION: us-east-1
           COGNITO_USER_POOL_ID: !Ref UserPool
           COGNITO_CLIENT_ID: !Ref UserPoolClient
           COGNITO_REGION: !Ref AWS::Region
@@ -492,8 +499,8 @@ Resources:
         Variables:
           TABLE_NAME: !Ref ArsTableName
           ENV: !Ref Env
-          BEDROCK_REGION: us-east-1
-          BEDROCK_MODEL_ID: anthropic.claude-3-5-sonnet-20241022-v2:0
+          BEDROCK_REGION: ap-northeast-1
+          BEDROCK_MODEL_ID: jp.anthropic.claude-haiku-4-5-20251001-v1:0
           VAPID_PRIVATE_KEY: !Ref VapidPrivateKey
           VAPID_PUBLIC_KEY: !Ref VapidPublicKey
           VAPID_SUBJECT: !Ref VapidSubject
@@ -524,7 +531,7 @@ Resources:
         ProactiveMessageSchedule:
           Type: Schedule
           Properties:
-            Schedule: rate(1 hour)
+            Schedule: rate(30 minutes)
             Input: '{"trigger": "proactive_messages"}'
 
   # ─── S3: Frontend Hosting ───

@@ -70,3 +70,40 @@
   .metrics strong { font-size: 20px; }
   .dashboard-grid { grid-template-columns: 1fr; }
 }
+
+/* ── Trend Chart ── */
+.trend-chart { display: flex; align-items: flex-end; justify-content: space-between; gap: 6px; height: 140px; padding: 0 4px; }
+.trend-col { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.trend-bar-wrap { width: 100%; height: 100px; display: flex; align-items: flex-end; justify-content: center; }
+.trend-bar { width: 70%; min-height: 4px; border-radius: 6px 6px 0 0; transition: height 0.4s ease; }
+.trend-bar.pos { background: linear-gradient(180deg, #a4d99a 0%, #83c58c 100%); }
+.trend-bar.neg { background: linear-gradient(180deg, #f5b8a6 0%, #d97757 100%); }
+.trend-label { font-size: 10px; color: #8e8270; margin-top: 4px; }
+.trend-val { font-size: 9px; color: #6b6258; font-style: normal; }
+.trend-val.neg { color: #d97757; }
+
+/* ── Expense List ── */
+.expense-list { list-style: none; padding: 0; margin: 0; }
+.expense-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid rgba(232, 223, 206, 0.6); }
+.expense-item.empty { justify-content: center; flex-direction: column; padding: 24px; text-align: center; }
+.exp-icon { font-size: 22px; }
+.exp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.exp-item-name { font-size: 14px; color: #4a4135; }
+.exp-excuse { font-size: 11px; color: #7fa05f; background: #f3f8ec; padding: 2px 8px; border-radius: 12px; align-self: flex-start; }
+.exp-meta { font-size: 10px; color: #a69c8c; }
+.exp-amount { font-style: normal; font-weight: 700; color: #4a4135; font-size: 14px; }
+.exp-actions { display: flex; gap: 4px; }
+.exp-actions button { background: none; border: none; padding: 6px 8px; cursor: pointer; font-size: 14px; opacity: 0.6; border-radius: 8px; }
+.exp-actions button:hover { opacity: 1; background: rgba(232, 223, 206, 0.4); }
+.btn-add-expense { background: #83c58c; color: #fff; border: none; padding: 6px 12px; border-radius: 14px; font-size: 12px; font-weight: 700; cursor: pointer; }
+
+/* ── Modal ── */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.modal-card { background: #fff; border-radius: 20px; padding: 20px; width: 100%; max-width: 360px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.2); }
+.modal-card h3 { margin: 0 0 12px; color: #4a4135; }
+.modal-card label { display: block; margin-bottom: 10px; font-size: 12px; color: #6b6258; font-weight: 700; }
+.modal-card input, .modal-card select { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; border: 1px solid #e3dac1; border-radius: 10px; font-size: 14px; box-sizing: border-box; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.modal-actions button { padding: 8px 16px; border: 1px solid #e3dac1; background: #fff; border-radius: 12px; cursor: pointer; font-size: 13px; }
+.modal-actions button.primary { background: #83c58c; color: #fff; border-color: #83c58c; font-weight: 700; }
+.modal-actions button:disabled { opacity: 0.5; cursor: not-allowed; }

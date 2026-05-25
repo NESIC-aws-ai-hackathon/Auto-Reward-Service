@@ -54,3 +54,19 @@
 @media (max-width: 390px) {
   .recovery-grid { grid-template-columns: 1fr; }
 }
+
+/* === Chat back link (横断的体験：他画面 → Chat 戻り導線) === */
+.chat-back-link {
+  display: inline-block;
+  margin-top: 8px;
+  margin-left: 8px;
+  padding: 8px 14px;
+  background: #fff;
+  color: #4a7a4d;
+  border: 1px solid #cde8ce;
+  border-radius: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.chat-back-link:hover { background: #f3f9f1; }

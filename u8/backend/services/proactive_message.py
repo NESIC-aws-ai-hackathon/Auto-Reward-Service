@@ -68,8 +68,8 @@ class ProactiveMessageService:
         now_jst = datetime.now(JST)
         hour = now_jst.hour
 
-        # Only send between 10:00-21:00 JST
-        if hour < 10 or hour >= 21:
+        # Send between 8:00-23:00 JST (友達感覚で頻度up)
+        if hour < 8 or hour >= 23:
             return {"sent": 0, "reason": "outside_hours"}
 
         # Get all users with push subscriptions
@@ -114,24 +114,24 @@ class ProactiveMessageService:
         return user_ids
 
     def _should_send_message(self, user_id: str, hour: int) -> bool:
-        """Determine if we should send a message now (max 3 per day, spaced 3+ hours apart)."""
+        """友達感覚: 1日5回まで、1.5時間以上の間隔、75%確率。"""
         today = datetime.now(JST).strftime("%Y-%m-%d")
         prefix = f"PROACTIVE_MSG#{today}"
 
         existing = self.da.query_by_prefix(f"USER#{user_id}", prefix, limit=10)
 
-        if len(existing) >= 3:
+        if len(existing) >= 5:
             return False
 
-        # Check last message time
+        # Check last message time (1.5時間 ≒ 2時間粒度で hour 差1以下は弾く)
         if existing:
             last = existing[-1]
             last_hour = int(last.get("hour", 0))
-            if abs(hour - last_hour) < 3:
+            if hour - last_hour < 2:
                 return False
 
-        # Random chance (60%) to feel natural, not robotic
-        return random.random() < 0.6
+        # Random chance to feel natural
+        return random.random() < 0.75
 
     def _generate_message(self, user_id: str, hour: int) -> str | None:
         """Generate a contextual message based on time and user state."""
@@ -158,18 +158,18 @@ class ProactiveMessageService:
 
     def _check_special_conditions(self, user_id: str, display_name: str) -> str | None:
         """Check for special conditions that warrant specific messages."""
-        # Check if user hasn't talked in 2+ days
+        # Check if user hasn't talked in 2+ days (CHAT#プレフィクスで判定)
         from datetime import date
         today = date.today()
         two_days_ago = (today - timedelta(days=2)).isoformat()
 
-        recent_turns = self.da.query_by_prefix(
+        recent_chats = self.da.query_by_prefix(
             f"USER#{user_id}",
-            f"CONVERSATION_TURN#{two_days_ago}",
+            f"CHAT#{two_days_ago}",
             limit=1,
         )
 
-        if not recent_turns:
+        if not recent_chats:
             template = random.choice(NO_TALK_MESSAGES)
             return template.format(display_name=display_name)
 
@@ -184,13 +184,20 @@ class ProactiveMessageService:
         return None
 
     def _save_and_notify(self, user_id: str, message: str) -> None:
-        """Save the message as a conversation turn and send push notification."""
+        """CHAT#として保存することでチャット履歴に表示され、そこから会話を続けられる。"""
         from datetime import datetime, timezone
-        now = datetime.now(timezone.utc)
-        now_jst = now.astimezone(JST)
-        timestamp = now.isoformat()
+        now_jst = datetime.now(JST)
+        timestamp = now_jst.isoformat()
 
-        # Save as conversation turn (appears in chat)
+        # CHAT# プレフィクスで保存（ChatPageで通常の会話として表示される）
+        self.da.put_item(f"USER#{user_id}", f"CHAT#{timestamp}", {
+            "role": "assistant",
+            "text": message,
+            "timestamp": timestamp,
+            "proactive": True,
+        })
+
+        # 履歴互換のため CONVERSATION_TURN# にも残す（既存UIが参照していた場合に備える）
         self.da.put_item(f"USER#{user_id}", f"CONVERSATION_TURN#{timestamp}", {
             "session_id": "proactive",
             "role": "assistant",

@@ -4,6 +4,7 @@ Routes: $connect, $disconnect, startSession, audioChunk, textMessage, endSession
 """
 import json
 import traceback
+from decimal import Decimal
 import boto3
 
 from shared.config import get_config
@@ -17,6 +18,7 @@ def lambda_handler(event, context):
     """Main WebSocket route handler."""
     route_key = event.get("requestContext", {}).get("routeKey", "")
     connection_id = event.get("requestContext", {}).get("connectionId", "")
+    print(f"[VoiceGW] route={route_key} conn={connection_id}")
 
     try:
         if route_key == "$connect":
@@ -85,8 +87,10 @@ def handle_disconnect(event, connection_id):
 
 def handle_start_session(event, connection_id):
     """Start a new Nova Sonic voice session."""
+    print(f"[VoiceGW] startSession conn={connection_id}")
     conn = da.get_item(f"WS_CONNECTION#{connection_id}", "META#")
     if not conn:
+        print(f"[VoiceGW] startSession: no connection record found")
         return {"statusCode": 403}
 
     user_id = conn["user_id"]
@@ -110,6 +114,7 @@ def handle_start_session(event, connection_id):
 
 def handle_audio_chunk(event, connection_id):
     """Process audio chunk from client, invoke Nova Sonic, stream response back."""
+    print(f"[VoiceGW] audioChunk conn={connection_id}")
     conn = da.get_item(f"WS_CONNECTION#{connection_id}", "META#")
     if not conn:
         return {"statusCode": 403}
@@ -228,21 +233,31 @@ def _abort_session(user_id: str, session_id: str):
         pass
 
 
+class _DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, Decimal):
+            return int(o) if o == int(o) else float(o)
+        return super().default(o)
+
+
 def _send_to_client(connection_id: str, data: dict):
     """Send message back to WebSocket client via API Gateway Management API."""
     endpoint = config.get("websocket_api_endpoint", "")
     if not endpoint:
+        print(f"[VoiceGW] _send_to_client: no endpoint configured")
         return
 
     client = boto3.client("apigatewaymanagementapi", endpoint_url=endpoint)
     try:
         client.post_to_connection(
             ConnectionId=connection_id,
-            Data=json.dumps(data, ensure_ascii=False).encode("utf-8"),
+            Data=json.dumps(data, ensure_ascii=False, cls=_DecimalEncoder).encode("utf-8"),
         )
     except client.exceptions.GoneException:
         # Connection no longer exists
-        pass
+        print(f"[VoiceGW] _send_to_client: connection gone")
+    except Exception as e:
+        print(f"[VoiceGW] _send_to_client error: {e}")
 
 
 def _parse_body(event) -> dict:

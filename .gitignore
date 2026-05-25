@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Git backup (corrupted)
+.git_backup/
+
 # Build outputs
 .aws-sam/
 u8/.aws-sam/

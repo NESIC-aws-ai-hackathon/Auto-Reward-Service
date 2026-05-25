@@ -11,11 +11,11 @@ class BedrockClient:
         config = get_config()
         self._client = boto3.client(
             "bedrock-runtime",
-            region_name=config.get("bedrock_region", "us-east-1"),
+            region_name=config.get("bedrock_region", "ap-northeast-1"),
         )
         self._model_id = config.get(
             "bedrock_model_id",
-            "anthropic.claude-3-5-sonnet-20241022-v2:0",
+            "jp.anthropic.claude-haiku-4-5-20251001-v1:0",
         )
 
     def invoke(self, prompt: str, system: str = None, max_tokens: int = 2000, temperature: float = 0.3) -> str:

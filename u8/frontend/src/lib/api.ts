@@ -1,3 +1,5 @@
+import { getJstDateString } from './datetime';
+
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export class ApiError extends Error {
@@ -11,6 +13,15 @@ export interface Settings {
   diary_time: string;
   notification_enabled: boolean;
   monthly_surplus: number;
+}
+
+export interface ChatSuggestion {
+  type: 'product' | 'video' | 'wishlist' | 'restaurant';
+  title: string;
+  url: string;
+  image?: string;
+  price?: number | null;
+  reason?: string;
 }
 
 export class ApiClient {
@@ -138,7 +149,7 @@ export class ApiClient {
   // ─── Diary ───
 
   getDiaryList(): Promise<{
-    entries: { date: string; content: string; life_log_count: number }[];
+    entries: { date: string; content: string; life_log_count: number; chat_count?: number }[];
   }> {
     return this.request('/api/diary');
   }
@@ -147,7 +158,8 @@ export class ApiClient {
     date: string;
     content: string | null;
     life_log_count: number;
-    life_logs: { category: string; content: string }[];
+    chat_count?: number;
+    life_logs: { category: string; content: string; emotion?: string; timestamp?: string }[];
     stress: { level: number; mood: string } | null;
   }> {
     return this.request(`/api/diary/${date}`);
@@ -171,10 +183,105 @@ export class ApiClient {
     return this.request(`/api/chat/messages${qs ? '?' + qs : ''}`);
   }
 
-  sendChatMessage(content: string): Promise<{ reply: string; timestamp: string }> {
+  sendChatMessage(content: string): Promise<{
+    reply: string;
+    timestamp: string;
+    intent?: string;
+    expense_saved?: boolean;
+    suggestion?: ChatSuggestion;
+  }> {
     return this.request('/api/chat/send', {
       method: 'POST',
       body: JSON.stringify({ content }),
+    });
+  }
+
+  // ─── Expenses ───
+
+  getExpenses(limit?: number, month?: string): Promise<{
+    expenses: {
+      id: string;
+      item: string;
+      amount: number;
+      category: string;
+      category_label?: string;
+      excuse_tag?: string;
+      source: string;
+      store: string;
+      timestamp: string;
+    }[];
+  }> {
+    const params = new URLSearchParams();
+    if (limit) params.set('limit', String(limit));
+    if (month) params.set('month', month);
+    return this.request(`/api/expenses?${params.toString()}`);
+  }
+
+  postExpense(data: { item: string; amount: number; category?: string; store?: string }): Promise<{
+    success: boolean;
+    id: string;
+    excuse_tag: string;
+    category: string;
+  }> {
+    return this.request('/api/expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateExpense(id: string, data: { item?: string; amount?: number; category?: string; excuse_tag?: string; store?: string }): Promise<{ success: boolean }> {
+    return this.request(`/api/expenses/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteExpense(id: string): Promise<{ success: boolean }> {
+    return this.request(`/api/expenses/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  getExpenseSummary(month?: string): Promise<{
+    month: string;
+    total_spent: number;
+    expense_count: number;
+    monthly_surplus: number;
+    carryover_in?: number;
+    balance?: number;
+    balance_for_chart?: number;
+    remaining: number;
+    trend?: {
+      month: string;
+      total_spent: number;
+      expense_count: number;
+      monthly_surplus: number;
+      carryover_in: number;
+      balance: number;
+      balance_for_chart: number;
+      carryover_out: number;
+    }[];
+  }> {
+    const params = new URLSearchParams();
+    if (month) params.set('month', month);
+    return this.request(`/api/expenses/summary?${params.toString()}`);
+  }
+
+  uploadReceipt(imageBase64: string, mediaType?: string, note?: string): Promise<{
+    success: boolean;
+    reply: string;
+    items: { item: string; amount: number; category: string }[];
+    total: number;
+    store: string;
+    date: string;
+  }> {
+    return this.request('/api/expenses/receipt', {
+      method: 'POST',
+      body: JSON.stringify({
+        image: imageBase64,
+        media_type: mediaType || 'image/jpeg',
+        note: note || '',
+      }),
     });
   }
 
@@ -209,6 +316,42 @@ export class ApiClient {
     return this.request(`/api/search/youtube?keyword=${encodeURIComponent(keyword)}`);
   }
 
+  // ─── Wishlist (Amazon ほしいものリスト) ───
+
+  getWishlistSources(): Promise<{ sources: { wishlist_source_id: string; wishlist_url: string; display_name?: string; last_sync_at?: string; item_count?: number }[] }> {
+    return this.request('/api/wishlist/sources');
+  }
+
+  registerWishlist(url: string, displayName?: string): Promise<{ success?: boolean; source_id?: string; error?: string; message?: string }> {
+    return this.request('/api/wishlist/register', {
+      method: 'POST',
+      body: JSON.stringify({ url, display_name: displayName || '' }),
+    });
+  }
+
+  syncWishlist(sourceId?: string): Promise<{ synced?: number; items?: number; error?: string; message?: string }> {
+    return this.request('/api/wishlist/sync', {
+      method: 'POST',
+      body: JSON.stringify(sourceId ? { source_id: sourceId } : {}),
+    });
+  }
+
+  getWishlistItems(status?: string): Promise<{
+    items: {
+      wishlist_item_id: string;
+      product_title: string;
+      product_url: string;
+      product_image_url: string;
+      price?: number;
+      desire_aging_days?: number;
+      status?: string;
+    }[];
+  }> {
+    const params = new URLSearchParams();
+    if (status) params.set('status', status);
+    return this.request(`/api/wishlist/items?${params.toString()}`);
+  }
+
   // ─── Health Data ───
 
   getHealthData(date?: string): Promise<{
@@ -220,7 +363,7 @@ export class ApiClient {
     mindful_minutes: number | null;
     mood_history: { time: string; level: number; note?: string }[];
   }> {
-    const d = date || new Date().toISOString().slice(0, 10);
+    const d = date || getJstDateString();
     return this.request(`/api/health?date=${d}`);
   }
 
@@ -256,5 +399,21 @@ export class ApiClient {
 
   getOnboardingStatus(): Promise<{ completed: boolean; step?: string }> {
     return this.request('/api/onboarding');
+  }
+
+  // ─── API Connection Test ───
+
+  testConnection(service: 'bedrock' | 'rakuten' | 'hotpepper' | 'youtube'): Promise<{
+    ok: boolean;
+    service: string;
+    count?: number;
+    sample?: string;
+    model?: string;
+    error?: string;
+  }> {
+    return this.request('/api/settings/test-connection', {
+      method: 'POST',
+      body: JSON.stringify({ service }),
+    });
   }
 }

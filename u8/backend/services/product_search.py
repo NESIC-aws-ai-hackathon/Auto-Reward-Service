@@ -9,6 +9,7 @@ import urllib.request
 import urllib.parse
 import urllib.error
 from shared.config import get_config
+from shared.secrets import get_secret
 
 RAKUTEN_SEARCH_URL = "https://app.rakuten.co.jp/services/api/IchibaItem/Search/20170706"
 MAX_RETRIES = 3
@@ -18,7 +19,7 @@ BACKOFF_BASE = 1.0
 class ProductSearchService:
     def __init__(self):
         self.config = get_config()
-        self._app_id = os.environ.get("RAKUTEN_APP_ID", "")
+        self._app_id = os.environ.get("RAKUTEN_APP_ID", "") or get_secret("ars/rakuten", "app_id")
 
     def search(self, keyword: str = "", category: str = "", max_price: str = "") -> list[dict]:
         """Search Rakuten Ichiba for products."""

@@ -1,7 +1,14 @@
-import { Outlet } from 'react-router-dom';
+import { useState } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { Navigation } from './Navigation';
+import { NotificationPanel } from './NotificationPanel';
+import { FortuneModal } from './FortuneModal';
 
 export function AppLayout() {
+  const navigate = useNavigate();
+  const [showNotif, setShowNotif] = useState(false);
+  const [showFortune, setShowFortune] = useState(false);
+
   return (
     <div className="phone-shell">
       <div className="phone-inner">
@@ -14,10 +21,15 @@ export function AppLayout() {
             </div>
           </div>
           <div className="header-actions">
-            <button className="icon-button" aria-label="通知">🔔<i className="dot"></i></button>
-            <button className="icon-button" aria-label="メニュー">✨</button>
+            <button className="icon-button" aria-label="今日のご褒美占い" onClick={() => setShowFortune(true)}>✨</button>
+            <button className="icon-button" aria-label="通知" onClick={() => setShowNotif(v => !v)}>🔔<i className="dot"></i></button>
+            <button className="icon-button" aria-label="設定" onClick={() => navigate('/settings')}>⚙️</button>
           </div>
         </header>
+
+        {showNotif && <NotificationPanel onClose={() => setShowNotif(false)} />}
+        {showFortune && <FortuneModal onClose={() => setShowFortune(false)} />}
+
         <main className="app-main">
           <Outlet />
         </main>

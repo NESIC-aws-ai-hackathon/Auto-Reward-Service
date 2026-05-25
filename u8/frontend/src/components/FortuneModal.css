@@ -1,0 +1,138 @@
+.fortune-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.fortune-modal {
+  width: 88%;
+  max-width: 340px;
+  background: linear-gradient(145deg, #fffdf7, #fff8ee);
+  border-radius: 28px;
+  padding: 32px 24px;
+  box-shadow: 0 20px 60px rgba(87, 68, 38, 0.25);
+  text-align: center;
+  animation: scaleIn 0.3s ease;
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.fortune-spinning {
+  padding: 40px 0;
+}
+
+.fortune-star {
+  font-size: 60px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.2); }
+  to { transform: rotate(360deg) scale(1); }
+}
+
+.fortune-spinning p {
+  margin-top: 16px;
+  font-size: 16px;
+  color: #7a7265;
+  font-weight: 600;
+}
+
+.fortune-result {
+  position: relative;
+}
+
+.fortune-close {
+  position: absolute;
+  top: -12px;
+  right: -4px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.06);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: #999;
+  cursor: pointer;
+}
+
+.fortune-emoji {
+  font-size: 56px;
+  margin-bottom: 8px;
+}
+
+.fortune-result h2 {
+  margin: 0 0 16px;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.fortune-card {
+  background: rgba(104, 169, 119, 0.08);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.fortune-category {
+  font-size: 12px;
+  color: var(--green, #68a977);
+  font-weight: 700;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.fortune-tip {
+  margin: 0;
+  font-size: 15px;
+  color: #3d3a35;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+.fortune-ai {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(255, 183, 77, 0.08);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  text-align: left;
+}
+
+.fortune-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.fortune-ai p {
+  margin: 0;
+  font-size: 13px;
+  color: #5a5347;
+  line-height: 1.5;
+}
+
+.fortune-btn {
+  width: 100%;
+  padding: 14px;
+  border-radius: 14px;
+  background: var(--green, #68a977);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(104, 169, 119, 0.3);
+}

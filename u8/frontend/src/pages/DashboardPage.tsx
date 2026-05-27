@@ -186,16 +186,35 @@ export function DashboardPage() {
             </strong>
           </article>
         </div>
+        {/* Progress bar */}
+        {totalBudget > 0 && (
+          <div style={{ marginTop: 12, padding: '0 4px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#8e8270', marginBottom: 4 }}>
+              <span>¥0</span>
+              <span>{Math.min(100, Math.round((spent / totalBudget) * 100))}% 使用</span>
+              <span>¥{totalBudget.toLocaleString()}</span>
+            </div>
+            <div style={{ height: 10, borderRadius: 5, background: '#f0ebe3', overflow: 'hidden', position: 'relative' }}>
+              <div style={{
+                height: '100%', borderRadius: 5, transition: 'width 0.5s ease',
+                width: `${Math.min(100, (spent / totalBudget) * 100)}%`,
+                background: spent / totalBudget > 1 ? 'linear-gradient(90deg, #f5b8a6, #d97757)' :
+                  spent / totalBudget > 0.8 ? 'linear-gradient(90deg, #ffd58a, #e8a040)' :
+                  'linear-gradient(90deg, #a4d99a, #83c58c)',
+              }} />
+            </div>
+          </div>
+        )}
       </section>
 
-      {/* Monthly Trend Chart */}
+      {/* Monthly Trend Chart — 支出 vs 余り 比較 */}
       {trend.length > 0 && (
         <section className="chart-card" style={{ padding: 16 }}>
-          <h2>📊 月次の余り推移（6ヶ月）</h2>
+          <h2>📊 月別 支出 vs 余り</h2>
           <p style={{ fontSize: 11, color: '#8e8270', margin: '4px 0 12px' }}>
-            マイナスは翌月に繰り越しません（甘やかしモード🌱）・棒をタップで詳細
+            棒をタップで月を切替・マイナスは翌月に繰り越しません🌱
           </p>
-          <MonthlyTrendChart trend={trend} onSelectMonth={(m) => setMonth(m)} selectedMonth={month} />
+          <MonthlyCompareChart trend={trend} onSelectMonth={(m) => setMonth(m)} selectedMonth={month} />
         </section>
       )}
 
@@ -231,7 +250,7 @@ export function DashboardPage() {
       {/* Expense List with edit/delete - グループ化表示 */}
       <section className="activity-list">
         <div className="section-title-row">
-          <h2>🦥 今月の支出 ({expenses.length}件)</h2>
+          <h2>🦥 {isCurrentMonth ? '今月' : month.replace('-', '年') + '月'}の支出 ({expenses.length}件)</h2>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               className="btn-add-expense"
@@ -244,31 +263,50 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* カテゴリ別円グラフ風バー */}
-        {expenses.length > 0 && (
-          <div className="category-breakdown" style={{ padding: '8px 4px 16px' }}>
-            <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden', boxShadow: 'inset 0 0 0 1px #efe7d6' }}>
-              {CATEGORY_OPTIONS.map(opt => {
-                const sum = expenses.filter(e => e.category === opt.value).reduce((a, b) => a + b.amount, 0);
-                const total = expenses.reduce((a, b) => a + b.amount, 0) || 1;
-                const w = (sum / total) * 100;
-                if (w < 0.5) return null;
-                const color = ({
-                  recovery: '#f4b8b8', startup: '#ffd58a', maintenance: '#d6c5a8',
-                  investment: '#a8d6a8', social: '#b8c8f4', other: '#cfcfcf',
-                } as Record<string,string>)[opt.value];
-                return <span key={opt.value} style={{ width: `${w}%`, background: color }} title={`${opt.label}: ¥${sum.toLocaleString()}`} />;
-              })}
+        {/* カテゴリ別ドーナツ + 内訳 */}
+        {expenses.length > 0 && (() => {
+          const total = expenses.reduce((a, b) => a + b.amount, 0) || 1;
+          const catData = CATEGORY_OPTIONS.map(opt => ({
+            ...opt,
+            sum: expenses.filter(e => e.category === opt.value).reduce((a, b) => a + b.amount, 0),
+          })).filter(c => c.sum > 0);
+          const colors: Record<string, string> = {
+            recovery: '#f4b8b8', startup: '#ffd58a', maintenance: '#d6c5a8',
+            investment: '#a8d6a8', social: '#b8c8f4', other: '#cfcfcf',
+          };
+          let acc = 0;
+          const gradientStops = catData.map(c => {
+            const start = acc;
+            acc += (c.sum / total) * 100;
+            return `${colors[c.value] || '#ccc'} ${start}% ${acc}%`;
+          }).join(', ');
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 8px 16px' }}>
+              {/* Mini donut */}
+              <div style={{
+                width: 80, height: 80, borderRadius: '50%', flexShrink: 0,
+                background: `conic-gradient(${gradientStops})`,
+                display: 'grid', placeItems: 'center',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              }}>
+                <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#fffdf7', display: 'grid', placeItems: 'center' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#4a4135' }}>¥{total.toLocaleString()}</span>
+                </div>
+              </div>
+              {/* Category labels */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, fontSize: 12 }}>
+                {catData.map(c => (
+                  <div key={c.value} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 3, background: colors[c.value], flexShrink: 0 }} />
+                    <span style={{ color: '#6e6450', flex: 1 }}>{categoryIcon(c.value)} {c.label}</span>
+                    <strong style={{ color: '#4a4135' }}>¥{c.sum.toLocaleString()}</strong>
+                    <span style={{ fontSize: 10, color: '#a69c8c' }}>({Math.round((c.sum / total) * 100)}%)</span>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 8, fontSize: 11, color: '#6e6450' }}>
-              {CATEGORY_OPTIONS.map(opt => {
-                const sum = expenses.filter(e => e.category === opt.value).reduce((a, b) => a + b.amount, 0);
-                if (!sum) return null;
-                return <span key={opt.value}>{categoryIcon(opt.value)} {opt.label} ¥{sum.toLocaleString()}</span>;
-              })}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {groupByCategory ? (
           <div className="expense-groups">
@@ -332,7 +370,10 @@ export function DashboardPage() {
                 <div className="exp-main">
                   <b className="exp-item-name">{e.item}</b>
                   {e.excuse_tag && <span className="exp-excuse">{e.excuse_tag}</span>}
-                  <small className="exp-meta">{e.timestamp.slice(5, 10)} · {e.category_label || e.category}</small>
+                  <small className="exp-meta">
+                    {e.timestamp.slice(5, 10)} · {e.category_label || e.category}
+                    {e.source === 'chat' ? ' · 💬' : e.source === 'receipt' ? ' · 🧾' : ' · ✍️'}
+                  </small>
                 </div>
                 <em className="exp-amount">¥{e.amount.toLocaleString()}</em>
                 <div className="exp-actions">
@@ -393,41 +434,57 @@ export function DashboardPage() {
   );
 }
 
-function MonthlyTrendChart({ trend, onSelectMonth, selectedMonth }: { trend: TrendItem[]; onSelectMonth?: (m: string) => void; selectedMonth?: string }) {
-  const values = trend.map((t) => t.balance_for_chart);
-  const maxAbs = Math.max(1, ...values.map((v) => Math.abs(v)));
+function MonthlyCompareChart({ trend, onSelectMonth, selectedMonth }: { trend: TrendItem[]; onSelectMonth?: (m: string) => void; selectedMonth?: string }) {
+  const maxVal = Math.max(1, ...trend.map(t => Math.max(t.total_spent, Math.abs(t.balance_for_chart), t.monthly_surplus)));
   return (
-    <div className="trend-chart">
-      {trend.map((t) => {
-        const v = t.balance_for_chart;
-        const pct = Math.max(8, (Math.abs(v) / maxAbs) * 80);
-        const isNeg = v < 0;
-        const isSelected = t.month === selectedMonth;
-        return (
-          <div
-            key={t.month}
-            className="trend-col"
-            onClick={() => onSelectMonth?.(t.month)}
-            style={{ cursor: onSelectMonth ? 'pointer' : undefined, opacity: selectedMonth && !isSelected ? 0.55 : 1 }}
-          >
-            <div className="trend-bar-wrap">
-              <div
-                className={`trend-bar ${isNeg ? 'neg' : 'pos'}`}
-                style={{
-                  height: `${pct}%`,
-                  outline: isSelected ? '2px solid #7fa05f' : undefined,
-                  outlineOffset: 1,
-                }}
-                title={`${t.month}: ¥${v.toLocaleString()} (タップで詳細)`}
-              />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 14, fontSize: 11, color: '#6b6258', marginBottom: 6, justifyContent: 'center' }}>
+        <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#ffc784', marginRight: 4 }} />支出</span>
+        <span><i style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 3, background: '#83c58c', marginRight: 4 }} />余り</span>
+        <span style={{ borderBottom: '2px dashed #c5b89a', paddingBottom: 1 }}>予算</span>
+      </div>
+      <div className="trend-chart" style={{ height: 150 }}>
+        {trend.map((t) => {
+          const spentPct = Math.max(4, (t.total_spent / maxVal) * 85);
+          const balPct = Math.max(4, (Math.abs(t.balance_for_chart) / maxVal) * 85);
+          const isNeg = t.balance_for_chart < 0;
+          const isSelected = t.month === selectedMonth;
+          return (
+            <div
+              key={t.month}
+              className="trend-col"
+              onClick={() => onSelectMonth?.(t.month)}
+              style={{ cursor: 'pointer', opacity: selectedMonth && !isSelected ? 0.5 : 1, flex: 1, gap: 2 }}
+            >
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 110, width: '100%', justifyContent: 'center' }}>
+                {/* 支出バー */}
+                <div
+                  style={{
+                    width: '38%', height: `${spentPct}%`, borderRadius: '4px 4px 0 0',
+                    background: 'linear-gradient(180deg, #ffd58a, #ffc784)',
+                    outline: isSelected ? '2px solid #e8a040' : undefined,
+                  }}
+                  title={`支出 ¥${t.total_spent.toLocaleString()}`}
+                />
+                {/* 余りバー */}
+                <div
+                  style={{
+                    width: '38%', height: `${balPct}%`, borderRadius: '4px 4px 0 0',
+                    background: isNeg ? 'linear-gradient(180deg, #f5b8a6, #d97757)' : 'linear-gradient(180deg, #a4d99a, #83c58c)',
+                    outline: isSelected ? '2px solid #7fa05f' : undefined,
+                  }}
+                  title={`余り ¥${t.balance_for_chart.toLocaleString()}`}
+                />
+              </div>
+              <small style={{ fontSize: 10, color: '#8e8270', marginTop: 3 }}>{t.month.slice(5)}月</small>
+              <em style={{ fontSize: 9, color: isNeg ? '#d97757' : '#6b6258', fontStyle: 'normal' }}>
+                {isNeg ? '−' : ''}¥{Math.abs(t.balance_for_chart).toLocaleString()}
+              </em>
             </div>
-            <small className="trend-label">{t.month.slice(5)}</small>
-            <em className={`trend-val ${isNeg ? 'neg' : ''}`}>
-              {isNeg ? '−' : ''}¥{Math.abs(v).toLocaleString()}
-            </em>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }

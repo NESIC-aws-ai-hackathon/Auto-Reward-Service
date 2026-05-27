@@ -161,11 +161,18 @@ class WishlistService:
         return {"success": True}
 
     def _validate_url(self, url: str) -> bool:
-        """Amazon公開ほしい物リストURLの検証。"""
+        """URLの検証（Amazon wishlist / 一般的なECサイトURL）。"""
         patterns = [
             r"https?://(www\.)?amazon\.co\.jp/.*/wishlist/.*",
             r"https?://(www\.)?amazon\.co\.jp/hz/wishlist/ls/[A-Z0-9]+",
             r"https?://(www\.)?amazon\.co\.jp/gp/registry/wishlist/[A-Z0-9]+",
+            r"https?://(www\.)?amazon\.co\.jp/.*",
+            r"https?://(www\.)?rakuten\.co\.jp/.*",
+            r"https?://item\.rakuten\.co\.jp/.*",
+            r"https?://search\.rakuten\.co\.jp/.*",
+            r"https?://(www\.)?yahoo\.co\.jp/.*",
+            r"https?://shopping\.yahoo\.co\.jp/.*",
+            r"https?://.*",  # 任意のHTTPS/HTTP URLを許可
         ]
         return any(re.match(p, url) for p in patterns)
 

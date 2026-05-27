@@ -331,14 +331,15 @@ function WishlistSection() {
   return (
     <section className="settings-cards">
       <article style={{ gridColumn: '1 / -1' }}>
-        <h3>💝 Amazon ほしいものリスト</h3>
+        <h3>💝 ほしいものリスト連携</h3>
         <p style={{ fontSize: 12, color: '#8e8270' }}>
-          公開設定のほしいものリストURLを登録すると、ふれまーるちゃんがチャットで自然におすすめしてくれるよ✨
+          ほしいものリストURLを登録すると、ふれまーるちゃんがチャットで自然におすすめしてくれるよ✨<br/>
+          Amazon・楽天・その他ECサイトのURLが使えるよ
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
           <input
             type="url"
-            placeholder="https://www.amazon.co.jp/hz/wishlist/ls/..."
+            placeholder="https://www.amazon.co.jp/hz/wishlist/ls/... など"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             style={{ padding: '8px 10px', borderRadius: 10, border: '1px solid #e3dac1', fontSize: 13 }}

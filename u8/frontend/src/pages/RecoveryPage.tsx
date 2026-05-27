@@ -110,6 +110,9 @@ export function RecoveryPage() {
         </div>
       </section>
 
+      {/* 実データ統合：Wishlist / 楽天 / YouTube — 上位に配置して「実際の商品・動画」をすぐ見えるように */}
+      <RecoveryIntegrations mood={data?.mood || ''} />
+
       {/* 0円回復 */}
       {freeItems.length > 0 && (
         <>
@@ -196,29 +199,60 @@ export function RecoveryPage() {
       </section>
 
       {loading && <div className="loading-state">読み込み中...</div>}
-
-      {/* 実データ統合：Wishlist / 楽天 / YouTube */}
-      <RecoveryIntegrations mood={data?.mood || ''} />
     </div>
   );
 }
 
 function RecoveryIntegrations({ mood }: { mood: string }) {
   const api = useApi();
-  const [tab, setTab] = useState<'wishlist' | 'rakuten' | 'youtube'>('wishlist');
+  // 「実際の商品を提案してほしい」要望に合わせて rakuten を初期タブに
+  const [tab, setTab] = useState<'rakuten' | 'youtube' | 'wishlist'>('rakuten');
   const [wishlist, setWishlist] = useState<WishlistItem[] | null>(null);
   const [products, setProducts] = useState<ProductItem[] | null>(null);
   const [videos, setVideos] = useState<VideoItem[] | null>(null);
   const [loading, setLoading] = useState(false);
+  const [userKeywords, setUserKeywords] = useState<string[]>([]);
+  const [activeKeyword, setActiveKeyword] = useState<string>('');
 
-  // 気分キーワードマッピング
-  const keyword = (() => {
+  // 情報がない場合でも実際の商品を表示するためのデフォルトキーワード群
+  const DEFAULT_KEYWORDS = [
+    'バスソルト 入浴剤',
+    'ご褒美 スイーツ',
+    'アロマキャンドル',
+    'ドリップコーヒー ギフト',
+    'ハーブティー リラックス',
+  ];
+
+  // 気分キーワードマッピング（mood がある場合）
+  const moodKeyword = (() => {
     const m = mood || '';
-    if (m.includes('疲') || m.includes('しんど')) return '癒し';
-    if (m.includes('ストレス') || m.includes('イラ')) return 'リラックス';
-    if (m.includes('楽し')) return 'ごしょうび';
-    return 'リラックス';
+    if (m.includes('疲') || m.includes('しんど')) return '癒し グッズ';
+    if (m.includes('ストレス') || m.includes('イラ')) return 'リラックス グッズ';
+    if (m.includes('楽し')) return 'ご褒美 スイーツ';
+    // デフォルト: 曜日や時間帯でローテーション
+    const idx = new Date().getDay() % DEFAULT_KEYWORDS.length;
+    return DEFAULT_KEYWORDS[idx]!;
   })();
+
+  // ユーザーの学習済み興味を取得
+  useEffect(() => {
+    api.getUserInterests().then(r => {
+      if (r.interests && r.interests.length > 0) {
+        const kws = r.interests.map(i => i.search_keyword);
+        setUserKeywords(kws);
+        setActiveKeyword(kws[0] || moodKeyword);
+      } else {
+        // 興味データなし → デフォルトキーワードをチップとして表示
+        setUserKeywords(DEFAULT_KEYWORDS);
+        setActiveKeyword(moodKeyword);
+      }
+    }).catch(() => {
+      setUserKeywords(DEFAULT_KEYWORDS);
+      setActiveKeyword(moodKeyword);
+    });
+  }, []);
+
+  const keyword = activeKeyword || moodKeyword;
 
   const loadWishlist = useCallback(async () => {
     if (wishlist !== null) return;
@@ -231,43 +265,67 @@ function RecoveryIntegrations({ mood }: { mood: string }) {
   }, [api, wishlist]);
 
   const loadProducts = useCallback(async () => {
-    if (products !== null) return;
     setLoading(true);
     try {
       const r = await api.searchProducts(keyword, undefined, 3000);
       setProducts(r.products || []);
     } catch { setProducts([]); }
     finally { setLoading(false); }
-  }, [api, products, keyword]);
+  }, [api, keyword]);
 
   const loadVideos = useCallback(async () => {
-    if (videos !== null) return;
     setLoading(true);
     try {
       const r = await api.searchYoutube(keyword);
       setVideos(r.videos || []);
     } catch { setVideos([]); }
     finally { setLoading(false); }
-  }, [api, videos, keyword]);
+  }, [api, keyword]);
+
+  // キーワード変更時に商品/動画をリロード
+  useEffect(() => {
+    if (!keyword) return;
+    if (tab === 'rakuten') { setProducts(null); loadProducts(); }
+    else if (tab === 'youtube') { setVideos(null); loadVideos(); }
+  }, [keyword]);
 
   useEffect(() => {
     if (tab === 'wishlist') loadWishlist();
-    else if (tab === 'rakuten') loadProducts();
-    else if (tab === 'youtube') loadVideos();
+    else if (tab === 'rakuten' && products === null) loadProducts();
+    else if (tab === 'youtube' && videos === null) loadVideos();
   }, [tab, loadWishlist, loadProducts, loadVideos]);
 
   const tabs: { key: typeof tab; label: string; icon: string }[] = [
-    { key: 'wishlist', label: 'ほしいもの', icon: '💝' },
-    { key: 'rakuten', label: '楽天で探す', icon: '🛍️' },
+    { key: 'rakuten', label: '商品を探す', icon: '🛍️' },
     { key: 'youtube', label: '癒し動画', icon: '🎧' },
+    { key: 'wishlist', label: 'ほしいもの', icon: '💝' },
   ];
 
   return (
     <section className="chart-card" style={{ padding: 16, marginTop: 16 }}>
-      <h2 style={{ marginTop: 0 }}>✨ 実際のご褐美・癒し</h2>
-      <p style={{ fontSize: 11, color: '#8e8270', margin: '4px 0 12px' }}>
-        「{keyword}」でおすすめを探したよ🌱
+      <h2 style={{ marginTop: 0 }}>✨ 今日のゴホウビ候補</h2>
+      <p style={{ fontSize: 11, color: '#8e8270', margin: '4px 0 8px' }}>
+        {userKeywords.length > 0
+          ? 'あなたの好みから探したよ🌱'
+          : `「${keyword}」でおすすめを探したよ🌱`}
       </p>
+      {/* 学習キーワード切り替えチップ */}
+      {userKeywords.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {userKeywords.slice(0, 6).map(kw => (
+            <button
+              key={kw}
+              onClick={() => { setActiveKeyword(kw); setProducts(null); setVideos(null); }}
+              style={{
+                padding: '4px 10px', borderRadius: 14, border: '1px solid #e3dac1',
+                background: kw === activeKeyword ? '#f4b8b8' : '#fffdf6',
+                color: kw === activeKeyword ? '#fff' : '#4a4135',
+                fontSize: 11, cursor: 'pointer', fontWeight: kw === activeKeyword ? 'bold' : 'normal',
+              }}
+            >{kw.split(' ')[0]}</button>
+          ))}
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
         {tabs.map(t => (
           <button
@@ -292,22 +350,50 @@ function RecoveryIntegrations({ mood }: { mood: string }) {
 
       {tab === 'wishlist' && !loading && (
         wishlist && wishlist.length > 0 ? (
-          <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
-            {wishlist.slice(0, 6).map(it => (
-              <li key={it.wishlist_item_id} style={{ display: 'flex', gap: 10, padding: 8, background: '#fffdf6', borderRadius: 10 }}>
-                {it.product_image_url && <img src={it.product_image_url} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, background: '#f0e8d8' }} />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <a href={it.product_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 'bold', color: '#4a4135', textDecoration: 'none', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    {it.product_title}
-                  </a>
-                  <div style={{ fontSize: 11, color: '#7fa05f', marginTop: 4 }}>
-                    {it.price ? `¥${it.price.toLocaleString()}` : ''}
-                    {it.desire_aging_days ? <span style={{ marginLeft: 8, color: '#a69c8c' }}>欲しくなって{it.desire_aging_days}日</span> : null}
+          <>
+            {/* 熟成ストーリーのリード文 */}
+            {(() => {
+              const sorted = [...wishlist].sort((a, b) => (b.desire_aging_days || 0) - (a.desire_aging_days || 0));
+              const top = sorted[0];
+              if (top && (top.desire_aging_days || 0) >= 7) {
+                return (
+                  <div style={{ background: '#fff4e6', border: '1px solid #f5d8a8', borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#8c6a3a' }}>
+                    🌱 <strong>{top.desire_aging_days}日</strong>もずっと欲しがってる「{(top.product_title || '').slice(0, 20)}」、そろそろ自分にあげても良い頃かも？
                   </div>
-                </div>
-              </li>
-            ))}
-          </ul>
+                );
+              }
+              return null;
+            })()}
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
+              {[...wishlist].sort((a, b) => (b.desire_aging_days || 0) - (a.desire_aging_days || 0)).slice(0, 6).map(it => {
+                const aging = it.desire_aging_days || 0;
+                // 熟成度に応じたバッジ
+                let badge: { label: string; bg: string; color: string } | null = null;
+                if (aging >= 30) badge = { label: `🔥 ${aging}日熟成`, bg: '#ffe4d1', color: '#c4683a' };
+                else if (aging >= 14) badge = { label: `✨ ${aging}日熟成`, bg: '#fff0d6', color: '#a8803a' };
+                else if (aging >= 7) badge = { label: `🌱 ${aging}日`, bg: '#e8f0d6', color: '#7fa05f' };
+                else if (aging > 0) badge = { label: `${aging}日前から`, bg: '#f0ebe0', color: '#8e8270' };
+                return (
+                  <li key={it.wishlist_item_id} style={{ display: 'flex', gap: 10, padding: 8, background: '#fffdf6', borderRadius: 10 }}>
+                    {it.product_image_url && <img src={it.product_image_url} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, background: '#f0e8d8' }} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <a href={it.product_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 'bold', color: '#4a4135', textDecoration: 'none', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {it.product_title}
+                      </a>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                        {it.price && <span style={{ fontSize: 11, color: '#7fa05f', fontWeight: 'bold' }}>¥{it.price.toLocaleString()}</span>}
+                        {badge && (
+                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 10, background: badge.bg, color: badge.color, fontWeight: 'bold' }}>
+                            {badge.label}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </>
         ) : (
           <p style={{ fontSize: 12, color: '#a69c8c', textAlign: 'center', padding: 16 }}>
             ほしいものリストがまだ登録されてないよ。<br />
@@ -321,13 +407,23 @@ function RecoveryIntegrations({ mood }: { mood: string }) {
           <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
             {products.slice(0, 6).map((p, i) => (
               <li key={i} style={{ display: 'flex', gap: 10, padding: 8, background: '#fffdf6', borderRadius: 10 }}>
-                {p.image && <img src={p.image} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, background: '#f0e8d8' }} />}
+                {p.image && <img src={p.image} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, background: '#f0e8d8' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <a href={p.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 'bold', color: '#4a4135', textDecoration: 'none', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                  <a href={p.url || `https://search.rakuten.co.jp/search/mall/${encodeURIComponent(keyword)}/`} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, fontWeight: 'bold', color: '#4a4135', textDecoration: 'none', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                     {p.name}
                   </a>
-                  <div style={{ fontSize: 11, color: '#7fa05f', marginTop: 4 }}>
-                    ¥{p.price.toLocaleString()} <span style={{ color: '#a69c8c', marginLeft: 6 }}>{p.shop}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                    <span style={{ fontSize: 11, color: '#7fa05f' }}>¥{p.price.toLocaleString()}</span>
+                    <span style={{ color: '#a69c8c', fontSize: 10 }}>{p.shop}</span>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.addWishlistItem({ name: p.name, url: p.url, price: p.price, image: p.image });
+                          alert('ほしいものリストに追加したよ！💝');
+                        } catch { alert('追加に失敗しました'); }
+                      }}
+                      style={{ marginLeft: 'auto', padding: '2px 8px', fontSize: 10, border: '1px solid #f4b8b8', borderRadius: 10, background: '#fff', color: '#e8756c', cursor: 'pointer' }}
+                    >💝 追加</button>
                   </div>
                 </div>
               </li>

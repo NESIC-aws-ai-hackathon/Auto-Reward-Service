@@ -81,6 +81,111 @@ function getGreetingForTime(): string {
   return GREETING_MESSAGES[3]!;
 }
 
+/**
+ * 「ふれまーるちゃんの記憶」パネル — 過去のLIFE_LOGや支出パターンから
+ * 「あなたのことを覚えてるよ」を可視化する。沼ループの「記憶される」中核UI。
+ */
+type MemoryData = {
+  topics: { name: string; count: number }[];
+  favorite_items: { name: string; count: number }[];
+  episodes: { content: string; category: string; date: string; topic: string }[];
+  total_chat_days: number;
+  total_life_logs: number;
+  days_since_last_chat: number;
+};
+
+function MemoryPanel({ userId }: { userId: string }) {
+  const api = useApi();
+  const [data, setData] = useState<MemoryData | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getMemories().then((d: MemoryData) => {
+      if (cancelled) return;
+      setData(d);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+    return () => { cancelled = true; };
+  }, [userId]);
+
+  if (!loaded || !data) return null;
+  const hasMemory = (data.total_life_logs > 0 || data.favorite_items.length > 0 || data.topics.length > 0);
+  if (!hasMemory) return null;
+
+  // 1行プレビューを生成（友達っぽいトーン）
+  const previewParts: string[] = [];
+  if (data.favorite_items[0]) previewParts.push(`${data.favorite_items[0].name}が好きだったよね`);
+  else if (data.topics[0]) previewParts.push(`${data.topics[0].name}の話、最近よく聞いてる気がする`);
+  if (data.total_chat_days >= 7) previewParts.push(`もう${data.total_chat_days}日も一緒だよ♪`);
+  else if (data.total_chat_days >= 1) previewParts.push(`これで${data.total_chat_days}日目だね`);
+  const preview = previewParts.join(' / ') || 'ちょっとずつ、あなたのこと覚えてきたよ';
+
+  return (
+    <section style={{
+      margin: '12px 16px', padding: '12px 14px', borderRadius: 14,
+      background: 'linear-gradient(135deg, #fff7f9 0%, #f3f8ec 100%)',
+      border: '1px solid #f0d8e0', fontSize: 13, color: '#5a4a52',
+    }}>
+      <button
+        onClick={() => setExpanded(v => !v)}
+        style={{ width: '100%', textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#5a4a52', fontSize: 13 }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 18 }}>💭</span>
+          <strong style={{ flex: 1 }}>ふれまーるちゃんの記憶</strong>
+          <span style={{ fontSize: 11, color: '#a08891' }}>{expanded ? '閉じる' : 'もっと見る'}</span>
+        </div>
+        <div style={{ marginTop: 6, lineHeight: 1.5 }}>{preview}</div>
+      </button>
+      {expanded && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px dashed #e8c8d0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {data.favorite_items.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, color: '#a08891', marginBottom: 4 }}>🛒 よく買ってるもの</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {data.favorite_items.slice(0, 5).map(item => (
+                  <span key={item.name} style={{ background: '#fff', padding: '3px 10px', borderRadius: 12, border: '1px solid #f0d8e0' }}>
+                    {item.name} <small style={{ color: '#a08891' }}>×{item.count}</small>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.topics.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, color: '#a08891', marginBottom: 4 }}>💬 よく話してくれること</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {data.topics.slice(0, 6).map(t => (
+                  <span key={t.name} style={{ background: '#fff', padding: '3px 10px', borderRadius: 12, border: '1px solid #d8e8c4' }}>
+                    {t.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.episodes.length > 0 && (
+            <div>
+              <div style={{ fontSize: 11, color: '#a08891', marginBottom: 4 }}>📌 覚えてるエピソード</div>
+              <ul style={{ margin: 0, padding: '0 0 0 18px', lineHeight: 1.6 }}>
+                {data.episodes.slice(0, 4).map((ep, i) => (
+                  <li key={i} style={{ fontSize: 12 }}>
+                    <span style={{ color: '#9fa080' }}>{ep.date || ''}</span> {ep.content}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div style={{ fontSize: 11, color: '#a08891', textAlign: 'right' }}>
+            記録: 会話{data.total_chat_days}日 / 出来事{data.total_life_logs}件
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function getEmotionAvatar(emotion?: string): string {
   const map: Record<string, string> = {
     happy: '/assets/emotions/happy.png',
@@ -94,16 +199,17 @@ function getEmotionAvatar(emotion?: string): string {
 }
 
 /**
- * 会話の話題から、Recovery / Dashboard / Diary への自然な導線を提案する。
+ * 会話の話題から、Dashboard / Diary への自然な導線を提案する。
+ * Recovery は reco カード（商品/動画URL）で直接提案するため、ここからは外す。
  * AGENTS.md「広告っぽくしない、友達の自然な提案」に沿い、押し付けず1つだけ出す。
  */
 type Suggestion = { to: string; label: string };
-function pickSuggestion(userText: string, replyText: string): Suggestion | null {
+function pickSuggestion(userText: string, replyText: string, hasReco: boolean): Suggestion | null {
+  // reco カードが既に出ているなら追加の導線は出さない（くどさを避ける）
+  if (hasReco) return null;
   const text = `${userText}\n${replyText}`;
-  const recovery = /疲れ|つかれ|しんど|だる|ストレス|休|回復|甘やか|ごほうび|ご褒美|癒|リラックス/;
   const dashboard = /円|お金|家計|予算|貯金|余裕|無駄遣い|使いすぎ|支出|余剰/;
   const diary = /今日|振り返|記録|日記|まとめ|ログ/;
-  if (recovery.test(text)) return { to: '/recovery', label: '🌿 今日のごほうび候補を見る' };
   if (dashboard.test(text)) return { to: '/dashboard', label: '👛 今月の余裕をのぞいてみる' };
   if (diary.test(text)) return { to: '/diary', label: '📖 今日のダイアリーを見る' };
   return null;
@@ -202,7 +308,7 @@ export function ChatPage() {
       const assistantMsg: ChatMessage = {
         id: `asst-${Date.now()}`, role: 'assistant', content: resp.reply,
         timestamp: resp.timestamp, emotion: 'support',
-        suggestion: pickSuggestion(text, resp.reply) || undefined,
+        suggestion: pickSuggestion(text, resp.reply, !!resp.suggestion?.url) || undefined,
         reco: resp.suggestion,
       };
       const withReply = [...updated, assistantMsg];
@@ -324,6 +430,9 @@ export function ChatPage() {
           <span>今日も一緒に、お金のことをやさしく整えてこ？ 🍀</span>
         </div>
       </section>
+
+      {/* Memory Panel - 「あなたのこと覚えてるよ」演出 */}
+      <MemoryPanel userId={userId} />
 
       {/* Chat Thread */}
       {chatHistory.length > 0 && (

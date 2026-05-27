@@ -151,9 +151,9 @@ Resources:
           COGNITO_REGION: !Ref AWS::Region
           BEDROCK_REGION: ap-northeast-1
           BEDROCK_MODEL_ID: jp.anthropic.claude-haiku-4-5-20251001-v1:0
-          RAKUTEN_APP_ID: ""
-          YOUTUBE_API_KEY: ""
-          HOTPEPPER_API_KEY: ""
+          RAKUTEN_APP_ID: '{{resolve:secretsmanager:ars/rakuten:SecretString:RAKUTEN_APP_ID}}'
+          YOUTUBE_API_KEY: '{{resolve:secretsmanager:ars/youtube:SecretString:api_key}}'
+          HOTPEPPER_API_KEY: '{{resolve:secretsmanager:ars/hotpepper/api-key:SecretString:HOTPEPPER_API_KEY}}'
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ArsTableName
@@ -289,6 +289,62 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /api/diary/{date}
             Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        MemoriesGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/memories
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ExpensesGet:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/expenses
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ExpensesPost:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/expenses
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ExpensesSummary:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/expenses/summary
+            Method: GET
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ExpensesReceipt:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/expenses/receipt
+            Method: POST
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ExpenseUpdate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/expenses/{expenseId}
+            Method: PUT
+            Auth:
+              Authorizer: CognitoAuthorizer
+        ExpenseDelete:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /api/expenses/{expenseId}
+            Method: DELETE
             Auth:
               Authorizer: CognitoAuthorizer
         ChatMessagesGet:

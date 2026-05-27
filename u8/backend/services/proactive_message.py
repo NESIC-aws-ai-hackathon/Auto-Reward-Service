@@ -57,6 +57,71 @@ STREAK_MESSAGES = [
     "{streak_days}日連続！ 習慣になってきたね。えらいなぁ。",
 ]
 
+# 月初メッセージ — 新しい月のはじまり、リセット感
+MONTH_START_MESSAGES = [
+    "今日から新しい月だね♪ 先月もお疲れさま！ 今月も{display_name}のペースで一緒にやってこ〜。",
+    "新しい月のはじまりだよ〜。先月はがんばったね。今月はどんなご褒美を計画しよっか？",
+]
+
+# 月末メッセージ — 振り返り誘導
+MONTH_END_MESSAGES = [
+    "今月もあとちょっとだね。よくがんばった月だったよ。ダッシュボードで振り返ってみる？",
+    "もう月末だね〜！ {display_name}、今月の自分にちゃんと「えらい」って言ってあげて♪",
+]
+
+# 購入後フォローアップ — 「あれどうだった？」
+PURCHASE_FOLLOWUP_MESSAGES = [
+    "ねえ、昨日の{item}、どうだった？ 気分上がった？",
+    "{item}買ったの覚えてるよ〜。使ってみてどんな感じ？",
+    "昨日の{item}、よかった？ ご褒美って大事だよね♪",
+]
+
+# 思い出して話しかける — 過去のLIFE_LOGトピックを参照
+MEMORY_CALLBACK_MESSAGES = [
+    "そういえば最近、{topic}の話してたよね。あれからどう？",
+    "{topic}のこと、ふと思い出した♪ いまも楽しんでる？",
+    "ねえ、{topic}って言ってたじゃない？ あれからなにか進展あった？",
+]
+
+# ご褒美提案メッセージ — ほしいものリスト/ユーザーの興味から
+REWARD_SUGGESTION_MESSAGES = [
+    "ねえねえ、{item}ってまだ気になってる？ 自分へのご褒美にいいかも♪",
+    "そういえば{item}が気になってたよね。今月いけそうじゃない？えへへ。",
+    "{item}、チェックしてみた？ たまには自分を甘やかしてもいいと思うな〜♪",
+]
+
+# 興味ベースの提案
+INTEREST_NUDGE_MESSAGES = [
+    "{display_name}、{interest}好きだったよね。なにか新しいの見つけた？",
+    "最近{interest}のことあんまり話してないけど、忙しかったのかな？",
+    "ねえ、{interest}関連でなにかほしいものある？ 一緒に探そっか♪",
+]
+
+# 天気・季節の雑談（バリエーション増）
+WEATHER_CHAT_MESSAGES = [
+    "今日はなんだかぽかぽかだね〜。お散歩日和かも♪",
+    "雨の日は家でゆっくりする口実ができるよね。えへへ。",
+    "風が気持ちいい日だね。深呼吸してみて〜♪",
+]
+
+# 応援・肯定メッセージ
+ENCOURAGEMENT_MESSAGES = [
+    "{display_name}、最近ちゃんとがんばってるの知ってるよ。えらいなぁ♪",
+    "なんとなくだけど、{display_name}って真面目だよね。たまには手抜きしていいんだよ〜。",
+    "今日も{display_name}は{display_name}のままでいいんだよ。そのままが素敵♪",
+    "ねえ知ってる？ がんばらない日も大事なんだって。今日はゆるっとね。",
+]
+
+# 小さな問いかけ（会話のきっかけ）
+TINY_QUESTION_MESSAGES = [
+    "ねえ、最近なにかいいことあった？ 小さいことでもいいよ♪",
+    "今ハマってるものある？ なんでも聞きたい〜。",
+    "今日のごはん何にする？ 決まってなかったら一緒に考えよ♪",
+    "週末なにするの？ ……って聞いてみたかっただけ。えへへ。",
+    "なんか最近気になってることある？ なんでも話してね〜。",
+    "ねえねえ、好きな季節っていつ？ ……急にごめんね、ふと気になって♪",
+]
+
 
 class ProactiveMessageService:
     def __init__(self, da: DataAccess = None):
@@ -138,12 +203,35 @@ class ProactiveMessageService:
         profile = self.da.get_or_create_profile(user_id)
         display_name = profile.get("display_name", "あなた")
 
-        # Check for special conditions
-        message = self._check_special_conditions(user_id, display_name)
-        if message:
-            return message
+        # Check for special conditions (30% chance to skip and use variety pool instead)
+        if random.random() < 0.70:
+            message = self._check_special_conditions(user_id, display_name)
+            if message:
+                return message
 
-        # Time-based message selection
+        # Variety pool: 40% time-based, 20% reward/interest, 20% encouragement, 20% questions
+        roll = random.random()
+
+        if roll < 0.20:
+            # ご褒美/興味ベースの提案
+            msg = self._generate_reward_nudge(user_id, display_name)
+            if msg:
+                return msg
+
+        if roll < 0.40:
+            # 応援・肯定
+            template = random.choice(ENCOURAGEMENT_MESSAGES)
+            return template.format(display_name=display_name)
+
+        if roll < 0.55:
+            # 小さな問いかけ
+            return random.choice(TINY_QUESTION_MESSAGES)
+
+        if roll < 0.65:
+            # 天気・季節の雑談
+            return random.choice(WEATHER_CHAT_MESSAGES)
+
+        # Time-based message selection (残りの35%)
         if 10 <= hour < 12:
             pool = MORNING_MESSAGES
         elif 12 <= hour < 14:
@@ -156,13 +244,81 @@ class ProactiveMessageService:
         template = random.choice(pool)
         return template.format(display_name=display_name)
 
+    def _generate_reward_nudge(self, user_id: str, display_name: str) -> str | None:
+        """ほしいものリストやユーザーの興味に基づいてご褒美を提案する。"""
+        # 1. ほしいものリストから提案
+        try:
+            wishlist_items = self.da.query_by_prefix(
+                f"USER#{user_id}", "WISHLIST_ITEM#", limit=10,
+            ) or []
+            if wishlist_items and random.random() < 0.6:
+                item = random.choice(wishlist_items)
+                item_name = (item.get("name") or "").strip()
+                if item_name:
+                    template = random.choice(REWARD_SUGGESTION_MESSAGES)
+                    return template.format(item=item_name[:20])
+        except Exception:
+            pass
+
+        # 2. ユーザーの興味から提案
+        try:
+            interests_data = self.da.get_item(f"USER#{user_id}", "USER_INTERESTS#")
+            if interests_data:
+                interests = interests_data.get("interests", [])
+                if interests:
+                    top = sorted(interests, key=lambda x: x.get("score", 0), reverse=True)[:5]
+                    chosen = random.choice(top)
+                    interest_name = chosen.get("category", "")
+                    if interest_name:
+                        template = random.choice(INTEREST_NUDGE_MESSAGES)
+                        return template.format(display_name=display_name, interest=interest_name)
+        except Exception:
+            pass
+
+        return None
+
     def _check_special_conditions(self, user_id: str, display_name: str) -> str | None:
         """Check for special conditions that warrant specific messages."""
-        # Check if user hasn't talked in 2+ days (CHAT#プレフィクスで判定)
         from datetime import date
+        from calendar import monthrange
         today = date.today()
-        two_days_ago = (today - timedelta(days=2)).isoformat()
 
+        # 1. 月初 (1日) — 朝の時間帯のみ
+        if today.day == 1 and 8 <= datetime.now(JST).hour < 12:
+            return random.choice(MONTH_START_MESSAGES).format(display_name=display_name)
+
+        # 2. 月末 (月の最終日) — 夕方以降のみ
+        last_day = monthrange(today.year, today.month)[1]
+        if today.day == last_day and datetime.now(JST).hour >= 17:
+            return random.choice(MONTH_END_MESSAGES).format(display_name=display_name)
+
+        # 3. 購入フォローアップ — 直近1日以内の支出があれば30%で言及
+        if random.random() < 0.30:
+            yesterday = (today - timedelta(days=1)).isoformat()
+            recent_expenses = self.da.query_by_prefix(
+                f"USER#{user_id}", f"EXPENSE#{yesterday}", limit=3,
+            ) or []
+            if recent_expenses:
+                last = recent_expenses[-1]
+                item = (last.get("item") or "").strip()
+                # 食品でない＆少し贅沢っぽい支出を優先（食費は日常）
+                category = (last.get("category") or "")
+                if item and category not in ["食費", "交通費", "光熱費"]:
+                    return random.choice(PURCHASE_FOLLOWUP_MESSAGES).format(item=item[:20])
+
+        # 4. 思い出して話しかける — LIFE_LOGからトピックを引用 20%
+        if random.random() < 0.20:
+            life_logs = self.da.query_by_prefix_latest(
+                f"USER#{user_id}", "LIFE_LOG#", limit=30,
+            ) or []
+            topics = [log.get("topic", "").strip() for log in life_logs if log.get("topic")]
+            topics = [t for t in topics if t and 2 <= len(t) <= 20]
+            if topics:
+                topic = random.choice(topics)
+                return random.choice(MEMORY_CALLBACK_MESSAGES).format(topic=topic)
+
+        # 5. 久しぶり (2日以上沈黙)
+        two_days_ago = (today - timedelta(days=2)).isoformat()
         recent_chats = self.da.query_by_prefix(
             f"USER#{user_id}",
             f"CHAT#{two_days_ago}",
@@ -173,7 +329,7 @@ class ProactiveMessageService:
             template = random.choice(NO_TALK_MESSAGES)
             return template.format(display_name=display_name)
 
-        # Check streak
+        # 6. ストリーク
         streak = self.da.get_item(f"USER#{user_id}", "STREAK#")
         if streak:
             days = streak.get("current_streak", 0)

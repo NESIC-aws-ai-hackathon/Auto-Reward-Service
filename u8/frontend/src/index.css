@@ -30,7 +30,7 @@ button, input, select, textarea { font-family: inherit; }
 button { cursor: pointer; border: 0; background: none; color: inherit; }
 
 .phone-shell {
-  width: min(430px, 100vw);
+  width: min(480px, 100vw);
   height: min(932px, 100dvh);
   border-radius: 42px;
   background: #111;
@@ -167,7 +167,7 @@ button { cursor: pointer; border: 0; background: none; color: inherit; }
 @keyframes pulse { 70% { box-shadow: 0 0 0 10px rgba(104, 169, 119, 0); } }
 @keyframes wave { 50% { transform: scaleY(0.45); opacity: 0.65; } }
 
-@media (max-width: 480px) {
+@media (max-width: 520px) {
   body { display: block; background: #fff; }
   .phone-shell { width: 100vw; height: 100dvh; border-radius: 0; padding: 0; box-shadow: none; }
   .phone-inner { border-radius: 0; }

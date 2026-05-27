@@ -83,18 +83,40 @@
 .trend-val.neg { color: #d97757; }
 
 /* ── Expense List ── */
-.expense-list { list-style: none; padding: 0; margin: 0; }
-.expense-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid rgba(232, 223, 206, 0.6); }
-.expense-item.empty { justify-content: center; flex-direction: column; padding: 24px; text-align: center; }
-.exp-icon { font-size: 22px; }
-.exp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.exp-item-name { font-size: 14px; color: #4a4135; }
-.exp-excuse { font-size: 11px; color: #7fa05f; background: #f3f8ec; padding: 2px 8px; border-radius: 12px; align-self: flex-start; }
-.exp-meta { font-size: 10px; color: #a69c8c; }
-.exp-amount { font-style: normal; font-weight: 700; color: #4a4135; font-size: 14px; }
-.exp-actions { display: flex; gap: 4px; }
-.exp-actions button { background: none; border: none; padding: 6px 8px; cursor: pointer; font-size: 14px; opacity: 0.6; border-radius: 8px; }
-.exp-actions button:hover { opacity: 1; background: rgba(232, 223, 206, 0.4); }
+.expense-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+/* 高い詳細度で .activity-list li の grid ルールを上書き */
+.activity-list li.expense-item,
+.expense-list li.expense-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; background: #fff;
+  border: 1px solid rgba(232, 223, 206, 0.7); border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(87, 68, 38, 0.03);
+}
+.activity-list li.expense-item.empty { justify-content: center; flex-direction: column; padding: 24px; text-align: center; }
+.activity-list li.expense-item .exp-icon { font-size: 22px; flex-shrink: 0; }
+.activity-list li.expense-item .exp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.activity-list li.expense-item .exp-item-name {
+  font-size: 14px; color: #4a4135; font-weight: 600;
+  /* 既存 .activity-list li b の緑ピル装飾を打ち消し */
+  background: none; padding: 0; border-radius: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.activity-list li.expense-item .exp-excuse {
+  font-size: 10px; color: #7fa05f; background: #f3f8ec;
+  padding: 2px 8px; border-radius: 12px; align-self: flex-start;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.activity-list li.expense-item .exp-meta { font-size: 10px; color: #a69c8c; }
+.activity-list li.expense-item .exp-amount {
+  font-style: normal; font-weight: 700; color: #4a4135;
+  font-size: 15px; flex-shrink: 0; margin-left: auto;
+}
+.activity-list li.expense-item .exp-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.activity-list li.expense-item .exp-actions button {
+  background: none; border: none; padding: 6px 8px; cursor: pointer;
+  font-size: 14px; opacity: 0.5; border-radius: 8px;
+}
+.activity-list li.expense-item .exp-actions button:hover { opacity: 1; background: rgba(232, 223, 206, 0.4); }
 .btn-add-expense { background: #83c58c; color: #fff; border: none; padding: 6px 12px; border-radius: 14px; font-size: 12px; font-weight: 700; cursor: pointer; }
 
 /* ── Modal ── */

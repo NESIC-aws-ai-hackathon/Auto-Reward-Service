@@ -4,6 +4,90 @@
 
 ---
 
+## [MAINTENANCE] v1 LINE Bot → archive 移行・リポジトリ構造刷新
+**Timestamp**: 2026-05-26T01:00:00+09:00
+**Status**: Complete
+**User Input (raw)**: "u1-u7は旧コンセプトだからアーカイブして。旧コンセプトで出た設計等は課題としてbacklogに入れておいて。u8が現コンセプトであるため今後はここをブラッシュアップする必要がある 旧コードも整理して、アーカイブするようにしてほしい 現在使っているものがないかは確認して LINE利用は制限が多かったためやめた旨を記載して 旧コンセプトでデプロイしたものもすべて削除してほしい そのうえで新コンセプトに合わせてREADMEを更新してほしい"
+
+### 実施内容
+1. **依存チェック**: U8 が旧コード (`src/`, `layer/`) に依存していないことを確認。ArsTable のみ共有
+2. **アーカイブ移動**: 旧コード一式を `archive/v1-line-bot/` に移動
+   - `src/`, `layer/`, `template.yaml`, `samconfig.toml`, `Makefile`, `requirements*.txt`
+   - `scripts/`, `images/`, `pwa/`, `worker/`, `tools/`, `tests/`
+3. **旧スタック削除**: ユーザー判断で**スキップ**（ArsTable がブロッカー。手動で後日対応）
+4. **BACKLOG.md 作成**: 旧設計から持ち越すべき15件の課題を優先度付きで整理
+5. **README.md 全面書換**: LINE Bot → PWA スタンドアロンに合わせた内容に更新
+6. **AGENTS.md 更新**: 新コンセプトのデプロイ・テスト方針に変更
+7. **archive/v1-line-bot/README.md 作成**: LINE廃止理由・削除手順・再利用可能資産の説明
+
+### 旧スタック (auto-reward-service) リソース一覧
+- Lambda: WebhookHandlerFunction, LiffApiFunction, PwaTemptationFunction, ReceiptProcessorFunction, RewardPoolUpdaterFunction, ScheduledPushFunction
+- API Gateway: WebhookApi
+- DynamoDB: ArsTable (**U8参照中のため保持**)
+- SQS: ReceiptProcessingQueue
+- EventBridge: RewardPoolScheduler, ScheduledPushEvening/Night, WarmupWebhookScheduler
+- IAM: ArsLambdaRole, SchedulerExecutionRole
+- Layer: ArsCommonLayer
+
+### リポジトリ構造（変更後）
+```
+├── u8/              ← 現行メインアプリ
+├── archive/v1-line-bot/  ← 旧コード（参照専用）
+├── docs/            ← ドキュメント
+├── aidlc-docs/      ← AI-DLC成果物
+├── .aidlc/          ← AI-DLCルール
+├── BACKLOG.md       ← 旧設計からの課題
+├── AGENTS.md        ← 開発ルール
+└── README.md        ← プロジェクト説明（新コンセプト）
+```
+
+---
+
+## [MAINTENANCE] リポジトリ整理 — 不要ファイル削除
+**Timestamp**: 2026-05-26T00:00:00+09:00
+**Status**: Complete
+**User Input (raw)**: "AI-DLCに従ってリポジトリ内をしっかりと整理してほしい 不要ファイルはすべて削除して"
+
+### 削除対象と理由
+| カテゴリ | 削除ファイル/ディレクトリ | 理由 |
+|---------|------------------------|------|
+| ワンタイムスクリプト | `check_amazon.py`, `check_db.py`, `fix_quotes.py`, `fix_quotes2.py`, `test_wishlist_scrape.py` | アドホックデバッグ・一回限りの修正スクリプト |
+| 一時出力 | `deploy-output.txt`, `env-update.json`, `out.json`, `payload.json`, `temp_wishlist.html`, `tmp_pwa_logs.txt` | デプロイログ・テストペイロード・一時ファイル |
+| アーカイブ | `layer-update.zip`, `layer.zip` | ビルド成果物（再生成可能） |
+| 非推奨コード | `old/` | コンセプト変更前のドキュメント（参照不要） |
+| 壊れたGitバックアップ | `.git-NSAPC-61003131A/` | 破損したgitディレクトリ |
+| ビルドキャッシュ | `.aws-sam/`, `.pytest_cache/`, `__pycache__/` (src, tests, worker) | 再生成可能なキャッシュ |
+| ビルドログ | `u8/sam-build.log`, `u8/sam-deploy.log` | 一時的なログファイル |
+
+### .gitignore更新
+- `.git_backup/` → `.git-*/` + `!.git/` + `!.github/` (壊れたバックアップ全般を除外)
+- `*.log` / `sam-build.log` / `sam-deploy.log` 追加
+
+### 整理後のルートディレクトリ構成
+```
+.aidlc/       — AI-DLCルール定義
+.github/      — GitHub設定
+aidlc-docs/   — AI-DLC成果物（設計書・状態管理）
+docs/         — プロジェクトドキュメント
+images/       — LINE Rich Menu画像
+layer/        — Lambda Layer依存パッケージ
+pwa/          — PWA静的ファイル
+scripts/      — 運用スクリプト（Rich Menu登録等）
+src/          — メインLambdaソースコード
+tests/        — テストコード
+tools/        — Nova Act Smoke等ツール
+u8/           — Unit 8（PWAダッシュボード: frontend + backend + SAM）
+worker/       — Nova Act Worker
+.gitignore    — Git除外設定
+AGENTS.md     — AI Agent設定
+Makefile      — ビルドコマンド
+README.md     — プロジェクト説明
+requirements.txt / requirements-dev.txt — Python依存
+samconfig.toml / template.yaml — SAM設定
+```
+
+---
+
 ## [CONSTRUCTION] Unit 8-B — 音声チャット方針変更 (Nova Sonic 移行)
 **Timestamp**: 2026-05-24T18:00:00+09:00
 **Status**: Complete

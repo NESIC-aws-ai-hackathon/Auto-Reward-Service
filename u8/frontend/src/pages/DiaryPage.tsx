@@ -136,6 +136,9 @@ export function DiaryPage() {
         {mood && <p>今日の気分：{mood}</p>}
       </section>
 
+      {/* Mood Insight - 昨日との比較で因果を示す */}
+      <MoodInsightCard todayStress={stressLevel} todayDate={getJstDateString()} />
+
       {/* Life Log */}
       <section className="life-log-list">
         <div className="section-title-row">
@@ -294,6 +297,71 @@ function PastDiariesSection({ entries, todayDate }: { entries: DiaryEntry[]; tod
           );
         })}
       </div>
+    </section>
+  );
+}
+
+/**
+ * MoodInsightCard - 昨日の気分・支出と今日を比較し、ふれまーるちゃんが因果を「実感させる」コメントを表示。
+ * 沼ループの「ご褒美→気分改善」の物語化。
+ */
+function MoodInsightCard({ todayStress, todayDate }: { todayStress: number | undefined; todayDate: string }) {
+  const api = useApi();
+  const [comment, setComment] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (todayStress === undefined) {
+      setComment(null);
+      return;
+    }
+    (async () => {
+      try {
+        // 昨日の日付を計算
+        const d = new Date(todayDate + 'T00:00:00');
+        d.setDate(d.getDate() - 1);
+        const yesterdayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const yesterday = await api.getDiaryDetail(yesterdayStr);
+        const ystress = yesterday.stress?.level;
+        if (ystress === undefined || ystress === null) {
+          setComment(null);
+          return;
+        }
+        const diff = ystress - todayStress;  // 正なら気分↑（ストレス下がった）
+        // 昨日の支出から「ご褒美っぽい」ものを探す
+        let rewardItem = '';
+        try {
+          const exp = await api.getExpenses(20);
+          const yExp = (exp.expenses || []).filter(e => (e.timestamp || '').startsWith(yesterdayStr));
+          const rewardCats = ['ご褒美', '趣味', 'カフェ', '美容'];
+          const matching = yExp.find(e => rewardCats.includes(e.category || '') || (e.item && /(プリン|ケーキ|スイーツ|アイス|コーヒー|お菓子)/.test(e.item)));
+          if (matching) rewardItem = (matching.item || '').slice(0, 20);
+        } catch { /* ignore */ }
+
+        if (diff >= 2) {
+          setComment(rewardItem
+            ? `🌱 昨日の「${rewardItem}」のおかげかな？ 今日はストレスが${diff}も下がってるよ♪`
+            : `🌿 昨日より気分がだいぶ上がってるね！ ストレス−${diff}。なんかいいことあった？`);
+        } else if (diff >= 1) {
+          setComment('🌷 昨日よりちょっと気分上向き♪ ゆっくりペースでいこ〜');
+        } else if (diff <= -2) {
+          setComment('😢 今日はちょっとお疲れみたい……。ご褒美いっとく？ ');
+        } else if (diff <= -1) {
+          setComment('🍃 昨日よりちょっとしんどそう。無理せずいこ〜');
+        } else {
+          setComment('🌼 昨日と同じくらいの気分。安定してるね♪');
+        }
+      } catch { setComment(null); }
+    })();
+  }, [todayStress, todayDate, api]);
+
+  if (!comment) return null;
+  return (
+    <section style={{
+      margin: '8px 16px', padding: '10px 14px', borderRadius: 12,
+      background: 'linear-gradient(135deg, #f3f8ec 0%, #fff7f9 100%)',
+      border: '1px solid #d8e8c4', fontSize: 13, color: '#5a6a4a', lineHeight: 1.6,
+    }}>
+      {comment}
     </section>
   );
 }

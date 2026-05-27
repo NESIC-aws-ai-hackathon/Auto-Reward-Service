@@ -11,12 +11,16 @@ import { SettingsPage } from './pages/SettingsPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PublicRoute } from './components/PublicRoute';
+import { DemoPage } from './demo/DemoPage';
 
 export function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Demo Mode — 認証不要・本番データに触れない */}
+          <Route path="/demo" element={<DemoPage />} />
+
           {/* Public routes */}
           <Route element={<PublicRoute />}>
             <Route path="/login" element={<LoginPage />} />

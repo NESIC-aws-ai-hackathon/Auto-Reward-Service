@@ -1,0 +1,197 @@
+/* ============================================================
+   Demo Mode — 最小限のオーバーライド。
+   本番ページの CSS (ChatPage.css, DashboardPage.css, RecoveryPage.css) を
+   DemoScreens.tsx 側で import して流用し、ここでは Demo 固有のレイアウトのみ定義。
+   ============================================================ */
+
+.demo-root {
+  width: 100vw;
+  height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: #060606;
+  padding: 16px;
+}
+
+/* phone-shell / phone-inner は index.css の本番スタイルをそのまま使う */
+
+/* Demo 固有ヘッダー（本番の .app-header と同じだが DEMO バッジ付き） */
+.demo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px 10px;
+  background: rgba(255, 253, 247, 0.82);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(232, 223, 206, 0.72);
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+}
+.demo-brand { display: flex; align-items: center; gap: 10px; }
+.demo-avatar {
+  width: 50px; height: 50px; border-radius: 50%; object-fit: cover;
+  border: 2px solid rgba(104, 169, 119, 0.28);
+  box-shadow: 0 6px 18px rgba(104, 169, 119, 0.18);
+}
+.demo-brand-title { font-weight: 900; font-size: 22px; color: var(--green); }
+.demo-brand-sub { font-size: 11px; color: #655d52; font-weight: 600; }
+.demo-mode-badge {
+  background: #e9a643; color: #fff; font-weight: 800; font-size: 10px;
+  padding: 4px 10px; border-radius: 999px; letter-spacing: 0.1em;
+}
+
+/* Demo タブバー（本番の .tabbar と完全同一構造） */
+.demo-tabbar {
+  height: 86px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: rgba(255, 253, 247, 0.94);
+  border-top: 1px solid rgba(232, 223, 206, 0.85);
+  display: grid;
+  grid-template-columns: 1fr 1fr 70px 1fr 1fr;
+  gap: 4px;
+  z-index: 6;
+  backdrop-filter: blur(18px);
+  flex-shrink: 0;
+}
+.demo-tab {
+  border-radius: 18px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  color: #5f8d62; font-weight: 800;
+  text-decoration: none;
+}
+.demo-tab span { font-size: 24px; line-height: 1; }
+.demo-tab small { font-size: 11px; }
+.demo-tab.active:not(.center) {
+  background: rgba(104, 169, 119, 0.11);
+  box-shadow: inset 0 0 0 1px rgba(104, 169, 119, 0.14);
+}
+.demo-tab.center {
+  margin-top: -30px;
+  width: 76px; height: 76px; border-radius: 50%;
+  background: #fffaf0;
+  box-shadow: 0 8px 28px rgba(87, 68, 38, 0.18), 0 0 0 8px rgba(255, 250, 240, 0.82);
+  align-self: start; justify-self: center;
+}
+.demo-tab.center img {
+  width: 66px; height: 66px; border-radius: 50%; object-fit: cover;
+}
+
+/* Demo ページ内部コンテンツ（phone-inner と同じフレックス） */
+.demo-phone {
+  background: linear-gradient(180deg, #fffdf7, #f2f8eb 42%, #fffaf2);
+}
+.demo-page-content {
+  flex: 1; overflow-y: auto; position: relative; z-index: 1;
+  scrollbar-width: none;
+}
+.demo-page-content::-webkit-scrollbar { display: none; }
+
+/* ============================================================
+   レシートオーバーレイ（Demo専用）
+   ============================================================ */
+.demo-receipt-overlay {
+  margin: 12px 0; padding: 0 2px;
+}
+.demo-receipt-card {
+  padding: 16px; display: flex; flex-direction: column; gap: 8px;
+  animation: demo-fadein 0.35s ease-out;
+}
+.demo-receipt-bar {
+  height: 6px; background: rgba(0, 0, 0, 0.08); border-radius: 999px; overflow: hidden;
+}
+.demo-receipt-bar-fill {
+  height: 100%; background: linear-gradient(90deg, #8fc49b, #68a977);
+  transition: width 0.6s ease;
+  animation: demo-bar-pulse 1.2s ease-in-out infinite alternate;
+}
+@keyframes demo-bar-pulse { from { opacity: 0.7; } to { opacity: 1; } }
+.demo-receipt-row {
+  display: flex; justify-content: space-between; gap: 8px;
+  padding: 4px 0; font-size: 13px;
+}
+.demo-receipt-row > span:first-child { color: #7f7668; font-weight: 700; }
+.demo-receipt-row > span:last-child { color: #3e3a32; font-weight: 700; }
+.demo-tag {
+  display: inline-block; padding: 3px 9px; border-radius: 999px;
+  background: rgba(143, 196, 155, 0.25); color: #2f7c51; font-size: 11px; font-weight: 700;
+}
+
+/* ============================================================
+   キャプション & トースト
+   ============================================================ */
+.demo-caption {
+  position: relative; left: 0; top: 0;
+  background: rgba(0, 0, 0, 0.82); color: #fff;
+  padding: 10px 18px; border-radius: 0 0 14px 14px;
+  font-size: 13px; font-weight: 700;
+  text-align: center; z-index: 20; backdrop-filter: blur(10px);
+  animation: demo-fadein 0.3s ease-out;
+  flex-shrink: 0;
+}
+.demo-toasts {
+  position: absolute; top: 90px; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 6px; z-index: 25;
+  pointer-events: none;
+}
+.demo-toast {
+  background: rgba(104, 169, 119, 0.95); color: #fff;
+  padding: 10px 16px; border-radius: 14px;
+  font-size: 12px; font-weight: 700;
+  box-shadow: 0 8px 24px rgba(104, 169, 119, 0.4);
+  animation: demo-fadein 0.3s ease-out;
+}
+
+@keyframes demo-fadein {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Control Panel
+   ============================================================ */
+.demo-control-panel {
+  background: #1a1a1a; color: #fff;
+  border-radius: 18px; padding: 18px;
+  width: 280px; flex-shrink: 0;
+  display: flex; flex-direction: column; gap: 10px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+  font-size: 13px;
+}
+.demo-control-title {
+  font-weight: 900; font-size: 14px; color: #e9a643;
+  letter-spacing: 0.08em; margin-bottom: 6px;
+}
+.demo-control-row {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.demo-control-row label {
+  min-width: 56px; font-size: 12px; color: #aaa; font-weight: 700;
+}
+.demo-control-row select, .demo-control-row button {
+  background: #2a2a2a; color: #fff; border: 1px solid #444;
+  padding: 8px 12px; border-radius: 10px; font-size: 12px; font-weight: 700;
+  flex: 1;
+}
+.demo-control-row button { cursor: pointer; transition: all 0.15s ease; }
+.demo-control-row button:not(:disabled):hover { background: #e9a643; border-color: #e9a643; }
+.demo-control-row button:disabled { opacity: 0.4; cursor: not-allowed; }
+.demo-control-info {
+  background: #0d0d0d; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid #2a2a2a;
+}
+.demo-control-progress { font-size: 11px; color: #aaa; margin-top: 4px; }
+.demo-control-hint {
+  font-size: 10px; color: #666; line-height: 1.6; margin-top: 6px;
+  padding-top: 8px; border-top: 1px solid #2a2a2a;
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 960px) {
+  .demo-root { flex-direction: column; padding: 8px; gap: 12px; }
+  .demo-control-panel { width: min(480px, 100vw); }
+}

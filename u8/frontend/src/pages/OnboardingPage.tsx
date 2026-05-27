@@ -3,9 +3,25 @@ import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 import './OnboardingPage.css';
 
-type Step = 'welcome' | 'name' | 'income' | 'fixed_costs' | 'confirm_budget' | 'bonus' | 'time' | 'done';
+type Step = 'welcome' | 'name' | 'income' | 'fixed_costs' | 'confirm_budget' | 'bonus' | 'interests' | 'time' | 'done';
 
-const STEPS: Step[] = ['welcome', 'name', 'income', 'fixed_costs', 'confirm_budget', 'bonus', 'time'];
+const STEPS: Step[] = ['welcome', 'name', 'income', 'fixed_costs', 'confirm_budget', 'bonus', 'interests', 'time'];
+
+// オンボーディングで選べる興味カテゴリ
+const INTEREST_OPTIONS = [
+  { id: 'coffee', emoji: '☕', label: 'コーヒー・カフェ', keyword: 'コーヒー 豆 ドリップ' },
+  { id: 'sweets', emoji: '🍰', label: 'スイーツ・お菓子', keyword: 'スイーツ ご褒美' },
+  { id: 'bath', emoji: '🛁', label: 'お風呂・温泉', keyword: 'バスソルト 入浴剤' },
+  { id: 'music', emoji: '🎵', label: '音楽・ライブ', keyword: 'ヒーリング音楽 リラックス' },
+  { id: 'movie', emoji: '🎬', label: '映画・動画', keyword: 'おすすめ映画' },
+  { id: 'reading', emoji: '📚', label: '読書・漫画', keyword: '話題の本' },
+  { id: 'yoga', emoji: '🧘', label: 'ヨガ・運動', keyword: 'ヨガ リラックス' },
+  { id: 'aroma', emoji: '🧴', label: 'アロマ・香り', keyword: 'アロマ リラックス' },
+  { id: 'animal', emoji: '🐱', label: '動物・ペット', keyword: '癒し 動物 動画' },
+  { id: 'cooking', emoji: '🍳', label: '料理・グルメ', keyword: '簡単レシピ ご褒美' },
+  { id: 'travel', emoji: '✈️', label: '旅行・おでかけ', keyword: '旅行 リフレッシュ' },
+  { id: 'stationery', emoji: '✏️', label: '文房具・手帳', keyword: '文房具 ご褒美' },
+] as const;
 
 function calcRewardBudget(income: number, fixedCosts: number): number {
   const surplus = Math.max(0, income - fixedCosts);
@@ -23,6 +39,7 @@ export function OnboardingPage() {
   const [bonusAmount, setBonusAmount] = useState('');
   const [bonusMonths, setBonusMonths] = useState('');
   const [diaryTime, setDiaryTime] = useState('22:00');
+  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const incomeNum = parseInt(income) || 0;
@@ -47,6 +64,7 @@ export function OnboardingPage() {
         reward_budget: finalBudget,
         bonus_amount: parseInt(bonusAmount) || 0,
         bonus_months: bonusMonths,
+        interests: selectedInterests,
       });
       setStep('done');
       setTimeout(() => navigate('/chat', { replace: true }), 2500);
@@ -236,13 +254,47 @@ export function OnboardingPage() {
               style={{ marginTop: 8 }}
             />
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button className="btn btn-secondary" onClick={() => setStep('time')}>
+              <button className="btn btn-secondary" onClick={() => setStep('interests')}>
                 スキップ
               </button>
-              <button className="btn btn-primary" onClick={() => setStep('time')} disabled={!bonusAmount}>
+              <button className="btn btn-primary" onClick={() => setStep('interests')} disabled={!bonusAmount}>
                 次へ
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Step: Interests */}
+      {step === 'interests' && (
+        <div className="onboarding-step fade-in">
+          <img src="/assets/furemaru-happy.png" alt="" className="onboarding-avatar-img small" />
+          <p className="onboarding-bubble">
+            {name}ちゃんの好きなこと教えて～♪<br />
+            <span className="bubble-hint">（あとでご褒美の提案に使うよ！）</span>
+          </p>
+          <div className="onboarding-input-area">
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {INTEREST_OPTIONS.map(opt => (
+                <button
+                  key={opt.id}
+                  className={`preset-btn ${selectedInterests.includes(opt.id) ? 'active' : ''}`}
+                  onClick={() => setSelectedInterests(prev =>
+                    prev.includes(opt.id) ? prev.filter(x => x !== opt.id) : [...prev, opt.id]
+                  )}
+                  style={{ padding: '10px 4px', fontSize: 12, textAlign: 'center', lineHeight: 1.3 }}
+                >
+                  <span style={{ fontSize: 20, display: 'block' }}>{opt.emoji}</span>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: 11, color: '#8e8270', margin: '8px 0', textAlign: 'center' }}>
+              {selectedInterests.length > 0 ? `${selectedInterests.length}個選択中` : 'いくつでもOKだよ～'}
+            </p>
+            <button className="btn btn-primary" onClick={() => setStep('time')}>
+              {selectedInterests.length > 0 ? '次へ' : 'スキップ'}
+            </button>
           </div>
         </div>
       )}

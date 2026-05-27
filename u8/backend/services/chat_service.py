@@ -90,6 +90,12 @@ class ChatService:
         except Exception as e:
             print(f"side_effects skip: {e}")
 
+        # ユーザーの興味を学習
+        try:
+            self._update_user_interests(user_id, content, intent)
+        except Exception as e:
+            print(f"interests update skip: {e}")
+
         # 会話履歴を保存
         saved_ts = self._save_turn(user_id, now, content, result["reply"], intent)
         result["user_timestamp"] = now
@@ -297,15 +303,21 @@ class ChatService:
         except Exception as e:
             print(f"lifelog read skip: {e}")
 
-        # 直近の会話(短期記憶)
+        # 直近の会話(短期記憶) — proactive messagesも含めてすべて読み込む
         recent_dialog = []
         try:
-            chats = self.da.query_items(f"USER#{user_id}", "CHAT#", limit=6, scan_index_forward=False)
+            chats = self.da.query_items(f"USER#{user_id}", "CHAT#", limit=30, scan_index_forward=False)
             for c in reversed(chats or []):
+                # 新形式: user_message / assistant_message
                 if c.get("user_message"):
                     recent_dialog.append(("user", c["user_message"]))
                 if c.get("assistant_message"):
                     recent_dialog.append(("assistant", c["assistant_message"]))
+                # プロアクティブメッセージ形式: role + text
+                elif c.get("role") == "assistant" and c.get("text"):
+                    recent_dialog.append(("assistant", c["text"]))
+                elif c.get("role") == "user" and c.get("text"):
+                    recent_dialog.append(("user", c["text"]))
         except Exception:
             pass
 
@@ -316,13 +328,14 @@ class ChatService:
             "【目的】会話から、支出・気分・疲れ・趣味嗜好を自然に拾う。支出には「回復費」「起動費」等のやさしい意味づけ。\n"
             "【提案】内・回復(深呼吸/散歩)から始め、有料の小さなものへ自然に。押し売りしない。\n"
             "【長さ】1〜2文。短くテンポよく。\n"
-            "【重要】前の会話の流れを踏まえて自然に続けること。唐突に話題を変えない。"
+            "【重要】前の会話の流れを必ず踏まえて自然に続けること。直前の自分の発言に対する返事なら、その内容を受けて応答する。\n"
+            "【記憶】過去の会話で出てきた話題・好み・出来事を覚えていて、自然に言及する。「前に○○って言ってたよね」のように。"
         )
         if context_parts:
             system_prompt += "\n\n【ユーザー状況】\n" + "\n".join(context_parts)
 
         messages = []
-        for role, msg in recent_dialog[-10:]:
+        for role, msg in recent_dialog[-30:]:
             messages.append({"role": role, "content": [{"text": msg}]})
         messages.append({"role": "user", "content": [{"text": content}]})
 
@@ -418,6 +431,80 @@ class ChatService:
 
     # ─── suggestion (rakuten / wishlist / youtube) ───
 
+    # ─── user interests extraction & storage ───
+
+    # 興味カテゴリ → 検索キーワード候補のマッピング
+    INTEREST_PATTERNS = [
+        (["コーヒー", "カフェ", "スタバ", "珈琲", "ラテ"], "コーヒー", "コーヒー 豆 ドリップ"),
+        (["紅茶", "ティー", "お茶", "ハーブティー"], "紅茶", "紅茶 リラックス"),
+        (["チョコ", "スイーツ", "ケーキ", "甘い", "お菓子", "プリン", "アイス"], "スイーツ", "スイーツ ご褒美"),
+        (["映画", "Netflix", "Amazon", "ドラマ", "動画"], "映画・動画", "おすすめ映画"),
+        (["本", "読書", "漫画", "マンガ", "小説"], "読書・漫画", "話題の本"),
+        (["ゲーム", "Switch", "PS", "スマホゲー"], "ゲーム", "ゲーム リラックス"),
+        (["音楽", "Spotify", "曲", "ライブ", "フェス", "アーティスト"], "音楽", "ヒーリング音楽 リラックス"),
+        (["ヨガ", "ストレッチ", "ジム", "筋トレ", "運動", "ランニング"], "運動", "ヨガ リラックス"),
+        (["お風呂", "バス", "温泉", "サウナ", "風呂"], "お風呂・温泉", "バスソルト 入浴剤"),
+        (["猫", "犬", "ペット", "動物"], "動物", "癒し 動物 動画"),
+        (["旅行", "旅", "温泉", "ホテル"], "旅行", "旅行 リフレッシュ"),
+        (["料理", "自炊", "レシピ", "作った"], "料理", "簡単レシピ ご褒美"),
+        (["アロマ", "香り", "お香", "キャンドル"], "アロマ", "アロマ リラックス"),
+        (["花", "植物", "観葉", "ガーデニング"], "植物", "観葉植物 癒し"),
+        (["文房具", "ノート", "ペン", "手帳"], "文房具", "文房具 ご褒美"),
+    ]
+
+    def _update_user_interests(self, user_id: str, content: str, intent: str):
+        """会話内容からユーザーの興味を抽出してDynamoDBに蓄積する。"""
+        text = (content or "").strip()
+        if not text or len(text) < 3:
+            return
+
+        detected = []
+        for keywords, category, search_kw in self.INTEREST_PATTERNS:
+            if any(k in text for k in keywords):
+                detected.append({"category": category, "search_keyword": search_kw})
+
+        if not detected:
+            return
+
+        # 既存の interests を取得してマージ
+        try:
+            existing = self.da.get_item(f"USER#{user_id}", "USER_INTERESTS#") or {}
+            interests = existing.get("interests", [])
+            # interests: [{category, search_keyword, score, last_seen}]
+            interest_map = {i["category"]: i for i in interests}
+
+            now = _now_jst_iso()
+            for d in detected:
+                cat = d["category"]
+                if cat in interest_map:
+                    interest_map[cat]["score"] = min(interest_map[cat].get("score", 1) + 1, 20)
+                    interest_map[cat]["last_seen"] = now
+                else:
+                    interest_map[cat] = {
+                        "category": cat,
+                        "search_keyword": d["search_keyword"],
+                        "score": 1,
+                        "last_seen": now,
+                    }
+
+            # scoreの高い順にソートして上位15件を保持
+            sorted_interests = sorted(interest_map.values(), key=lambda x: x.get("score", 0), reverse=True)[:15]
+
+            self.da.put_item(f"USER#{user_id}", "USER_INTERESTS#", {
+                "interests": sorted_interests,
+                "updated_at": now,
+            })
+        except Exception as e:
+            print(f"interests update error: {e}")
+
+    def _get_user_interests(self, user_id: str) -> list:
+        """ユーザーの蓄積された興味リストを取得する。"""
+        try:
+            item = self.da.get_item(f"USER#{user_id}", "USER_INTERESTS#")
+            return (item or {}).get("interests", [])
+        except Exception:
+            return []
+
     def _maybe_build_suggestion(self, user_id, content, intent, result, profile):
         if intent == INTENT_EXPENSE or result.get("expense_saved"):
             return None
@@ -452,7 +539,7 @@ class ChatService:
         try:
             from services.product_search import ProductSearchService
             ps = ProductSearchService()
-            kw = self._infer_reward_keyword(content)
+            kw = self._infer_reward_keyword(content, user_id)
             items = ps.search(keyword=kw, max_price="3000") or []
             if items:
                 pick = random.choice(items[:3])
@@ -470,9 +557,9 @@ class ChatService:
         # 3) YouTube
         try:
             from shared.secrets import get_secret
-            api_key = os.environ.get("YOUTUBE_API_KEY") or get_secret("ars/youtube", "api_key") or ""
+            api_key = os.environ.get("YOUTUBE_API_KEY") or get_secret("ars/youtube") or ""
             if api_key:
-                kw = "癒し 音楽 リラックス" if wants else self._infer_reward_keyword(content)
+                kw = "癒し 音楽 リラックス" if wants else self._infer_reward_keyword(content, user_id)
                 qs = urllib.parse.urlencode({
                     "part": "snippet", "q": kw, "type": "video",
                     "maxResults": "5", "key": api_key,
@@ -502,7 +589,7 @@ class ChatService:
 
         return None
 
-    def _infer_reward_keyword(self, content: str) -> str:
+    def _infer_reward_keyword(self, content: str, user_id: str = None) -> str:
         mapping = [
             (("コーヒー", "カフェ", "眠"), "コーヒー ドリップバッグ"),
             (("甘い", "スイーツ", "ケーキ", "チョコ"), "高級チョコ ご褒美"),
@@ -514,6 +601,16 @@ class ChatService:
         for keys, kw in mapping:
             if any(k in content for k in keys):
                 return kw
+
+        # 学習した興味から検索キーワードを選ぶ
+        if user_id:
+            interests = self._get_user_interests(user_id)
+            if interests:
+                # スコア上位からランダムに1つ選ぶ
+                top = interests[:5]
+                pick = random.choice(top)
+                return pick.get("search_keyword", "ご褒美 プチギフト")
+
         return "ご褒美 プチギフト"
 
     # ─── save turn ───

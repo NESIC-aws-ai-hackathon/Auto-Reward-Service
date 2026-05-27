@@ -41,6 +41,8 @@ def lambda_handler(event, context):
             return _handle_put_settings(user_id, event)
         elif path == "/api/user/me" and method == "GET":
             return _handle_get_user(user_id)
+        elif path == "/api/user/interests" and method == "GET":
+            return _handle_get_user_interests(user_id)
         elif path == "/api/voice-session/start" and method == "POST":
             return _handle_voice_session_start(user_id)
         elif path == "/api/voice-session/end" and method == "POST":
@@ -66,6 +68,8 @@ def lambda_handler(event, context):
         elif path.startswith("/api/diary/") and method == "GET":
             date = path.split("/api/diary/")[1]
             return _handle_get_diary_detail(user_id, date)
+        elif path == "/api/memories" and method == "GET":
+            return _handle_get_memories(user_id)
         elif path == "/api/chat/messages" and method == "GET":
             return _handle_get_chat_messages(user_id, event)
         elif path == "/api/chat/send" and method == "POST":
@@ -88,6 +92,8 @@ def lambda_handler(event, context):
             return _handle_get_wishlist_sources(user_id)
         elif path == "/api/wishlist/register" and method == "POST":
             return _handle_wishlist_register(user_id, event)
+        elif path == "/api/wishlist/add-item" and method == "POST":
+            return _handle_wishlist_add_item(user_id, event)
         elif path == "/api/wishlist/sync" and method == "POST":
             return _handle_wishlist_sync(user_id, event)
         elif path == "/api/wishlist/items" and method == "GET":
@@ -163,6 +169,14 @@ def _handle_get_user(user_id: str) -> dict:
         "user_id": user_id,
         "display_name": profile.get("display_name", ""),
     })
+
+
+def _handle_get_user_interests(user_id: str) -> dict:
+    """学習済みのユーザー興味を返す。RecoveryPage等で検索キーワードとして使用。"""
+    from services.chat_service import ChatService
+    svc = ChatService(da)
+    interests = svc._get_user_interests(user_id)
+    return _json_response(200, {"interests": interests})
 
 
 def _validate_settings(body: dict) -> list:
@@ -373,6 +387,79 @@ def _handle_get_diary_detail(user_id: str, date: str) -> dict:
     return _json_response(200, result)
 
 
+def _handle_get_memories(user_id: str) -> dict:
+    """ふれまーるちゃんが「覚えている」ユーザーの出来事・趣味・太郎を返す。"""
+    from collections import Counter
+    from datetime import datetime as _dt
+
+    # 最近のLIFE_LOGを取得（多めに取って集計）
+    logs = da.query_by_prefix_latest(f"USER#{user_id}", "LIFE_LOG#", limit=80) or []
+
+    # トピック頃度集計
+    topics = Counter()
+    moods = Counter()
+    categories = Counter()
+    episodes = []  # 「覚えてるよ」エピソード集
+    for log in logs:
+        t = (log.get("topic") or "").strip()
+        if t and len(t) <= 30:
+            topics[t] += 1
+        m = (log.get("mood") or log.get("emotion") or "").strip()
+        if m and len(m) <= 20:
+            moods[m] += 1
+        c = (log.get("category") or "").strip()
+        if c:
+            categories[c] += 1
+        content = (log.get("content") or "").strip()
+        if content and 5 <= len(content) <= 80:
+            episodes.append({
+                "content": content,
+                "category": c,
+                "date": log.get("date") or (log.get("SK", "")[9:19] if log.get("SK", "").startswith("LIFE_LOG#") else ""),
+                "topic": t,
+            })
+
+    # 購入履歴から「よく買うもの」も集計
+    expenses = da.query_by_prefix_latest(f"USER#{user_id}", "EXPENSE#", limit=50) or []
+    favorite_items = Counter()
+    for e in expenses:
+        item = (e.get("item") or "").strip()
+        if item and len(item) <= 30:
+            favorite_items[item] += 1
+
+    # ストリークの計算（CHATがある日の連続日数）
+    chats = da.query_by_prefix_latest(f"USER#{user_id}", "CHAT#", limit=200) or []
+    chat_dates = set()
+    for ch in chats:
+        ts = ch.get("timestamp") or ""
+        if len(ts) >= 10:
+            chat_dates.add(ts[:10])
+
+    # 会話間隔を計算
+    today = _dt.now().strftime("%Y-%m-%d")
+    last_chat_date = max(chat_dates) if chat_dates else None
+    days_since_chat = 0
+    if last_chat_date:
+        try:
+            d1 = _dt.strptime(today, "%Y-%m-%d")
+            d2 = _dt.strptime(last_chat_date, "%Y-%m-%d")
+            days_since_chat = (d1 - d2).days
+        except Exception:
+            pass
+
+    return _json_response(200, {
+        "topics": [{"name": k, "count": v} for k, v in topics.most_common(6)],
+        "moods": [{"name": k, "count": v} for k, v in moods.most_common(4)],
+        "categories": [{"name": k, "count": v} for k, v in categories.most_common(5)],
+        "favorite_items": [{"name": k, "count": v} for k, v in favorite_items.most_common(5) if v >= 2],
+        "episodes": episodes[:8],
+        "total_chat_days": len(chat_dates),
+        "total_life_logs": len(logs),
+        "days_since_last_chat": days_since_chat,
+        "last_chat_date": last_chat_date,
+    })
+
+
 # ─── Chat Message Handlers ───
 
 def _handle_get_chat_messages(user_id: str, event: dict) -> dict:
@@ -452,11 +539,11 @@ def _generate_chat_reply(user_id: str, user_message: str) -> str:
     display_name = profile.get("display_name", "あなた")
 
     # Get recent conversation context
-    recent = da.query_by_prefix(f"USER#{user_id}", "CONVERSATION_TURN#", limit=20)
+    recent = da.query_by_prefix(f"USER#{user_id}", "CONVERSATION_TURN#", limit=30)
 
     # Build history ensuring alternating roles (Bedrock Converse requirement)
     history = []
-    for item in recent[-8:]:
+    for item in recent[-30:]:
         role = item.get("role", "user")
         content = item.get("content", "") or item.get("transcript", "")
         if not content:
@@ -622,7 +709,7 @@ def _handle_get_onboarding(user_id: str) -> dict:
 
 
 def _handle_post_onboarding(user_id: str, event: dict) -> dict:
-    """Save onboarding financial profile."""
+    """Save onboarding financial profile and initial interests."""
     body = json.loads(event.get("body", "{}") or "{}")
 
     monthly_income = body.get("monthly_income", 0)
@@ -630,6 +717,7 @@ def _handle_post_onboarding(user_id: str, event: dict) -> dict:
     reward_budget = body.get("reward_budget", 0)
     bonus_amount = body.get("bonus_amount", 0)
     bonus_months = body.get("bonus_months", "")
+    interests_ids = body.get("interests", [])
 
     if not isinstance(monthly_income, (int, float)) or monthly_income < 0:
         return _json_response(400, {"error": "validation_error", "message": "Invalid monthly_income"})
@@ -647,6 +735,37 @@ def _handle_post_onboarding(user_id: str, event: dict) -> dict:
         "onboarding_completed": True,
         "onboarding_completed_at": now,
     })
+
+    # Save initial interests from onboarding selections
+    if interests_ids and isinstance(interests_ids, list):
+        INTEREST_MAP = {
+            "coffee": {"category": "コーヒー", "search_keyword": "コーヒー 豆 ドリップ"},
+            "sweets": {"category": "スイーツ", "search_keyword": "スイーツ ご褒美"},
+            "bath": {"category": "お風呂・温泉", "search_keyword": "バスソルト 入浴剤"},
+            "music": {"category": "音楽", "search_keyword": "ヒーリング音楽 リラックス"},
+            "movie": {"category": "映画・動画", "search_keyword": "おすすめ映画"},
+            "reading": {"category": "読書・漫画", "search_keyword": "話題の本"},
+            "yoga": {"category": "運動", "search_keyword": "ヨガ リラックス"},
+            "aroma": {"category": "アロマ", "search_keyword": "アロマ リラックス"},
+            "animal": {"category": "動物", "search_keyword": "癒し 動物 動画"},
+            "cooking": {"category": "料理", "search_keyword": "簡単レシピ ご褒美"},
+            "travel": {"category": "旅行", "search_keyword": "旅行 リフレッシュ"},
+            "stationery": {"category": "文房具", "search_keyword": "文房具 ご褒美"},
+        }
+        interests = []
+        for iid in interests_ids[:10]:
+            if iid in INTEREST_MAP:
+                interests.append({
+                    "category": INTEREST_MAP[iid]["category"],
+                    "search_keyword": INTEREST_MAP[iid]["search_keyword"],
+                    "score": 3,  # onboarding selection starts with higher score
+                    "last_seen": now,
+                })
+        if interests:
+            da.put_item(f"USER#{user_id}", "USER_INTERESTS#", {
+                "interests": interests,
+                "updated_at": now,
+            })
 
     return _json_response(200, {"message": "Onboarding completed"})
 
@@ -669,7 +788,7 @@ def _handle_youtube_search(user_id: str, event: dict) -> dict:
         # Fallback: Secrets Manager
         try:
             from shared.secrets import get_secret
-            api_key = get_secret("ars/youtube", "api_key") or ""
+            api_key = get_secret("ars/youtube") or ""
         except Exception:
             api_key = ""
     if not api_key:
@@ -765,6 +884,44 @@ def _handle_wishlist_register(user_id: str, event: dict) -> dict:
     if "error" in result:
         return _json_response(400, result)
     return _json_response(200, result)
+
+
+def _handle_wishlist_add_item(user_id: str, event: dict) -> dict:
+    """直接商品をほしいものリストに追加する。"""
+    body = json.loads(event.get("body", "{}") or "{}")
+    name = body.get("name", "").strip()
+    url = body.get("url", "").strip()
+    price = body.get("price")
+    image = body.get("image", "").strip()
+    category = body.get("category", "").strip()
+
+    if not name:
+        return _json_response(400, {"error": "validation_error", "message": "name is required"})
+
+    import hashlib
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    item_id = hashlib.sha256(f"{name}{url}{now}".encode()).hexdigest()[:12]
+
+    item_data = {
+        "wishlist_item_id": item_id,
+        "wishlist_source_id": "manual",
+        "user_id": user_id,
+        "product_title": name,
+        "product_url": url or "",
+        "product_image_url": image or "",
+        "price": int(price) if price else None,
+        "category": category or "",
+        "status": "ACTIVE",
+        "desire_aging_days": 0,
+        "first_seen_at": now,
+        "last_seen_at": now,
+        "created_at": now,
+        "updated_at": now,
+    }
+
+    da.put_item(f"USER#{user_id}", f"WISHLIST_ITEM#{item_id}", item_data)
+    return _json_response(200, {"success": True, "item_id": item_id})
 
 
 def _handle_wishlist_sync(user_id: str, event: dict) -> dict:
@@ -990,7 +1147,7 @@ def _handle_test_connection(user_id: str, event: dict) -> dict:
         try:
             from services.hotpepper_service import HotpepperService
             rs = HotpepperService()
-            results = rs.search_restaurants(keyword="カフェ", lat=35.6812, lng=139.7671, range_=3)
+            results = rs.search_restaurants(keyword="カフェ", lat=35.6812, lng=139.7671, range_km=3)
             return _json_response(200, {
                 "ok": bool(results),
                 "service": "hotpepper",
@@ -1002,7 +1159,7 @@ def _handle_test_connection(user_id: str, event: dict) -> dict:
     if service == "youtube":
         try:
             from shared.secrets import get_secret
-            api_key = os.environ.get("YOUTUBE_API_KEY") or get_secret("ars/youtube", "api_key") or ""
+            api_key = os.environ.get("YOUTUBE_API_KEY") or get_secret("ars/youtube") or ""
             if not api_key:
                 return _json_response(200, {"ok": False, "service": "youtube", "error": "API key not found"})
             import urllib.request, urllib.parse

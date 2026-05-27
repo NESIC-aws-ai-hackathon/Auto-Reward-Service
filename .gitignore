@@ -1,9 +1,6 @@
 # Dependencies
 node_modules/
 
-# Git backup (corrupted)
-.git_backup/
-
 # Build outputs
 .aws-sam/
 u8/.aws-sam/
@@ -42,5 +39,14 @@ out.json
 tmp_*.txt
 temp_*.html
 
-# Old code (deprecated)
-old/
+# Logs
+*.log
+
+# Corrupted git backups
+.git-*/
+!.git/
+!.github/
+
+# Archive (large, track selectively)
+archive/v1-line-bot/layer/
+archive/v1-line-bot/tests/__pycache__/

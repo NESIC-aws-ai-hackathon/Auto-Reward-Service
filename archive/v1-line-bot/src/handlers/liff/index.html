@@ -1,0 +1,2039 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ふれまーるちゃん</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4a9c5e">
+<style>
+:root {
+  --primary: #4a9c5e;
+  --primary-dark: #357a44;
+  --primary-light: #e8f5e9;
+  --accent: #7c3aed;
+  --accent-light: #ede9fe;
+  --bg: #f0f7f2;
+  --card-bg: #ffffff;
+  --text: #2d3b2d;
+  --text-sub: #6b8068;
+  --border: #d4e5d7;
+  --danger: #d84315;
+  --warning: #f9a825;
+  --forest-gradient: linear-gradient(135deg, #2d6a4f, #40916c);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding-bottom: 70px;
+}
+.header {
+  background: var(--forest-gradient);
+  color: #fff;
+  padding: 16px 20px;
+  text-align: center;
+  font-size: 18px;
+  font-weight: bold;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  letter-spacing: 0.5px;
+}
+.tab-bar {
+  display: flex;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  z-index: 100;
+}
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 10px 0;
+  font-size: 12px;
+  color: var(--text-sub);
+  cursor: pointer;
+  transition: color 0.2s;
+}
+.tab.active { color: var(--primary); font-weight: bold; }
+.tab-icon { font-size: 20px; display: block; margin-bottom: 2px; }
+.content { padding: 16px; }
+.page { display: none; }
+.page.active { display: block; }
+.card {
+  background: var(--card-bg);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 2px 8px rgba(45,106,79,0.08);
+  border: 1px solid var(--border);
+}
+.card-title { font-size: 14px; color: var(--text-sub); margin-bottom: 8px; }
+.budget-amount { font-size: 28px; font-weight: bold; color: var(--primary); }
+.budget-sub { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
+.progress-bar {
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  margin: 12px 0;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--primary);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+.progress-fill.warning { background: var(--warning); }
+.progress-fill.danger { background: var(--danger); }
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.list-item:last-child { border-bottom: none; }
+.swipe-row .list-item { padding: 0; border-bottom: none; }
+.list-item-name { font-size: 14px; flex: 1; }
+.list-item-amount { font-size: 14px; font-weight: bold; white-space: nowrap; margin-left: 8px; }
+.list-item-cat { font-size: 11px; color: var(--text-sub); }
+.list-item-date { font-size: 11px; color: var(--text-sub); }
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: bold;
+}
+.badge-bought { background: var(--primary-light); color: var(--primary-dark); }
+.badge-skip { background: #fce4ec; color: #c62828; }
+.badge-done { background: var(--primary-light); color: var(--primary-dark); }
+.badge-active { background: var(--accent-light); color: var(--accent); }
+.badge-proposed { background: #e3f2fd; color: #1565c0; }
+.spot-clickable { cursor: pointer; }
+.spot-clickable:active { opacity: 0.7; }
+.spot-detail-link {
+  display: block;
+  padding: 10px 14px;
+  background: var(--card-inner, #f0f7f2);
+  border-radius: 8px;
+  color: var(--primary);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: bold;
+  text-align: center;
+}
+.spot-detail-link:active { opacity: 0.7; }
+.pool-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.pool-item:last-child { border-bottom: none; }
+.pool-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  margin-right: 12px;
+  background: var(--border);
+}
+.pool-info { flex: 1; }
+.pool-name { font-size: 14px; font-weight: 500; }
+.pool-price { font-size: 13px; color: var(--primary); margin-top: 2px; }
+.pool-type { font-size: 11px; color: var(--text-sub); }
+.form-group { margin-bottom: 16px; }
+.form-label { font-size: 13px; color: var(--text-sub); margin-bottom: 6px; display: block; }
+.form-select, .form-input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  background: var(--card-bg);
+  color: var(--text);
+  -webkit-appearance: none;
+}
+.btn {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  text-align: center;
+  transition: opacity 0.2s;
+}
+.btn:active { opacity: 0.7; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-danger { background: var(--danger); color: #fff; }
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes progress {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0); }
+  100% { transform: translateX(100%); }
+}
+.btn-outline {
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+.calendar-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 6px;
+}
+.status-dot.connected { background: var(--primary); }
+.status-dot.disconnected { background: var(--text-sub); }
+.loading { text-align: center; padding: 40px; color: var(--text-sub); }
+.error-msg { text-align: center; padding: 20px; color: var(--danger); }
+.empty-msg { text-align: center; padding: 30px; color: var(--text-sub); font-size: 14px; }
+.btn-edit {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-sub);
+  cursor: pointer;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+.btn-edit:active { opacity: 0.7; }
+.swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+}
+.swipe-row:last-child { border-bottom: none; }
+.swipe-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  background: var(--card-bg);
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+  will-change: transform;
+  position: relative;
+  z-index: 1;
+}
+.swipe-content.swiped { transform: translateX(-80px); }
+.swipe-delete-btn {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 80px;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 0;
+}
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal-box {
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 24px 20px;
+  width: 88%;
+  max-width: 360px;
+}
+.modal-title { font-size: 16px; font-weight: bold; margin-bottom: 16px; }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+.modal-actions .btn { flex: 1; }
+.chart-container { position: relative; height: 180px; margin: 8px 0; }
+.detour-hero {
+  text-align: center;
+  padding: 16px 0 8px;
+}
+.detour-count {
+  font-size: 48px;
+  font-weight: bold;
+  color: var(--accent);
+  line-height: 1;
+}
+.detour-count-label {
+  font-size: 12px;
+  color: var(--text-sub);
+  margin-top: 4px;
+}
+.detour-lane-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.detour-lane-row:last-child { border-bottom: none; }
+.detour-lane-name { font-weight: bold; }
+.detour-lane-stat { color: var(--text-sub); font-size: 12px; }
+.detour-place-chip {
+  display: inline-block;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 12px;
+  margin: 3px;
+}
+.btn-detour-start {
+  display: block;
+  width: 100%;
+  padding: 14px;
+  background: var(--forest-gradient);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+.btn-detour-start:active { opacity: 0.85; }
+.session-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px;
+  margin-bottom: 10px;
+}
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.session-title { font-size: 14px; font-weight: bold; color: var(--text); }
+.session-date { font-size: 11px; color: var(--text-sub); margin-bottom: 6px; }
+.session-place {
+  display: flex;
+  gap: 10px;
+  background: var(--card-inner, #f0f7f2);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+.place-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.place-info {
+  flex: 1;
+  min-width: 0;
+}
+.place-name {
+  font-size: 13px;
+  font-weight: bold;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+.place-desc {
+  font-size: 11px;
+  color: #5a7a5a;
+  margin-bottom: 3px;
+  font-style: italic;
+}
+.place-genre {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-right: 6px;
+}
+.place-budget {
+  font-size: 11px;
+  color: var(--accent);
+  margin-right: 6px;
+}
+.place-walk {
+  font-size: 11px;
+  color: var(--text-sub);
+}
+.place-links {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+.place-link {
+  font-size: 12px;
+  color: var(--primary);
+  text-decoration: none;
+  padding: 2px 8px;
+  background: rgba(74, 156, 94, 0.1);
+  border-radius: 4px;
+}
+.place-link:active { opacity: 0.6; }
+.session-place a { color: var(--accent); text-decoration: none; font-size: 12px; }
+.session-actions { margin-top: 10px; }
+.btn-record-expense {
+  display: inline-block;
+  padding: 8px 14px;
+  background: var(--accent-light);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.btn-record-expense:active { opacity: 0.7; }
+.expense-group {
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.expense-group-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--card-inner, #f0f7f2);
+  cursor: pointer;
+}
+.expense-group-header:active { opacity: 0.8; }
+.expense-group-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.expense-group-icon { font-size: 16px; }
+.expense-group-name { font-size: 13px; font-weight: bold; color: var(--text); }
+.expense-group-count { font-size: 11px; color: var(--text-sub); }
+.expense-group-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.expense-group-amount { font-size: 13px; font-weight: bold; color: var(--primary); }
+.expense-group-pct { font-size: 11px; color: var(--text-sub); }
+.expense-group-arrow { font-size: 10px; color: var(--text-sub); transition: transform 0.2s; }
+.expense-group-body { padding: 0 10px 8px; }
+.month-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.month-nav-btn {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+}
+.month-nav-btn:active { opacity: 0.7; }
+.month-label { font-size: 14px; font-weight: bold; }
+.forest-banner {
+  text-align: center;
+  padding: 8px 0 0;
+  font-size: 12px;
+  color: var(--text-sub);
+  opacity: 0.8;
+}
+/* ─── 通知チャット風UI (変更依頼書_2 §3) ─── */
+.chat-notifications { display: flex; flex-direction: column; gap: 12px; }
+.notif-bubble {
+  background: var(--primary-light);
+  border-radius: 16px 16px 16px 4px;
+  padding: 14px 16px;
+  position: relative;
+  max-width: 90%;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.notif-bubble .notif-type {
+  font-size: 11px;
+  color: var(--primary-dark);
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+.notif-bubble .notif-time {
+  font-size: 11px;
+  color: var(--text-sub);
+  margin-top: 6px;
+  text-align: right;
+}
+.notif-bubble .notif-actions {
+  display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
+}
+.notif-bubble .notif-actions button {
+  padding: 6px 12px; border-radius: 8px; border: 1px solid var(--primary);
+  background: #fff; color: var(--primary); font-size: 12px; cursor: pointer;
+}
+.notif-bubble .notif-actions button:hover { background: var(--primary-light); }
+/* ─── 欲望在庫カード ─── */
+.wishlist-card {
+  display: flex; gap: 12px; padding: 12px; border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 10px; align-items: center;
+}
+.wishlist-card img {
+  width: 60px; height: 60px; object-fit: cover; border-radius: 8px; flex-shrink: 0;
+}
+.wishlist-card .wishlist-info { flex: 1; }
+.wishlist-card .wishlist-title { font-size: 13px; font-weight: bold; margin-bottom: 4px; }
+.wishlist-card .wishlist-meta { font-size: 11px; color: var(--text-sub); }
+.wishlist-card .wishlist-aging {
+  font-size: 11px; color: var(--accent); font-weight: bold;
+}
+</style>
+</head>
+<body>
+
+<div class="header" id="header">🌿 ふれまーるちゃん</div>
+
+<div class="content">
+  <!-- ホーム -->
+  <div class="page active" id="page-home">
+    <div class="card">
+      <div class="card-title">🌳 今月のご褒美枠</div>
+      <div class="budget-amount" id="home-remaining">-</div>
+      <div class="budget-sub" id="home-budget-detail"></div>
+      <div class="progress-bar"><div class="progress-fill" id="home-progress"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🍃 最近のご褒美提案</div>
+      <div id="home-suggestions"><div class="empty-msg">まだ提案がありません</div></div>
+    </div>
+    <div class="forest-banner">🌿 ふれまーるちゃんがあなたの「甘やかし」を見守ってるよ</div>
+  </div>
+
+  <!-- 支出 -->
+  <!-- 支出 -->
+  <div class="page" id="page-expenses">
+    <div class="card">
+      <div class="card-title">📊 月次支出グラフ</div>
+      <div class="chart-container"><canvas id="monthly-chart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="month-nav">
+        <button class="month-nav-btn" id="btn-month-prev">◀ 前の月</button>
+        <span class="month-label" id="expenses-month-label">-</span>
+        <button class="month-nav-btn" id="btn-month-next">次の月 ▶</button>
+      </div>
+      <div id="expenses-list"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <!-- ご褒美 -->
+  <div class="page" id="page-rewards">
+    <div class="card">
+      <div class="card-title">🎁 提案履歴</div>
+      <div id="reward-history"><div class="loading">読み込み中...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">🌸 ご褒美候補</div>
+      <div id="reward-pool"><div class="loading">読み込み中...</div></div>
+    </div>
+  </div>
+
+  <!-- 寄り道レーン -->
+  <div class="page" id="page-detour">
+    <div class="card">
+      <button class="btn-detour-start" id="btn-detour-start">🗺️ 今すぐ寄り道レーンを作る</button>
+      <div style="font-size:11px;color:var(--text-sub);text-align:center;margin-top:6px;">現在地から帰り道の寄り道スポットを提案するよ 🌿</div>
+    </div>
+    <div class="card">
+      <div class="card-title">🌿 今月の寄り道まとめ</div>
+      <div class="detour-hero">
+        <div class="detour-count" id="detour-count">—</div>
+        <div class="detour-count-label">まっすぐ帰れなかった回数</div>
+      </div>
+      <div id="detour-lanes"><div class="loading">読み込み中...</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">📋 寄り道リスト</div>
+      <div id="detour-sessions"><div class="loading">読み込み中...</div></div>
+    </div>
+    <div class="card" id="detour-places-card" style="display:none">
+      <div class="card-title">🏠 よく寄るスポット</div>
+      <div id="detour-places"></div>
+    </div>
+  </div>
+
+  <!-- 設定 -->
+  <div class="page" id="page-settings">
+    <div class="card">
+      <div class="card-title">⚙️ 基本設定</div>
+      <div class="form-group">
+        <label class="form-label">ニックネーム</label>
+        <input type="text" class="form-input" id="set-nickname" maxlength="20" placeholder="ふれまーるちゃんからの呼び名">
+      </div>
+      <div class="form-group">
+        <label class="form-label">口調</label>
+        <select class="form-select" id="set-tone">
+          <option value="friendly">フレンドリー 😊</option>
+          <option value="polite">丁寧 🙇</option>
+          <option value="devilish">小悪魔 😈</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">月のご褒美枠（円）</label>
+        <input type="number" class="form-input" id="set-budget" min="1000" step="1000" placeholder="20000">
+      </div>
+      <div class="form-group">
+        <label class="form-label">繰り越し率（0〜100%）</label>
+        <input type="number" class="form-input" id="set-carryover" min="0" max="100" step="10" placeholder="50">
+      </div>
+      <button class="btn btn-primary" id="btn-save-settings">保存する</button>
+    </div>
+    <div class="card">
+      <div class="card-title">� 通知設定</div>
+      <div class="form-group">
+        <label class="form-label">通知クールダウン（時間）</label>
+        <select class="form-select" id="set-push-cooldown">
+          <option value="0">制限なし</option>
+          <option value="1">1時間</option>
+          <option value="2">2時間</option>
+          <option value="4">4時間</option>
+          <option value="8">8時間</option>
+        </select>
+        <small style="color:#888;font-size:11px;">PWA通知の最低間隔。短いほど通知が多くなります。</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">通知感度（閾値）</label>
+        <select class="form-select" id="set-push-threshold">
+          <option value="20">高め（よく通知）</option>
+          <option value="40">普通</option>
+          <option value="60">低め（控えめ）</option>
+          <option value="80">最低限</option>
+        </select>
+        <small style="color:#888;font-size:11px;">ストレススコアがこの値以上で寄り道提案します。</small>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">🔔 PWA Web Push通知</div>
+      <div id="webpush-status" style="margin-bottom:8px;font-size:13px;color:#555;">確認中...</div>
+      <button class="btn btn-primary" id="btn-webpush-subscribe" style="margin-right:6px;">通知をONにする</button>
+      <button class="btn btn-secondary" id="btn-webpush-test" style="margin-right:6px;">テスト通知</button>
+      <button class="btn btn-secondary" id="btn-webpush-unsubscribe">通知をOFFにする</button>
+      <button class="btn btn-primary" id="btn-push-trigger" style="margin-top:8px;">🌿 ご褒美通知を送る</button>
+      <div id="push-trigger-result" style="margin-top:6px;font-size:12px;color:#555;"></div>
+      <small style="display:block;color:#888;font-size:11px;margin-top:8px;">
+        ブラウザ通知を許可すると、ふれまーるちゃんからのおしらせがプッシュ通知で届きます。
+        「ご褒美通知を送る」で定期通知と同じPushを即座に受信できます。
+      </small>
+    </div>
+    <div class="card">
+      <div class="card-title">🎁 ご褒美候補検索テスト</div>
+      <div class="form-group">
+        <label class="form-label">検索キーワード</label>
+        <input type="text" class="form-input" id="nova-act-query" placeholder="抹茶 プリン（空欄でおまかせ）" value="">
+        <small style="color:#888;font-size:11px;">空欄でおまかせ検索。キーワードを入れると絞り込めます。</small>
+      </div>
+      <div class="form-group">
+        <label class="form-label">上限金額</label>
+        <select class="form-select" id="reward-test-budget">
+          <option value="1000">〜1,000円</option>
+          <option value="2000">〜2,000円</option>
+          <option value="3000" selected>〜3,000円</option>
+          <option value="5000">〜5,000円</option>
+          <option value="10000">〜10,000円</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="btn-nova-act-smoke">🔍 候補を検索する</button>
+      <div id="nova-act-result" style="margin-top:12px;font-size:12px;color:#555;"></div>
+      <small style="display:block;color:#888;font-size:11px;margin-top:8px;">
+        楽天API → ホットペッパーAPI → Nova Actキャッシュ → Bedrock AI → 静的カタログの順で候補を取得します。
+      </small>
+    </div>
+    <div class="card">
+      <div class="card-title">🤖 ご褒美候補プレビュー</div>
+      <div id="nova-act-cart-section">
+        <!-- 候補取得中 -->
+        <div id="nova-act-loading" style="display:none;text-align:center;padding:20px;">
+          <div style="font-size:36px;animation:bounce 1s infinite;">🎁</div>
+          <p style="font-size:14px;color:#2e7d32;margin-top:10px;font-weight:bold;">ふれまーるちゃんが候補を探し中...</p>
+          <div style="margin-top:12px;height:4px;background:#e0e0e0;border-radius:2px;overflow:hidden;">
+            <div style="width:60%;height:100%;background:#7BAF6E;animation:progress 2s ease-in-out infinite;"></div>
+          </div>
+        </div>
+
+        <!-- Empty: 候補なし -->
+        <div id="nova-act-empty" style="text-align:center;padding:16px;">
+          <p style="font-size:14px;color:#555;">まだ候補が見つかっていないよ🌿</p>
+          <p style="font-size:12px;color:#888;margin-top:4px;">上の検索テストか「今すぐ候補を探す」ボタンで試してみてね！</p>
+          <button class="btn btn-secondary" id="btn-nova-act-trigger" style="margin-top:12px;">🎁 今すぐ候補を探す</button>
+        </div>
+
+        <!-- Phase 2: カート追加完了 → ユーザーが購入を許可するだけ -->
+        <div id="nova-act-step1" style="display:none;">
+          <div style="background:#e8f5e9;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #a5d6a7;">
+            <div style="display:flex;align-items:center;margin-bottom:10px;">
+              <span style="font-size:20px;margin-right:8px;">🎁</span>
+              <p style="font-size:14px;color:#2e7d32;font-weight:bold;margin:0;">ふれまーるちゃんがご褒美候補を見つけてきたよ</p>
+            </div>
+            <div id="nova-act-product-image" style="text-align:center;margin-bottom:10px;"></div>
+            <div id="nova-act-product-title" style="font-weight:bold;font-size:16px;margin-bottom:4px;color:#333;"></div>
+            <div id="nova-act-product-price" style="color:#7BAF6E;font-weight:bold;font-size:20px;margin-bottom:8px;"></div>
+            <p style="font-size:12px;color:#666;margin-bottom:4px;" id="nova-act-reason"></p>
+            <div id="nova-act-product-source" style="font-size:11px;color:#888;margin-bottom:6px;"></div>
+            <div id="nova-act-product-link" style="margin-top:6px;"></div>
+          </div>
+          <p style="font-size:14px;color:#2d5016;text-align:center;margin-bottom:12px;">購入手続きの準備ができたよ🌿<br><span style="font-size:12px;color:#666;">注文はまだ確定していません</span></p>
+          <button class="btn btn-primary" id="btn-nova-act-add-cart" style="background:#ff9900;margin-bottom:8px;font-size:16px;padding:14px;">🛒 Amazonのカートに入れる</button>
+          <button class="btn btn-secondary" id="btn-nova-act-rakuten" style="margin-bottom:8px;display:none;">🛍️ 楽天で確認する</button>
+          <button class="btn btn-secondary" id="btn-nova-act-hotpepper" style="margin-bottom:8px;display:none;">🍽️ お店を見る</button>
+          <button class="btn btn-secondary" id="btn-nova-act-change" style="margin-bottom:6px;">🔄 別の商品にして</button>
+          <button class="btn btn-secondary" id="btn-nova-act-decline">❌ やっぱりやめる</button>
+        </div>
+
+        <!-- Phase 3: カート追加後 -->
+        <div id="nova-act-step2" style="display:none;">
+          <div style="background:#e3f2fd;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #90caf9;">
+            <div style="display:flex;align-items:center;margin-bottom:8px;">
+              <span style="font-size:20px;margin-right:8px;">🛒</span>
+              <p style="font-size:14px;color:#1565c0;font-weight:bold;margin:0;">カートに入ったよ！</p>
+            </div>
+            <div id="nova-act-cart-title" style="font-weight:bold;font-size:15px;margin-bottom:4px;color:#333;"></div>
+            <div id="nova-act-cart-price" style="color:#7BAF6E;font-weight:bold;font-size:18px;margin-bottom:8px;"></div>
+            <p style="font-size:12px;color:#666;">Amazonのカートに入ってるから、あとは注文を確定するだけだよ🌿<br>注文はまだ確定していません。</p>
+          </div>
+          <button class="btn btn-primary" id="btn-nova-act-purchase" style="background:#ff9900;margin-bottom:8px;font-size:16px;">🛒 Amazonのカートを確認する</button>
+          <button class="btn btn-secondary" id="btn-nova-act-bought" style="margin-bottom:8px;">✅ 買ったよ！</button>
+          <button class="btn btn-secondary" id="btn-nova-act-cancel">❌ やっぱりやめる</button>
+        </div>
+
+        <div id="nova-act-status" style="margin-top:8px;font-size:13px;color:#555;"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">�📅 Googleカレンダー連携</div>
+      <div class="calendar-status" id="calendar-section">
+        <div class="loading">確認中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 通知 (変更依頼書_2 §3) -->
+  <div class="page" id="page-notifications">
+    <div class="card">
+      <div class="card-title">💬 ふれまーるちゃんからのおしらせ</div>
+      <div id="notifications-list" class="chat-notifications">
+        <div class="loading">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 欲望在庫 (変更依頼書_2 §5) -->
+  <div class="page" id="page-wishlist">
+    <div class="card">
+      <div class="card-title">💎 欲望在庫</div>
+      <div class="form-group">
+        <label class="form-label">公開ほしい物リストURL</label>
+        <input type="url" class="form-input" id="wishlist-url-input" placeholder="https://www.amazon.co.jp/hz/wishlist/ls/...">
+      </div>
+      <button class="btn btn-primary" id="btn-register-wishlist" style="margin-bottom:16px;">登録して同期する</button>
+      <div id="wishlist-items-list">
+        <div class="empty-state">まだ欲望在庫がありません</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" data-page="home"><span class="tab-icon">🏠</span>ホーム</div>
+  <div class="tab" data-page="notifications"><span class="tab-icon">💬</span>通知</div>
+  <div class="tab" data-page="expenses"><span class="tab-icon">💰</span>支出</div>
+  <div class="tab" data-page="wishlist"><span class="tab-icon">💎</span>在庫</div>
+  <div class="tab" data-page="detour"><span class="tab-icon">🌿</span>寄り道</div>
+  <div class="tab" data-page="settings"><span class="tab-icon">⚙️</span>設定</div>
+</div>
+
+<!-- 支出編集モーダル -->
+<div class="modal-overlay" id="edit-modal">
+  <div class="modal-box">
+    <div class="modal-title">支出を修正</div>
+    <div class="form-group">
+      <label class="form-label">品名</label>
+      <input type="text" class="form-input" id="edit-item-name" maxlength="100">
+    </div>
+    <div class="form-group">
+      <label class="form-label">金額（円）</label>
+      <input type="number" class="form-input" id="edit-amount" min="1" max="9999999">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btn-edit-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="btn-edit-save">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 寄り道支出記録モーダル -->
+<div class="modal-overlay" id="detour-record-modal">
+  <div class="modal-box">
+    <div class="modal-title">🌿 寄り道の支出を記録</div>
+    <div id="detour-record-place" style="font-size:13px;color:var(--text-sub);margin-bottom:12px;"></div>
+    <div class="form-group">
+      <label class="form-label">何を買った？</label>
+      <input type="text" class="form-input" id="detour-record-item" maxlength="100" placeholder="例: カフェラテ">
+    </div>
+    <div class="form-group">
+      <label class="form-label">金額（円）</label>
+      <input type="number" class="form-input" id="detour-record-amount" min="1" max="1000000" inputmode="numeric" placeholder="680">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" id="btn-detour-record-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="btn-detour-record-save">記録する</button>
+    </div>
+  </div>
+</div>
+
+<!-- スポット詳細モーダル -->
+<div class="modal-overlay" id="spot-detail-modal">
+  <div class="modal-box" style="max-height:85vh;overflow-y:auto;">
+    <div id="spot-detail-content"></div>
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-primary" id="btn-spot-detail-close" style="width:100%;">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+  'use strict';
+
+  const LIFF_ID = '2010106872-9t0gN1D6';
+  let idToken = null;
+  let cachedUserId = localStorage.getItem('ars_user_id') || null;
+  let currentPage = 'home';
+  let currentExpenseMonth = null;
+  let editTargetSk = null;
+  let monthlyChart = null;
+  let detourRecordSession = null;
+
+  function fmt(n) {
+    return '\u00a5' + Number(n || 0).toLocaleString('ja-JP');
+  }
+  function fmtDate(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return (d.getMonth()+1) + '/' + d.getDate();
+  }
+  function fmtDateTime(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return (d.getMonth()+1) + '/' + d.getDate() + ' ' + d.getHours() + ':' + String(d.getMinutes()).padStart(2,'0');
+  }
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function escAttr(s) { return escHtml(s); }
+
+  async function api(path, opts = {}) {
+    const url = '/api' + path;
+    // トークンの最新取得を試みる
+    if (liff && liff.isLoggedIn && liff.isLoggedIn()) {
+      try {
+        const fresh = liff.getAccessToken();
+        if (fresh) idToken = fresh;
+      } catch (e) { /* PWA mode: SDK may throw */ }
+    }
+    const headers = {};
+    if (idToken) {
+      headers['Authorization'] = 'Bearer ' + idToken;
+    } else if (cachedUserId) {
+      // LIFF トークン無し → キャッシュ userId で認証
+      headers['X-ARS-User-Id'] = cachedUserId;
+    }
+    if (opts.body) headers['Content-Type'] = 'application/json';
+    const res = await fetch(url, {
+      method: opts.method || 'GET',
+      headers: headers,
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    if (res.status === 401 && idToken && cachedUserId) {
+      // トークン認証失敗 → キャッシュ userId にフォールバックしてリトライ
+      console.warn('Token auth failed, retrying with cached userId');
+      idToken = null;
+      const retryHeaders = { 'X-ARS-User-Id': cachedUserId };
+      if (opts.body) retryHeaders['Content-Type'] = 'application/json';
+      const retry = await fetch(url, {
+        method: opts.method || 'GET',
+        headers: retryHeaders,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+      });
+      if (retry.ok) return retry.json();
+    }
+    if (res.status === 401) {
+      // 完全に認証失敗 → ループせず静的表示
+      console.error('Auth failed completely');
+      throw new Error('認証に失敗しました。LINEアプリからLIFFを開き直してください。');
+    }
+    if (res.status === 503) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || 'サーバーが一時的に利用できません');
+    }
+    return res.json();
+  }
+
+  // タブ切り替え
+  document.querySelectorAll('.tab').forEach(function(tab) {
+    tab.addEventListener('click', function() {
+      const page = this.dataset.page;
+      if (page === currentPage) return;
+      currentPage = page;
+      document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+      this.classList.add('active');
+      document.getElementById('page-' + page).classList.add('active');
+      loadPage(page);
+    });
+  });
+
+  async function loadPage(page) {
+    try {
+      if (page === 'home') await loadDashboard();
+      else if (page === 'expenses') await loadExpenses();
+      else if (page === 'rewards') await loadRewards();
+      else if (page === 'detour') await loadDetour();
+      else if (page === 'settings') await loadSettings();
+      else if (page === 'notifications') await loadNotifications();
+      else if (page === 'wishlist') await loadWishlist();
+    } catch (e) {
+      console.error('loadPage error:', e);
+    }
+  }
+
+  async function loadDashboard() {
+    const data = await api('/dashboard');
+    const s = data.monthly_summary || {};
+    document.getElementById('home-remaining').textContent = fmt(s.remaining);
+    let detail = '\u4e88\u7b97 ' + fmt(s.total_budget) + ' / \u652f\u51fa ' + fmt(s.total_spent);
+    if (s.carryover_amount > 0) detail += '\uff08\u7e70\u8d8a ' + fmt(s.carryover_amount) + '\uff09';
+    document.getElementById('home-budget-detail').textContent = detail;
+    const pct = s.total_budget > 0 ? Math.min((s.total_spent / s.total_budget) * 100, 100) : 0;
+    const bar = document.getElementById('home-progress');
+    bar.style.width = pct + '%';
+    bar.className = 'progress-fill' + (pct > 90 ? ' danger' : pct > 70 ? ' warning' : '');
+
+    const sugEl = document.getElementById('home-suggestions');
+    const sugs = data.recent_suggestions || [];
+    if (sugs.length === 0) {
+      sugEl.innerHTML = '<div class="empty-msg">\u307e\u3060\u63d0\u6848\u304c\u3042\u308a\u307e\u305b\u3093</div>';
+    } else {
+      sugEl.innerHTML = sugs.map(function(s) {
+        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">\u8cfc\u5165\u6e08</span>'
+                    : s.outcome === 'skip' ? '<span class="badge badge-skip">\u30b9\u30ad\u30c3\u30d7</span>' : '';
+        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '\u2014') + '</div>'
+          + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
+          + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
+      }).join('');
+    }
+  }
+
+  async function loadExpenses() {
+    if (!currentExpenseMonth) {
+      currentExpenseMonth = new Date().toISOString().slice(0, 7);
+    }
+    document.getElementById('expenses-month-label').textContent = currentExpenseMonth;
+    loadMonthlyChart();
+
+    const data = await api('/expenses?month=' + currentExpenseMonth);
+    const el = document.getElementById('expenses-list');
+    const items = data.expenses || [];
+    if (items.length === 0) {
+      el.innerHTML = '<div class="empty-msg">\u3053\u306e\u6708\u306e\u652f\u51fa\u306f\u3042\u308a\u307e\u305b\u3093</div>';
+    } else {
+      const total = items.reduce(function(s, e) { return s + e.amount; }, 0);
+      // 言い訳分類ごとにグルーピング
+      const groups = {};
+      items.forEach(function(e) {
+        const cat = e.ars_category || '\u305d\u306e\u4ed6';
+        if (!groups[cat]) groups[cat] = { items: [], total: 0 };
+        groups[cat].items.push(e);
+        groups[cat].total += e.amount;
+      });
+      const CAT_ICONS = {
+        '\u60c5\u7dd2\u5b89\u5b9a\u8cbb': '\u2615', '\u56de\u5fa9\u8cbb': '\ud83c\udf3f', '\u7dca\u6025\u56de\u5fa9\u8cbb': '\u26a1',
+        '\u3054\u8912\u7f8e\u8cbb': '\ud83c\udf81', '\u9ad8\u7d1a\u3054\u8912\u7f8e\u8cbb': '\u2728', '\u65c5\u884c\u30fb\u4f53\u9a13\u8cbb': '\u2708\ufe0f',
+        '\u6210\u9577\u6295\u8cc7\u8cbb': '\ud83d\udcda', '\u304a\u3059\u305d\u308f\u3051\u8cbb': '\ud83c\udf81', '\u65e5\u5e38\u6d88\u8cbb': '\ud83d\uded2',
+        '\u30b0\u30eb\u30e1\u8cbb': '\ud83c\udf5c', '\u305d\u306e\u4ed6': '\ud83d\udcdd'
+      };
+
+      let html = '<div style="font-size:12px;color:var(--text-sub);margin-bottom:8px;">\u5408\u8a08: ' + fmt(total) + '</div>';
+      Object.keys(groups).forEach(function(cat) {
+        const g = groups[cat];
+        const icon = CAT_ICONS[cat] || '\ud83d\udcdd';
+        const pct = total > 0 ? Math.round(g.total / total * 100) : 0;
+        html += '<div class="expense-group">'
+          + '<div class="expense-group-header" data-cat="' + escAttr(cat) + '">'
+          + '<div class="expense-group-left">'
+          + '<span class="expense-group-icon">' + icon + '</span>'
+          + '<span class="expense-group-name">' + escHtml(cat) + '</span>'
+          + '<span class="expense-group-count">(' + g.items.length + '\u4ef6)</span>'
+          + '</div>'
+          + '<div class="expense-group-right">'
+          + '<span class="expense-group-amount">' + fmt(g.total) + '</span>'
+          + '<span class="expense-group-pct">' + pct + '%</span>'
+          + '<span class="expense-group-arrow">\u25b6</span>'
+          + '</div></div>'
+          + '<div class="expense-group-body" style="display:none">';
+        g.items.forEach(function(e) {
+          html += '<div class="swipe-row" data-sk="' + escAttr(e.sk) + '">'
+            + '<button class="swipe-delete-btn" data-sk="' + escAttr(e.sk) + '">\u524a\u9664</button>'
+            + '<div class="swipe-content">'
+            + '<div class="list-item">'
+            + '<div style="flex:1"><div class="list-item-name">' + escHtml(e.item_name || '\u2014') + '</div>'
+            + '<div class="list-item-date">' + fmtDate(e.created_at) + (e.corrected ? ' \u270f\ufe0f' : '') + '</div></div>'
+            + '<div style="display:flex;align-items:center">'
+            + '<span class="list-item-amount">' + fmt(e.amount) + '</span>'
+            + '<button class="btn-edit" data-sk="' + escAttr(e.sk) + '" data-name="' + escAttr(e.item_name || '') + '" data-amount="' + e.amount + '">\u4fee\u6b63</button>'
+            + '</div></div></div></div>';
+        });
+        html += '</div></div>';
+      });
+      el.innerHTML = html;
+
+      // アコーディオン開閉
+      el.querySelectorAll('.expense-group-header').forEach(function(header) {
+        header.addEventListener('click', function() {
+          const body = this.nextElementSibling;
+          const arrow = this.querySelector('.expense-group-arrow');
+          if (body.style.display === 'none') {
+            body.style.display = 'block';
+            arrow.textContent = '\u25bc';
+          } else {
+            body.style.display = 'none';
+            arrow.textContent = '\u25b6';
+          }
+        });
+      });
+
+      el.querySelectorAll('.btn-edit').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          openEditModal(this.dataset.sk, this.dataset.name, this.dataset.amount);
+        });
+      });
+      el.querySelectorAll('.swipe-row').forEach(function(row) {
+        var content = row.querySelector('.swipe-content');
+        var startX = 0, startY = 0, isDragging = false;
+        content.addEventListener('touchstart', function(ev) {
+          startX = ev.touches[0].clientX; startY = ev.touches[0].clientY; isDragging = true;
+        }, { passive: true });
+        content.addEventListener('touchmove', function(ev) {
+          if (!isDragging) return;
+          var dx = ev.touches[0].clientX - startX;
+          var dy = ev.touches[0].clientY - startY;
+          if (Math.abs(dy) > Math.abs(dx)) { isDragging = false; return; }
+          if (dx < -20) content.classList.add('swiped');
+          if (dx > 20) content.classList.remove('swiped');
+        }, { passive: true });
+        content.addEventListener('touchend', function() { isDragging = false; });
+        content.addEventListener('click', function(ev) {
+          if (!ev.target.classList.contains('btn-edit')) content.classList.remove('swiped');
+        });
+      });
+      el.querySelectorAll('.swipe-delete-btn').forEach(function(btn) {
+        btn.addEventListener('click', async function() {
+          const sk = this.dataset.sk;
+          if (!confirm('\u3053\u306e\u652f\u51fa\u3092\u524a\u9664\u3057\u307e\u3059\u304b\uff1f')) return;
+          try {
+            const result = await api('/expenses?sk=' + encodeURIComponent(sk), { method: 'DELETE' });
+            if (result.deleted) loadExpenses();
+            else alert('\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f: ' + (result.error || ''));
+          } catch(e) { alert('\u524a\u9664\u306b\u5931\u6557\u3057\u307e\u3057\u305f'); }
+        });
+      });
+    }
+  }
+
+  async function loadMonthlyChart() {
+    try {
+      const data = await api('/monthly-chart?months=6');
+      const rows = data.data || [];
+      const labels = rows.map(function(r) { return r.month.slice(5); });
+      const spents = rows.map(function(r) { return r.total_spent; });
+      const budgets = rows.map(function(r) { return r.budget; });
+
+      const ctx = document.getElementById('monthly-chart');
+      if (monthlyChart) {
+        monthlyChart.data.labels = labels;
+        monthlyChart.data.datasets[0].data = spents;
+        monthlyChart.data.datasets[1].data = budgets;
+        monthlyChart.update();
+      } else {
+        monthlyChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [
+              { label: '\u652f\u51fa', data: spents, backgroundColor: 'rgba(74,156,94,0.7)', borderRadius: 4 },
+              { label: '\u4e88\u7b97', data: budgets, type: 'line', borderColor: '#f9a825', backgroundColor: 'transparent', borderWidth: 2, pointRadius: 3, tension: 0.3 },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { labels: { font: { size: 11 } } } },
+            scales: {
+              y: { ticks: { callback: function(v) { return '\u00a5' + (v / 10000).toFixed(0) + '\u4e07'; }, font: { size: 10 } } },
+              x: { ticks: { font: { size: 11 } } },
+            },
+          },
+        });
+      }
+    } catch (e) { console.error('chart load error:', e); }
+  }
+
+  async function loadDetour() {
+    const LIFF_TEMPTATION = 'https://liff.line.me/2010106872-9t0gN1D6/temptation';
+    document.getElementById('btn-detour-start').onclick = function() {
+      liff.openWindow({ url: LIFF_TEMPTATION, external: false });
+    };
+
+    try {
+      const data = await api('/temptation/history');
+      const m = (data.this_month) || {};
+      const totalDetours = m.total_detours || 0;
+      document.getElementById('detour-count').textContent = totalDetours;
+
+      const lanesEl = document.getElementById('detour-lanes');
+      const byLane = m.by_lane || {};
+      const LANE_LABELS = {
+        CAFE_REBOOT: '\u2615 \u30ab\u30d5\u30a7\u518d\u8d77\u52d5',
+        CONVENIENCE_RECOVERY: '\ud83c\udfea \u30b3\u30f3\u30d3\u30cb\u56de\u5fa9',
+        SELF_COOKING_ESCAPE: '\ud83c\udf5c \u81ea\u7082\u653e\u68c4',
+        LOW_COST_RECOVERY: '\ud83d\udc8a \u4f4e\u30b3\u30b9\u30c8\u56de\u5fa9',
+        RICHER_ESCAPE: '\u2728 \u3061\u3087\u3063\u3068\u8d05\u6ca2',
+      };
+      const laneKeys = Object.keys(byLane);
+      if (laneKeys.length === 0) {
+        lanesEl.innerHTML = '<div class="empty-msg">\u4eca\u6708\u306f\u307e\u3060\u5bc4\u308a\u9053\u3057\u3066\u3044\u306a\u3044\u3088 \ud83c\udf31</div>';
+      } else {
+        lanesEl.innerHTML = laneKeys.map(function(k) {
+          var info = byLane[k];
+          return '<div class="detour-lane-row">'
+            + '<div><div class="detour-lane-name">' + escHtml(LANE_LABELS[k] || k) + '</div>'
+            + '<div class="detour-lane-stat">' + info.count + '\u56de / ' + fmt(info.total) + '</div></div>'
+            + '<div style="font-size:20px;">' + info.count + '\u56de</div>'
+            + '</div>';
+        }).join('');
+      }
+
+      // セッション一覧
+      const sessionsEl = document.getElementById('detour-sessions');
+      const sessions = data.recent_sessions || [];
+      if (sessions.length === 0) {
+        sessionsEl.innerHTML = '<div class="empty-msg">\u307e\u3060\u5bc4\u308a\u9053\u306e\u8a18\u9332\u306f\u306a\u3044\u3088 \ud83c\udf31</div>';
+      } else {
+        sessionsEl.innerHTML = sessions.map(function(s) {
+          let statusBadge = '';
+          if (s.status === 'proposed') {
+            statusBadge = '<span class="badge badge-proposed">\ud83d\udca1 \u63d0\u6848\u6e08\u307f</span>';
+          } else if (s.status === 'accepted') {
+            statusBadge = '<span class="badge badge-active">\ud83d\udeb6 \u3053\u308c\u304b\u3089\u884c\u304f</span>';
+          } else if (s.expense_recorded) {
+            statusBadge = '<span class="badge badge-done">\u2705 \u8a18\u9332\u6e08\u307f</span>';
+          } else {
+            statusBadge = '<span class="badge badge-active">\ud83d\udcdd \u672a\u8a18\u9332</span>';
+          }
+          const placesHtml = (s.places || []).map(function(p, idx) {
+            const walk = Math.max(1, Math.round((p.distance_m || 0) / 80));
+            const placeData = escAttr(JSON.stringify(p));
+            let html = '<div class="session-place spot-clickable" data-place="' + placeData + '">';
+            if (p.image_url) {
+              html += '<img src="' + escAttr(p.image_url) + '" class="place-thumb" alt="">';
+            }
+            html += '<div class="place-info">';
+            html += '<div class="place-name">' + escHtml(p.name) + ' <span style="font-size:10px;color:var(--primary)">\u25b6\u8a73\u7d30</span></div>';
+            if (p.description) html += '<div class="place-desc">\ud83c\udf3f ' + escHtml(p.description) + '</div>';
+            if (p.genre) html += '<span class="place-genre">' + escHtml(p.genre) + '</span>';
+            if (p.budget_text) html += '<span class="place-budget">' + escHtml(p.budget_text) + '</span>';
+            html += '<span class="place-walk">\ud83d\udeb6 ' + walk + '\u5206</span>';
+            html += '</div></div>';
+            return html;
+          }).join('');
+
+          let actionsHtml = '';
+          if (s.status === 'accepted' && !s.expense_recorded) {
+            actionsHtml = '<div class="session-actions">'
+              + '<button class="btn-record-expense" data-session=\'' + escAttr(JSON.stringify({
+                session_id: s.session_id,
+                lane_title: s.lane_title,
+                places: s.places,
+              })) + '\'>\ud83d\udcb0 \u652f\u51fa\u3092\u8a18\u9332\u3059\u308b</button>'
+              + '</div>';
+          }
+
+          return '<div class="session-card">'
+            + '<div class="session-header">'
+            + '<span class="session-title">' + escHtml(s.lane_title || '\u5bc4\u308a\u9053') + '</span>'
+            + statusBadge
+            + '</div>'
+            + '<div class="session-date">' + fmtDateTime(s.created_at) + '</div>'
+            + placesHtml
+            + actionsHtml
+            + '</div>';
+        }).join('');
+
+        // スポット詳細クリック
+        sessionsEl.querySelectorAll('.spot-clickable').forEach(function(el) {
+          el.addEventListener('click', function(ev) {
+            if (ev.target.tagName === 'A') return;
+            const place = JSON.parse(this.dataset.place);
+            openSpotDetailModal(place);
+          });
+        });
+
+        sessionsEl.querySelectorAll('.btn-record-expense').forEach(function(btn) {
+          btn.addEventListener('click', function() {
+            const sessionData = JSON.parse(this.dataset.session);
+            openDetourRecordModal(sessionData);
+          });
+        });
+      }
+
+      const places = m.frequent_places || [];
+      if (places.length > 0) {
+        document.getElementById('detour-places-card').style.display = '';
+        document.getElementById('detour-places').innerHTML =
+          places.map(function(p) { return '<span class="detour-place-chip">' + escHtml(p) + '</span>'; }).join('');
+      }
+    } catch (e) {
+      document.getElementById('detour-lanes').innerHTML = '<div class="empty-msg">\u30c7\u30fc\u30bf\u3092\u53d6\u5f97\u3067\u304d\u307e\u305b\u3093\u3067\u3057\u305f</div>';
+    }
+  }
+
+  // 寄り道支出記録モーダル
+  function openDetourRecordModal(sessionData) {
+    detourRecordSession = sessionData;
+    const placeText = (sessionData.places || []).map(function(p) { return p.name; }).join('\u3001');
+    document.getElementById('detour-record-place').textContent = '\ud83d\udccd ' + (placeText || sessionData.lane_title);
+    document.getElementById('detour-record-item').value = '';
+    document.getElementById('detour-record-amount').value = '';
+    document.getElementById('detour-record-modal').classList.add('open');
+  }
+
+  document.getElementById('btn-detour-record-cancel').addEventListener('click', function() {
+    document.getElementById('detour-record-modal').classList.remove('open');
+    detourRecordSession = null;
+  });
+
+  document.getElementById('btn-detour-record-save').addEventListener('click', async function() {
+    if (!detourRecordSession) return;
+    const item = document.getElementById('detour-record-item').value.trim();
+    const amountStr = document.getElementById('detour-record-amount').value.trim();
+    if (!item) { alert('\u4f55\u3092\u8cb7\u3063\u305f\u304b\u5165\u529b\u3057\u3066\u306d'); return; }
+    const amount = parseInt(amountStr, 10);
+    if (isNaN(amount) || amount < 1 || amount > 1000000) { alert('\u91d1\u984d\u3092\u6b63\u3057\u304f\u5165\u529b\u3057\u3066\u306d\uff081\u301c1,000,000\u5186\uff09'); return; }
+
+    const placeName = (detourRecordSession.places && detourRecordSession.places.length > 0)
+      ? detourRecordSession.places[0].name : '';
+
+    try {
+      const result = await api('/temptation/complete', {
+        method: 'POST',
+        body: {
+          session_id: detourRecordSession.session_id,
+          lane_id: detourRecordSession.session_id,
+          amount: amount,
+          item_name: item,
+          place_name: placeName,
+        },
+      });
+      if (result.error) {
+        alert(result.error);
+      } else {
+        document.getElementById('detour-record-modal').classList.remove('open');
+        detourRecordSession = null;
+        alert('\u2705 \u8a18\u9332\u5b8c\u4e86\uff01\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093\u306b\u5831\u544a\u3057\u3066\u3082\u3044\u3044\u3088\ud83c\udf3f');
+        loadDetour();
+      }
+    } catch (e) {
+      alert('\u8a18\u9332\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+    }
+  });
+
+  // スポット詳細モーダル
+  function openSpotDetailModal(place) {
+    let html = '';
+    if (place.image_url) {
+      html += '<img src="' + escAttr(place.image_url) + '" style="width:100%;border-radius:10px;margin-bottom:12px;max-height:180px;object-fit:cover;" alt="">';
+    }
+    html += '<div style="font-size:17px;font-weight:bold;color:var(--text);margin-bottom:6px;">' + escHtml(place.name || '') + '</div>';
+    if (place.genre) html += '<div style="font-size:13px;color:var(--text-sub);margin-bottom:4px;">\ud83c\udf74 ' + escHtml(place.genre) + '</div>';
+    if (place.budget_text) html += '<div style="font-size:13px;color:var(--accent);margin-bottom:4px;">\ud83d\udcb0 \u4e88\u7b97: ' + escHtml(place.budget_text) + '</div>';
+    const walk = Math.max(1, Math.round((place.distance_m || 0) / 80));
+    html += '<div style="font-size:13px;color:var(--text-sub);margin-bottom:8px;">\ud83d\udeb6 \u5f92\u6b69\u7d04' + walk + '\u5206</div>';
+    if (place.description) {
+      html += '<div style="background:var(--card-inner,#f0f7f2);border-radius:8px;padding:10px;margin-bottom:12px;">'
+        + '<div style="font-size:11px;color:var(--primary);margin-bottom:4px;">\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093\u306e\u30b3\u30e1\u30f3\u30c8</div>'
+        + '<div style="font-size:13px;color:var(--text);">' + escHtml(place.description) + '</div>'
+        + '</div>';
+    }
+    html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+    if (place.shop_url) {
+      html += '<a href="' + escAttr(place.shop_url) + '" target="_blank" class="spot-detail-link">\ud83c\udf74 \u304a\u5e97\u306eHP\u30fb\u30ec\u30d3\u30e5\u30fc\u3092\u898b\u308b</a>';
+    }
+    if (place.lat && place.lng) {
+      html += '<a href="https://www.google.com/maps/search/?api=1&query=' + place.lat + ',' + place.lng + '" target="_blank" class="spot-detail-link">\ud83d\uddfa\ufe0f Google\u30de\u30c3\u30d7\u3067\u958b\u304f</a>';
+    }
+    if (place.name) {
+      html += '<a href="https://www.google.com/search?q=' + encodeURIComponent(place.name + ' \u53e3\u30b3\u30df') + '" target="_blank" class="spot-detail-link">\u2b50 \u53e3\u30b3\u30df\u3092\u691c\u7d22</a>';
+    }
+    html += '</div>';
+    document.getElementById('spot-detail-content').innerHTML = html;
+    document.getElementById('spot-detail-modal').classList.add('open');
+  }
+
+  document.getElementById('btn-spot-detail-close').addEventListener('click', function() {
+    document.getElementById('spot-detail-modal').classList.remove('open');
+  });
+
+  async function loadRewards() {
+    const [histData, poolData] = await Promise.all([api('/history'), api('/pool')]);
+
+    const histEl = document.getElementById('reward-history');
+    const sugs = histData.suggestions || [];
+    if (sugs.length === 0) {
+      histEl.innerHTML = '<div class="empty-msg">\u307e\u3060\u63d0\u6848\u304c\u3042\u308a\u307e\u305b\u3093</div>';
+    } else {
+      histEl.innerHTML = sugs.map(function(s) {
+        const badge = s.outcome === 'bought' ? '<span class="badge badge-bought">\u8cfc\u5165\u6e08</span>'
+                    : s.outcome === 'skip' ? '<span class="badge badge-skip">\u30b9\u30ad\u30c3\u30d7</span>' : '';
+        return '<div class="list-item"><div><div class="list-item-name">' + escHtml(s.item_name || '\u2014') + '</div>'
+          + '<div class="list-item-date">' + fmtDate(s.proposed_at) + '</div></div>'
+          + '<div>' + badge + ' <span class="list-item-amount">' + fmt(s.price) + '</span></div></div>';
+      }).join('');
+    }
+
+    const poolEl = document.getElementById('reward-pool');
+    const items = poolData.items || [];
+    if (items.length === 0) {
+      poolEl.innerHTML = '<div class="empty-msg">\u5019\u88dc\u304c\u3042\u308a\u307e\u305b\u3093</div>';
+    } else {
+      poolEl.innerHTML = items.map(function(item) {
+        const typeLabel = item.type === 'travel' ? '\ud83c\udfe8' : item.type === 'restaurant' ? '\ud83c\udf7d\ufe0f' : '\ud83d\uded2';
+        const imgTag = item.image_url ? '<img class="pool-img" src="' + escAttr(item.image_url) + '" alt="">'
+                                       : '<div class="pool-img"></div>';
+        const link = item.source_url ? ' onclick="window.open(\'' + escAttr(item.source_url) + '\')"' : '';
+        return '<div class="pool-item"' + link + '>' + imgTag
+          + '<div class="pool-info"><div class="pool-name">' + escHtml(item.name || '') + '</div>'
+          + '<div class="pool-price">' + fmt(item.price) + '</div>'
+          + '<div class="pool-type">' + typeLabel + ' ' + escHtml(item.category || '') + '</div></div></div>';
+      }).join('');
+    }
+  }
+
+  async function loadSettings() {
+    const data = await api('/settings');
+    document.getElementById('set-nickname').value = data.nickname || '';
+    document.getElementById('set-tone').value = data.tone || 'friendly';
+    document.getElementById('set-budget').value = data.reward_budget_monthly || '';
+    document.getElementById('set-carryover').value = Math.round((data.carryover_rate || 0.5) * 100);
+    document.getElementById('set-push-cooldown').value = data.push_cooldown_hours != null ? data.push_cooldown_hours : '1';
+    document.getElementById('set-push-threshold').value = data.push_suggest_threshold != null ? data.push_suggest_threshold : '40';
+
+    // Web Push 状態表示
+    try { await loadWebPushStatus(); } catch (e) { console.warn('webpush status load failed', e); }
+
+    const calData = await api('/calendar/status');
+    const calEl = document.getElementById('calendar-section');
+    if (calData.connected) {
+      calEl.innerHTML = '<div><span class="status-dot connected"></span>\u9023\u643a\u6e08\u307f</div>'
+        + '<button class="btn btn-danger" id="btn-cal-disconnect" style="width:auto;padding:8px 16px;font-size:13px;">\u89e3\u9664</button>';
+      document.getElementById('btn-cal-disconnect').addEventListener('click', async function() {
+        if (confirm('\u30ab\u30ec\u30f3\u30c0\u30fc\u9023\u643a\u3092\u89e3\u9664\u3057\u307e\u3059\u304b\uff1f')) {
+          await api('/calendar/disconnect', { method: 'POST' });
+          loadSettings();
+        }
+      });
+    } else {
+      calEl.innerHTML = '<div><span class="status-dot disconnected"></span>\u672a\u9023\u643a</div>'
+        + '<button class="btn btn-outline" id="btn-cal-connect" style="width:auto;padding:8px 16px;font-size:13px;">Google\u3068\u9023\u643a\u3059\u308b</button>';
+      document.getElementById('btn-cal-connect').addEventListener('click', async function() {
+        const authData = await api('/calendar/auth');
+        if (authData.auth_url) {
+          liff.openWindow({ url: authData.auth_url, external: true });
+        } else {
+          alert(authData.error || '\u30ab\u30ec\u30f3\u30c0\u30fc\u9023\u643a\u306e\u8a2d\u5b9a\u304c\u307e\u3060\u5b8c\u4e86\u3057\u3066\u3044\u307e\u305b\u3093');
+        }
+      });
+    }
+  }
+
+  // 月ナビ
+  document.getElementById('btn-month-prev').addEventListener('click', function() {
+    if (!currentExpenseMonth) return;
+    var parts = currentExpenseMonth.split('-');
+    var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+    m -= 1; if (m === 0) { m = 12; y -= 1; }
+    currentExpenseMonth = y + '-' + String(m).padStart(2, '0');
+    loadExpenses();
+  });
+  document.getElementById('btn-month-next').addEventListener('click', function() {
+    if (!currentExpenseMonth) return;
+    var now = new Date(), nowYM = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+    if (currentExpenseMonth >= nowYM) return;
+    var parts = currentExpenseMonth.split('-');
+    var y = parseInt(parts[0], 10), m = parseInt(parts[1], 10);
+    m += 1; if (m === 13) { m = 1; y += 1; }
+    currentExpenseMonth = y + '-' + String(m).padStart(2, '0');
+    loadExpenses();
+  });
+
+  // 編集モーダル
+  function openEditModal(sk, name, amount) {
+    editTargetSk = sk;
+    document.getElementById('edit-item-name').value = name;
+    document.getElementById('edit-amount').value = amount;
+    document.getElementById('edit-modal').classList.add('open');
+  }
+  document.getElementById('btn-edit-cancel').addEventListener('click', function() {
+    document.getElementById('edit-modal').classList.remove('open');
+    editTargetSk = null;
+  });
+  document.getElementById('btn-edit-save').addEventListener('click', async function() {
+    if (!editTargetSk) return;
+    var newName = document.getElementById('edit-item-name').value.trim();
+    var newAmount = parseInt(document.getElementById('edit-amount').value, 10);
+    if (!newName || isNaN(newAmount) || newAmount < 1) {
+      alert('\u54c1\u540d\u3068\u91d1\u984d\u3092\u6b63\u3057\u304f\u5165\u529b\u3057\u3066\u304f\u3060\u3055\u3044');
+      return;
+    }
+    var result = await api('/expenses', {
+      method: 'PUT',
+      body: { sk: editTargetSk, item_name: newName, amount: newAmount },
+    });
+    if (result.updated) {
+      document.getElementById('edit-modal').classList.remove('open');
+      editTargetSk = null;
+      loadExpenses();
+    } else {
+      alert(result.error || '\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f');
+    }
+  });
+
+  // 設定保存
+  document.getElementById('btn-save-settings').addEventListener('click', async function() {
+    const body = {};
+    const nick = document.getElementById('set-nickname').value.trim();
+    if (nick) body.nickname = nick;
+    body.tone = document.getElementById('set-tone').value;
+    const budget = document.getElementById('set-budget').value;
+    if (budget) body.reward_budget_monthly = parseInt(budget, 10);
+    const co = document.getElementById('set-carryover').value;
+    if (co !== '') body.carryover_rate = parseInt(co, 10) / 100;
+    body.push_cooldown_hours = parseInt(document.getElementById('set-push-cooldown').value, 10);
+    body.push_suggest_threshold = parseInt(document.getElementById('set-push-threshold').value, 10);
+
+    const result = await api('/settings', { method: 'PUT', body: body });
+    if (result.updated) {
+      alert('\u4fdd\u5b58\u3057\u307e\u3057\u305f\uff01');
+    } else if (result.error) {
+      alert(result.error);
+    }
+  });
+
+  // LIFF 初期化
+  async function initLiff() {
+    const isPwa = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        if (isPwa && cachedUserId) {
+          // PWA モードでキャッシュあり → LIFF 再ログインせずキャッシュで続行
+          console.log('PWA mode: using cached userId');
+          document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+          loadPage('home');
+          return;
+        }
+        liff.login();
+        return;
+      }
+      idToken = liff.getAccessToken();
+      if (!idToken && cachedUserId) {
+        // トークン取得失敗だがキャッシュあり → 続行
+        console.log('No access token, using cached userId');
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+        loadPage('home');
+        return;
+      }
+      if (!idToken) {
+        liff.login();
+        return;
+      }
+      try {
+        const profile = await liff.getProfile();
+        document.getElementById('header').textContent = '\ud83c\udf3f ' + (profile.displayName || '\u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093');
+        // userId をキャッシュ（次回 PWA 起動時に使用）
+        if (profile.userId) {
+          cachedUserId = profile.userId;
+          localStorage.setItem('ars_user_id', profile.userId);
+        }
+      } catch (e) {
+        console.warn('getProfile failed, using cached', e);
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+      }
+      loadPage('home');
+    } catch (e) {
+      console.error('LIFF init error:', e);
+      if (cachedUserId) {
+        // LIFF 初期化失敗だがキャッシュあり → 続行
+        console.log('LIFF init failed, using cached userId');
+        document.getElementById('header').textContent = '\ud83c\udf3f \u3075\u308c\u307e\u30fc\u308b\u3061\u3083\u3093';
+        loadPage('home');
+      } else {
+        document.querySelector('.content').innerHTML = '<div class="error-msg">\u521d\u671f\u5316\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002LINE\u30a2\u30d7\u30ea\u304b\u3089\u958b\u3044\u3066\u304f\u3060\u3055\u3044\u3002</div>';
+      }
+    }
+  }
+
+  if (LIFF_ID === '__LIFF_ID__') {
+    console.warn('LIFF_ID not set \u2014 running in dev mode');
+    loadPage('home');
+  } else {
+    initLiff();
+  }
+
+  // ─── 通知一覧 (変更依頼書_2 §3) ───
+  async function loadNotifications() {
+    const container = document.getElementById('notifications-list');
+    try {
+      const data = await api('/notifications');
+      const list = data.notifications || [];
+      if (list.length === 0) {
+        container.innerHTML = '<div class="empty-state">まだ通知はありません</div>';
+        return;
+      }
+      container.innerHTML = list.map(n => {
+        const typeLabel = {
+          'RECOMMENDATION': '💡 おすすめ',
+          'CART_ADDED': '🛒 カート',
+          'LOCATION_RECOMMENDATION': '📍 近くのお店',
+          'LOGIN_REQUIRED': '🔑 ログイン要求',
+          'PURCHASE_READY': '✅ 購入完了',
+          'MONTHLY_REMAINING': '📊 今月の残り',
+          'SYSTEM': 'ℹ️ お知らせ',
+        }[n.type] || '📨 通知';
+        const time = n.createdAt ? new Date(n.createdAt).toLocaleString('ja-JP', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}) : '';
+        return '<div class="notif-bubble">' +
+          '<div class="notif-type">' + typeLabel + '</div>' +
+          '<div class="notif-text">' + (n.message_text || n.title || '').replace(/\n/g, '<br>') + '</div>' +
+          '<div class="notif-time">' + time + '</div>' +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<div class="error-msg">通知の読み込みに失敗しました</div>';
+    }
+  }
+
+  // ─── 欲望在庫 (変更依頼書_2 §5) ───
+  async function loadWishlist() {
+    const container = document.getElementById('wishlist-items-list');
+    try {
+      const data = await api('/wishlist/items');
+      const items = data.items || [];
+      if (items.length === 0) {
+        container.innerHTML = '<div class="empty-state">まだ欲望在庫がありません<br>公開ほしい物リストURLを登録してね</div>';
+        return;
+      }
+      container.innerHTML = items.map(i => {
+        const price = i.price ? '¥' + Number(i.price).toLocaleString() : '価格不明';
+        const aging = i.desire_aging_days || 0;
+        const agingText = aging > 0 ? '🕐 熟成 ' + aging + '日目' : '🆕 登録直後';
+        const img = i.product_image_url ? '<img src="' + i.product_image_url + '" alt="">' : '<div style="width:60px;height:60px;background:#eee;border-radius:8px;display:flex;align-items:center;justify-content:center;">💎</div>';
+        return '<div class="wishlist-card">' +
+          img +
+          '<div class="wishlist-info">' +
+            '<div class="wishlist-title">' + (i.product_title || '不明') + '</div>' +
+            '<div class="wishlist-meta">' + price + ' / ' + (i.category || 'カテゴリなし') + '</div>' +
+            '<div class="wishlist-aging">' + agingText + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<div class="error-msg">読み込みに失敗しました</div>';
+    }
+  }
+
+  // ─── ほしい物リスト登録 ───
+  document.getElementById('btn-register-wishlist').addEventListener('click', async function() {
+    const url = document.getElementById('wishlist-url-input').value.trim();
+    if (!url) { alert('URLを入力してください'); return; }
+    this.disabled = true;
+    this.textContent = '同期中...';
+    try {
+      const result = await api('/wishlist/public-url', { method: 'POST', body: { wishlistUrl: url } });
+      if (result.success) {
+        alert('登録完了！ ' + (result.items_count || 0) + '件の商品を同期しました');
+        await loadWishlist();
+      } else {
+        alert(result.error || '登録に失敗しました');
+      }
+    } catch (e) {
+      alert('エラーが発生しました');
+    } finally {
+      this.disabled = false;
+      this.textContent = '登録して同期する';
+    }
+  });
+
+  // ─────────────────────────────────────────
+  // PWA Web Push (要件整理.md §7)
+  // ─────────────────────────────────────────
+  function urlBase64ToUint8Array(b64) {
+    const padding = '='.repeat((4 - b64.length % 4) % 4);
+    const base64 = (b64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = window.atob(base64);
+    const out = new Uint8Array(rawData.length);
+    for (let i = 0; i < rawData.length; ++i) out[i] = rawData.charCodeAt(i);
+    return out;
+  }
+
+  async function ensureServiceWorker() {
+    if (!('serviceWorker' in navigator)) throw new Error('Service Worker 非対応');
+    const existing = await navigator.serviceWorker.getRegistration('/');
+    if (existing) return existing;
+    return navigator.serviceWorker.register('/service-worker.js', { scope: '/' });
+  }
+
+  async function loadWebPushStatus() {
+    const el = document.getElementById('webpush-status');
+    if (!el) return;
+    let parts = [];
+    parts.push('Notification: ' + (('Notification' in window) ? Notification.permission : '未対応'));
+    parts.push('ServiceWorker: ' + (('serviceWorker' in navigator) ? 'OK' : '未対応'));
+    parts.push('PushManager: ' + (('PushManager' in window) ? 'OK' : '未対応'));
+    try {
+      const data = await api('/webpush/status');
+      parts.push('購読: ' + (data.subscribed ? data.subscriptionCount + '件' : 'なし'));
+    } catch (e) {
+      parts.push('購読状況取得失敗');
+    }
+    el.innerHTML = parts.join(' / ');
+  }
+
+  document.getElementById('btn-webpush-subscribe').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '処理中...';
+    try {
+      if (!('Notification' in window)) { alert('このブラウザは通知非対応です'); return; }
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { alert('通知が許可されませんでした'); return; }
+      const reg = await ensureServiceWorker();
+      const keyData = await api('/webpush/vapid-public-key');
+      if (!keyData.publicKey) { alert('VAPIDキー取得失敗'); return; }
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+      });
+      const result = await api('/webpush/subscribe', { method: 'POST', body: { subscription: sub.toJSON() } });
+      if (result.subscribed) {
+        alert('通知をONにしました🌿');
+        await loadWebPushStatus();
+      } else {
+        alert(result.error || '購読に失敗しました');
+      }
+    } catch (e) {
+      alert('購読エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+      this.textContent = '通知をONにする';
+    }
+  });
+
+  document.getElementById('btn-webpush-test').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '送信中...';
+    try {
+      const result = await api('/webpush/test', { method: 'POST', body: {} });
+      if (result.sent > 0) {
+        alert('テスト通知を送信したよ〜🌿 通知が来たか確認してね');
+      } else {
+        alert('送信失敗。先に「通知をONにする」を押してね。\n詳細: ' + JSON.stringify(result.details || []));
+      }
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+      this.textContent = 'テスト通知';
+    }
+  });
+
+  document.getElementById('btn-webpush-unsubscribe').addEventListener('click', async function() {
+    this.disabled = true;
+    try {
+      const reg = await navigator.serviceWorker.getRegistration('/');
+      if (reg) {
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await api('/webpush/unsubscribe', { method: 'POST', body: { endpoint: sub.endpoint } });
+          await sub.unsubscribe();
+        }
+      }
+      alert('通知をOFFにしました');
+      await loadWebPushStatus();
+    } catch (e) {
+      alert('エラー: ' + (e.message || e));
+    } finally {
+      this.disabled = false;
+    }
+  });
+
+  // ─── ご褒美通知トリガー ───
+  document.getElementById('btn-push-trigger').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '送信中...';
+    const out = document.getElementById('push-trigger-result');
+    try {
+      const result = await api('/push/trigger', { method: 'POST', body: {} });
+      if (result.success) {
+        out.innerHTML = '<span style="color:#155724;">✅ ' + result.title + ' を送信しました</span>';
+      } else {
+        out.innerHTML = '<span style="color:#d33;">' + (result.error || '送信失敗') + '</span>';
+      }
+    } catch (e) {
+      out.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '🌿 ご褒美通知を送る';
+    }
+  });
+
+  // ─────────────────────────────────────────
+  // Nova Act スモーク (要件整理.md §10)
+  // ─────────────────────────────────────────
+  document.getElementById('btn-nova-act-smoke').addEventListener('click', async function() {
+    const query = document.getElementById('nova-act-query').value.trim();
+    const maxPrice = document.getElementById('reward-test-budget').value;
+    const out = document.getElementById('nova-act-result');
+    this.disabled = true;
+    this.textContent = '🔍 検索中...';
+    out.innerHTML = '<div style="color:#888;">候補取得中...</div>';
+    try {
+      const result = await api('/reward-candidates', { method: 'POST', body: { query: query, max_price: parseInt(maxPrice) } });
+      if (result.error) { out.innerHTML = '<span style="color:#d33;">' + result.error + '</span>'; return; }
+      let html = '<div style="margin-bottom:6px;"><b>取得件数:</b> ' + (result.count || 0) + '件</div>';
+      if (result.candidates && result.candidates.length > 0) {
+        html += '<div style="display:flex;flex-direction:column;gap:8px;">';
+        result.candidates.forEach(function(c, i) {
+          var sourceLabels = {'rakuten':'🛍️楽天','hotpepper':'🍽️HP','nova_act_amazon':'📦Nova','bedrock_amazon':'🤖AI','static':'📋静的'};
+          var badge = sourceLabels[c.source] || c.source;
+          html += '<div style="background:#f5f5f5;border-radius:8px;padding:10px;border:1px solid #e0e0e0;">';
+          html += '<div style="display:flex;gap:10px;">';
+          // 画像
+          if (c.image_url) {
+            html += '<img src="' + c.image_url + '" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display=\'none\'">';
+          }
+          html += '<div style="flex:1;min-width:0;">';
+          html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+          html += '<span style="font-weight:bold;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (c.name || '?').substring(0, 40) + '</span>';
+          html += '<span style="background:#7BAF6E;color:white;padding:2px 6px;border-radius:4px;font-size:10px;flex-shrink:0;margin-left:4px;">' + badge + '</span>';
+          html += '</div>';
+          html += '<div style="color:#7BAF6E;font-weight:bold;margin-top:2px;">¥' + (c.amount || 0).toLocaleString() + '</div>';
+          if (c.url) html += '<a href="' + c.url + '" target="_blank" style="font-size:11px;color:#1976d2;word-break:break-all;">🔗 ' + c.url.substring(0, 50) + (c.url.length > 50 ? '...' : '') + '</a>';
+          html += '</div></div></div>';
+        });
+        html += '</div>';
+        // プレビューカードに最初の候補を表示
+        hideAllNovaSteps();
+        novaActProduct = result.candidates[0];
+        showStep1(result.candidates[0], result.candidates[0].reason || 'ふれまーるちゃんが見つけてきたよ🌿');
+      } else {
+        html += '<div style="color:#888;">候補が見つかりませんでした</div>';
+      }
+      out.innerHTML = html;
+    } catch (e) {
+      out.innerHTML = '<span style="color:#d33;">エラー: ' + (e.message || e) + '</span>';
+    } finally {
+      this.disabled = false;
+      this.textContent = '🔍 候補を検索する';
+    }
+  });
+
+  // ─── ご褒美候補プレビュー ───
+  let novaActProduct = null;
+  const novaActLoading = document.getElementById('nova-act-loading');
+  const novaActEmpty = document.getElementById('nova-act-empty');
+  const novaActStep1 = document.getElementById('nova-act-step1');
+  const novaActStep2 = document.getElementById('nova-act-step2');
+  const novaActStatus = document.getElementById('nova-act-status');
+
+  function hideAllNovaSteps() {
+    novaActLoading.style.display = 'none';
+    novaActEmpty.style.display = 'none';
+    novaActStep1.style.display = 'none';
+    novaActStep2.style.display = 'none';
+  }
+
+  function openUrl(url) {
+    if (typeof liff !== 'undefined' && liff.isInClient && liff.isInClient()) {
+      liff.openWindow({ url: url, external: true });
+    } else {
+      window.open(url, '_blank') || (location.href = url);
+    }
+  }
+
+  // APIから商品を取得して Step 1 を表示
+  async function loadNovaActProduct() {
+    hideAllNovaSteps();
+    novaActLoading.style.display = 'block';
+    novaActStatus.textContent = '';
+    try {
+      const r = await api('/reward-candidates', { method: 'POST', body: {} });
+      console.log('reward-candidates response:', JSON.stringify(r));
+      hideAllNovaSteps();
+      if (r && r.success && r.candidates && r.candidates.length > 0) {
+        // 最もスコアの高い候補を表示
+        var best = r.candidates[0];
+        novaActProduct = best;
+        showStep1(best, best.reason || 'ふれまーるちゃんが見つけてきたよ🌿');
+      } else if (r && r.success && r.product) {
+        // 旧形式互換
+        novaActProduct = r.product;
+        showStep1(r.product, r.reason);
+      } else {
+        console.warn('reward-candidates: no candidates', r);
+        novaActEmpty.style.display = 'block';
+        novaActStatus.innerHTML = '<span style="color:#888;font-size:11px;">候補が見つかりませんでした</span>';
+      }
+    } catch (e) {
+      console.error('reward-candidates error:', e);
+      hideAllNovaSteps();
+      novaActEmpty.style.display = 'block';
+      novaActStatus.innerHTML = '<span style="color:#d33;font-size:11px;">Error: ' + (e.message || e) + '</span>';
+    }
+  }
+
+  function showStep1(product, reason) {
+    console.log('showStep1 called:', JSON.stringify(product));
+    const imgDiv = document.getElementById('nova-act-product-image');
+    if (product.image_url) {
+      imgDiv.innerHTML = '<img src="' + product.image_url + '" style="max-width:140px;max-height:140px;border-radius:8px;" alt="">';
+    } else {
+      imgDiv.innerHTML = '';
+    }
+    var titleEl = document.getElementById('nova-act-product-title');
+    titleEl.textContent = product.name || product.title || '（商品名取得中...）';
+    titleEl.style.fontSize = '16px';
+    var price = product.amount || product.price;
+    document.getElementById('nova-act-product-price').textContent = price ? ('¥' + Number(price).toLocaleString()) : '';
+    document.getElementById('nova-act-reason').textContent = reason || '';
+
+    // ソース表示
+    var sourceLabels = {
+      'rakuten': '🛍️ 楽天市場',
+      'hotpepper': '🍽️ ホットペッパー',
+      'nova_act_amazon': '📦 Amazon (Nova Act検索)',
+      'bedrock_amazon': '📦 Amazon (AI推薦)',
+      'static': '📋 おすすめカタログ'
+    };
+    var sourceEl = document.getElementById('nova-act-product-source');
+    if (sourceEl) {
+      sourceEl.textContent = sourceLabels[product.source] || product.source || '';
+    }
+
+    // 商品リンクを表示
+    var linkEl = document.getElementById('nova-act-product-link');
+    var url = product.url || product.product_url || '';
+    if (linkEl && url) {
+      linkEl.innerHTML = '<a href="' + url + '" target="_blank" style="color:#2e7d32;font-size:13px;">🔗 商品ページを見る</a>';
+    } else if (linkEl) {
+      linkEl.innerHTML = '';
+    }
+
+    // ソースに応じてボタン表示を切り替え
+    var btnAmazon = document.getElementById('btn-nova-act-add-cart');
+    var btnRakuten = document.getElementById('btn-nova-act-rakuten');
+    var btnHotpepper = document.getElementById('btn-nova-act-hotpepper');
+    btnAmazon.style.display = 'none';
+    btnRakuten.style.display = 'none';
+    btnHotpepper.style.display = 'none';
+
+    var source = product.source || '';
+    if (source === 'rakuten') {
+      btnRakuten.style.display = 'block';
+    } else if (source === 'hotpepper') {
+      btnHotpepper.style.display = 'block';
+    } else {
+      // Amazon系 → カートに入れるボタン（ASINなくてもサーバーで解決する）
+      btnAmazon.style.display = 'block';
+      btnAmazon.textContent = '🛒 Amazonのカートに入れる';
+    }
+
+    novaActStep1.style.display = 'block';
+  }
+
+  function showStep2(product) {
+    document.getElementById('nova-act-cart-title').textContent = product.name || product.title || '';
+    var price = product.amount || product.price;
+    document.getElementById('nova-act-cart-price').textContent = price ? ('¥' + Number(price).toLocaleString()) : '';
+    novaActStep2.style.display = 'block';
+  }
+
+  // 設定ページが開かれた時に商品を取得（認証完了後）
+  // ※ initLiff → loadPage('settings') 経由で呼ばれるため認証済み
+
+  // 「今すぐ候補を探す」
+  document.getElementById('btn-nova-act-trigger').addEventListener('click', async function() {
+    this.disabled = true;
+    this.textContent = '🌿 ふれまーるちゃんが探してるよ...';
+    await loadNovaActProduct();
+    this.disabled = false;
+    this.textContent = '🎁 今すぐ候補を探す';
+  });
+
+  // 「Amazonのカートに入れる」→ サーバーでASIN解決 → Add-to-Cart URLで自動カート投入
+  document.getElementById('btn-nova-act-add-cart').addEventListener('click', async function() {
+    if (!novaActProduct) {
+      novaActStatus.innerHTML = '<span style="color:#d33;">商品データがありません。</span>';
+      return;
+    }
+
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = '🔍 Amazonで商品を探しています...';
+    novaActStatus.innerHTML = '<span style="color:#666;">少々お待ちください...</span>';
+
+    var asin = novaActProduct.asin || '';
+    var cartUrl = '';
+
+    try {
+      if (asin) {
+        // 既にASINがある場合（nova_act_amazon等）→ 直接カートURL
+        cartUrl = 'https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=' + asin + '&Quantity.1=1';
+      } else {
+        // ASINなし → サーバーで商品名からASIN解決
+        var data = await api('/amazon/resolve-cart', {
+          method: 'POST',
+          body: {product_name: novaActProduct.name || novaActProduct.title, max_price: novaActProduct.amount || 5000}
+        });
+
+        if (data.success && data.asin) {
+          asin = data.asin;
+          cartUrl = data.cart_url || ('https://www.amazon.co.jp/gp/aws/cart/add.html?ASIN.1=' + asin + '&Quantity.1=1');
+          novaActProduct.asin = asin;
+          if (data.image_url) novaActProduct.image_url = data.image_url;
+          if (data.product_url) novaActProduct.url = data.product_url;
+          if (data.name) novaActProduct.name = data.name;
+        }
+      }
+
+      if (cartUrl) {
+        openUrl(cartUrl);
+        hideAllNovaSteps();
+        showStep2(novaActProduct);
+        novaActStatus.innerHTML = '<span style="color:#155724;">🛒 Amazonのカートに追加したよ！確認してね🌿</span>';
+      } else {
+        // ASIN解決失敗 → 商品検索ページへ
+        var url = novaActProduct.url || novaActProduct.product_url || '';
+        if (url) {
+          openUrl(url);
+          hideAllNovaSteps();
+          showStep2(novaActProduct);
+          novaActStatus.innerHTML = '<span style="color:#856404;">⚠️ 自動カート追加できませんでした。商品ページを開いたよ🌿</span>';
+        } else {
+          novaActStatus.innerHTML = '<span style="color:#d33;">商品が見つかりませんでした。別の候補を試してね。</span>';
+        }
+      }
+    } catch (e) {
+      console.error('Add to cart failed:', e);
+      novaActStatus.innerHTML = '<span style="color:#d33;">エラーが発生しました: ' + (e.message || e) + '</span>';
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🛒 Amazonのカートに入れる';
+  });
+
+  // 楽天ボタン
+  document.getElementById('btn-nova-act-rakuten').addEventListener('click', function() {
+    if (!novaActProduct || !novaActProduct.url) return;
+    openUrl(novaActProduct.url);
+    hideAllNovaSteps();
+    showStep2(novaActProduct);
+  });
+
+  // ホットペッパーボタン
+  document.getElementById('btn-nova-act-hotpepper').addEventListener('click', function() {
+    if (!novaActProduct || !novaActProduct.url) return;
+    openUrl(novaActProduct.url);
+    hideAllNovaSteps();
+    showStep2(novaActProduct);
+  });
+
+  // Step 2:「サイトで確認する」→ 商品URLを開く
+  document.getElementById('btn-nova-act-purchase').addEventListener('click', function() {
+    // Amazonカートページを開く
+    openUrl('https://www.amazon.co.jp/gp/cart/view.html');
+  });
+
+  // 「買ったよ！」→ 購入完了記録
+  document.getElementById('btn-nova-act-bought').addEventListener('click', async function() {
+    hideAllNovaSteps();
+    novaActStatus.innerHTML = '<span style="color:#155724;">🎉 おめでとう！ご褒美を楽しんでね🌿</span>';
+    // TODO: 購入完了をバックエンドに記録 (REWARD_HISTORY)
+    novaActProduct = null;
+  });
+
+  // 「別の商品にして」→ 候補リフレッシュ
+  document.getElementById('btn-nova-act-change').addEventListener('click', async function() {
+    this.disabled = true;
+    hideAllNovaSteps();
+    novaActLoading.style.display = 'block';
+    novaActStatus.innerHTML = '<span style="color:#555;">🤖 ふれまーるちゃんが別の候補を探してるよ...</span>';
+    await loadNovaActProduct();
+    this.disabled = false;
+    novaActStatus.textContent = '';
+  });
+
+  // 「やっぱりやめる」（Step 1）
+  document.getElementById('btn-nova-act-decline').addEventListener('click', function() {
+    hideAllNovaSteps();
+    novaActProduct = null;
+    novaActStatus.innerHTML = '<span style="color:#555;">わかった！また次の機会に🌿</span>';
+  });
+
+  // 「やっぱりやめる」（Step 2）
+  document.getElementById('btn-nova-act-cancel').addEventListener('click', function() {
+    hideAllNovaSteps();
+    novaActProduct = null;
+    novaActStatus.innerHTML = '<span style="color:#555;">了解！キャンセルしたよ🌿</span>';
+  });
+
+})();
+</script>
+</body>
+</html>

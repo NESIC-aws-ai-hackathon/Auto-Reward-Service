@@ -165,6 +165,22 @@ export class ApiClient {
     return this.request(`/api/diary/${date}`);
   }
 
+  // ─── Memories (ふれまーるちゃんが覚えてくれてること) ───
+
+  getMemories(): Promise<{
+    topics: { name: string; count: number }[];
+    moods: { name: string; count: number }[];
+    categories: { name: string; count: number }[];
+    favorite_items: { name: string; count: number }[];
+    episodes: { content: string; category: string; date: string; topic: string }[];
+    total_chat_days: number;
+    total_life_logs: number;
+    days_since_last_chat: number;
+    last_chat_date: string | null;
+  }> {
+    return this.request('/api/memories');
+  }
+
   // ─── Chat Messages ───
 
   getChatMessages(since?: string, limit?: number): Promise<{
@@ -287,6 +303,17 @@ export class ApiClient {
 
   // ─── Product Search ───
 
+  getUserInterests(): Promise<{
+    interests: {
+      category: string;
+      search_keyword: string;
+      score: number;
+      last_seen: string;
+    }[];
+  }> {
+    return this.request('/api/user/interests');
+  }
+
   searchProducts(keyword: string, category?: string, maxPrice?: number): Promise<{
     products: {
       name: string;
@@ -326,6 +353,13 @@ export class ApiClient {
     return this.request('/api/wishlist/register', {
       method: 'POST',
       body: JSON.stringify({ url, display_name: displayName || '' }),
+    });
+  }
+
+  addWishlistItem(item: { name: string; url?: string; price?: number; image?: string; category?: string }): Promise<{ success?: boolean; item_id?: string; error?: string }> {
+    return this.request('/api/wishlist/add-item', {
+      method: 'POST',
+      body: JSON.stringify(item),
     });
   }
 
@@ -390,6 +424,7 @@ export class ApiClient {
     reward_budget: number;
     bonus_amount?: number;
     bonus_months?: string;
+    interests?: string[];
   }): Promise<{ message: string }> {
     return this.request('/api/onboarding', {
       method: 'POST',

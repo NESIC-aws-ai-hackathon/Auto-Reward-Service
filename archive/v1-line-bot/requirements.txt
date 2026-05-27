@@ -1,0 +1,6 @@
+# Lambda Layer dependencies
+# boto3 / botocore は Lambda ランタイムに同梱済みのため除外
+aws-lambda-powertools>=3.0.0
+pydantic>=2.0.0
+line-bot-sdk>=3.0.0
+requests>=2.31.0

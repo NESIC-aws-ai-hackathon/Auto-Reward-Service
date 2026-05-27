@@ -2,15 +2,18 @@
 
 <div align="center">
 
-> ### 🎁 「話すだけで家計簿になる。好きなものを覚えて、買っていい理由をくれる。」
+> ### 🎁 「話すだけで家計簿になる。がんばった自分に、ちょうどいいご褒美を。」
 
 [![Status](https://img.shields.io/badge/AI--DLC-Construction-orange)](#)
 [![Theme](https://img.shields.io/badge/theme-人をダメにする-ff69b4)](#)
-[![LINE Bot](https://img.shields.io/badge/LINE-Messaging_API-00C300)](#)
-[![AWS Lambda](https://img.shields.io/badge/AWS-Lambda_(Python)-FF9900)](#)
+[![PWA](https://img.shields.io/badge/PWA-Standalone-5A0FC8)](#)
+[![React](https://img.shields.io/badge/React-19-61DAFB)](#)
+[![AWS Lambda](https://img.shields.io/badge/AWS-Lambda_(Python_3.13)-FF9900)](#)
 [![DynamoDB](https://img.shields.io/badge/AWS-DynamoDB-4053D6)](#)
 [![Bedrock](https://img.shields.io/badge/AWS-Bedrock_(Nova)-232F3E)](#)
 [![License](https://img.shields.io/badge/license-MIT-green)](#ライセンス)
+
+**🌐 デモ**: https://d39spqovcq7od.cloudfront.net/demo
 
 </div>
 
@@ -18,13 +21,11 @@
 
 ## 概要
 
-**オートリワードサービス（ARS）** は、AI-DLC ハッカソン「人をダメにする」テーマのもとで構築する、LINE Bot 中心の **AI 家計簿 × ご褒美自動購入サービス** です。
+**オートリワードサービス（ARS）** は、AI ハッカソン「人をダメにする」テーマのもとで構築する、PWA スタンドアロンの **AI 家計簿 × ご褒美提案サービス** です。
 
-LINEで **ふれまーるちゃん** と話しているだけで、愚痴・支出・好み・ご褒美履歴が **会話の副産物として** 育っていきます。
-ユーザーは家計簿を頑張らない。でも気づいたら、自分の消費傾向が整理されている。
-そしてふれまーるちゃんは、ユーザーの好きなものや今月の余裕を覚えて、ちょうど弱っているタイミングで「これ買っちゃおうよ〜」と提案し、許可が出たら **Amazon カートに自動で入れて購入まで代行** します。
+AI キャラクター **ふれまーるちゃん** と話しているだけで、支出・感情・嗜好が **会話の副産物として** 育っていきます。ユーザーは家計簿を頑張らない。でも気づいたら、自分の消費傾向が整理されている。そしてふれまーるちゃんは、ユーザーの好きなものや今月の余裕を覚えて、ちょうど弱っているタイミングで「これ買っちゃおうよ〜」と提案してくれます。
 
-> 💬 *「買っていいよ」の一言で、ふれまーるちゃんが全部やってくれる。*
+> 💬 *「買っていいよ」の一言で、ふれまーるちゃんが最適なご褒美を探して提案してくれる。*
 
 ---
 
@@ -35,294 +36,447 @@ LINEで **ふれまーるちゃん** と話しているだけで、愚痴・支�
 | キャッチコピー | 頑張らない家計簿アプリ「ARS」 |
 | テーマ | 人をダメにする |
 | ターゲット | 忙しい社会人・育児中の親・フリーランス |
-| コアバリュー | 会話するだけで家計が育ち、AI キャラが「買っていい理由」を作って自動購入まで代行 |
-| UI | LINE Bot（ふれまーるちゃん）+ PWA（ダッシュボード・通知） |
-| キャラクター | ふれまーるちゃん — 甘やかし特化の AI アシスタント |---
+| コアバリュー | 会話するだけで家計が育ち、AI キャラが「買っていい理由」を作ってご褒美を提案 |
+| UI | PWA（ふれまーるちゃんとのチャット + ダッシュボード + 日記） |
+| キャラクター | ふれまーるちゃん — 甘やかし特化の AI アシスタント |
+
+---
 
 ## 成功シナリオ
 
-> 田中さん（26歳・会社員）は残業後、LINEでふれまーるちゃんにつぶやく。
+> 田中さん（26歳・会社員）は残業後、スマホでふれまーるちゃんに話しかける。
 >
-> **ユーザー**: 今日疲れた  
-> **ふれまーるちゃん**: ほしい物リストで熟成していた入浴剤、今のあなたにちょうどよさそうだったので、買い物かごに入れておいたよ〜。疲れてるんだもん仕方ないよね！お風呂でゆっくりリラックスしよう！買うって言ってくれたら買っちゃうよ！
+> **ユーザー**: 今日もう限界かも…会議3つあってさ
 >
-> **ユーザー**: 買って！
-> **ふれまーるちゃん**: はーい！注文確定したよ〜 🎉 明日届くからね！
+> **ふれまーるちゃん**: 会議3つはきつかったね…。お疲れの度合い、かなり高めかも。
 >
-> 家計簿をつけたつもりはないのに、支出も感情も好みも自然に記録されている。
+> **ユーザー**: なんか自分にご褒美あげたいけど何がいいかな
+>
+> **ふれまーるちゃん**: 田中さんカフェ好きでしょ？今月まだ余剰が¥6,200あるから、こういうのどうかな？ちょっといいやつ。
+>
+> 🛍 **ルピシア お茶のバラエティセット** ¥2,480
+> *カフェ好きなあなたへ。自宅で本格ティータイムはどう？*
+>
+> **ユーザー**: おっ、これいいかも！買っちゃおうかな
+>
+> **ふれまーるちゃん**: えへへ、いいと思う！自宅ティータイムって意外と効くよ。回復費として記録しておくね。
+>
+> ✅ 支出記録: 回復費 ¥2,480
+>
+> **ふれまーるちゃん**: あと、今すぐできる0円回復もあるよ。
+>
+> ▶ **自律神経を整えるヨガ（10分）** — YouTube
+> *体を動かすと気分が切り替わるかも*
+
+**裏側で起きていること:**
+- 会話から感情（疲労度:高）を自動推定 → ライフログに記録
+- ユーザーの嗜好（カフェ好き）をPREF_MEMORYから参照
+- 今月の余剰金（¥6,200）を計算して予算内で提案
+- 楽天APIで商品検索 + YouTubeで0円回復候補を取得
+- 22時に今日の日記を自動生成
 
 ---
 
-## アーキテクチャ方針（要件整理.md §16 準拠）
+## ふれまーるちゃんについて
 
-### Unit 8: PWA 音声チャット + ダッシュボード
+<table>
+<tr>
+<td width="120">
 
-Unit 8 では、音声チャット基盤を **Amazon Nova Sonic / Amazon Bedrock** に変更しました。
+🧸
 
-これにより、音声会話、会話理解、応答生成を AWS 内に閉じた構成で実現します。
-OpenAI Realtime API は利用しません。
+</td>
+<td>
 
-**音声チャット構成:**
-```
-PWA VoiceChat
-  ↓ WebSocket (API Gateway WebSocket API)
-Backend Voice Gateway (Lambda)
-  ↓ InvokeModelWithBidirectionalStream
-Amazon Nova Sonic (Bedrock)
-  ↓ 音声 + Transcript
-Backend Voice Gateway
-  ↓ WebSocket
-PWA VoiceChat
-```
+**ふれまーるちゃん** は ARS の中核を担う AI キャラクターです。
 
-音声会話の Transcript を保存し、ライフログ抽出、家計簿更新、ストレス判定、日記サマリ生成は非同期 AnalysisWorker で実行します。
+- **性格**: 甘やかし特化。ユーザーの味方。でも無駄遣いには「う〜ん、それはちょっと待とっか」と言える
+- **口調**: フレンドリー。タメ口。絵文字少なめ。でも的確
+- **役割**: 会話相手 / 家計記録 / 感情ケア / ご褒美提案 / 日記作成
+- **6つの表情**: neutral / happy / support / shy / excited / listening
+- **設計思想**: 数字や率で見せず、キャラの言葉で伝える
 
-**テキストフォールバック:** Nova Sonic が利用できない場合は、Bedrock Claude Sonnet によるテキストチャットにフォールバックします。
+> *「今月はコンビニスイーツ多めだけど、大きな無駄遣いはまだしてないよ〜。
+> あと少しなら、甘いもの買っても大丈夫そう。でもガジェット系は来月まで待と？」*
 
-### MVP 対象（ハッカソン提出版）
+内部ではスコアリングする。表にはふれまーるちゃんの言葉で出す。
 
-| 領域 | 採用判断 | 備考 |
-|------|---------|------|
-| **LINE Bot 中心 UI** | ✅ 採用 | 全主要機能を LINE 上で完結（支出記録／ご褒美提案／カート確認） |
-| **PWA（補助 UI）** | ✅ 採用 | **Web Push 通知の受信導線**＋設定画面（メイン UI ではない） |
-| **AWS Bedrock (Nova)** | ✅ 採用 | 会話理解／Intent 分類／キャラ口調 |
-| **DynamoDB シングルテーブル** | ✅ 採用 | PK=USER#{userId}, SK でレコード種別 |
-| **Nova Act（候補探索）** | ✅ 採用（スモーク導線） | SDK 未導入時は外部API→静的フォールバック |
-| **PWA Web Push（VAPID）** | ✅ 採用 | LINE Push の代替として全プッシュ通知を担当 |
-| **EventBridge スケジューラ** | ✅ 採用 | 朝・夜の定時通知トリガ |
-| **LIFF Login（id_token）** | ✅ 採用 | LINE 公式アプリ内ブラウザでの認証 |
-
-### 廃止／非採用
-
-| 項目 | 理由 |
-|------|------|
-| **LINE Push API** | 認可制限・コスト・到達率の観点で PWA Web Push に一本化 |
-| **Google カレンダー連携** | MVP では Feature Flag で OFF（コード基盤のみ保持） |
-| **独自 PWA ダッシュボード単独運用** | LINE Bot 中心方針に統合（PWA は補助） |
-
-### Feature Flag による安定化
-
-要件整理.md §13 に従い、すべての主要機能はランタイム Feature Flag で個別に ON/OFF できます。
-
-```yaml
-ENABLE_PWA_WEB_PUSH: "true"      # PWA Web Push 通知
-ENABLE_LINE_PUSH: "false"        # LINE Push（廃止）
-ENABLE_NOVA_ACT: "true"          # Nova Act 候補探索
-ENABLE_NOVA_ACT_SMOKE: "true"    # /api/nova-act/smoke 検証導線
-ENABLE_EXTERNAL_REWARD_API: "true"  # 楽天等の外部API
-ENABLE_STATIC_REWARD_FALLBACK: "true"  # 静的候補フォールバック
-ENABLE_LINE_BOT: "true"          # LINE Bot 機能
-ENABLE_GOOGLE_CALENDAR: "false"  # Googleカレンダー（OFF）
-```
-
----
-
-## システムアーキテクチャ
-
-AWS サーバーレスアーキテクチャを採用。LINE Bot を入口として、Lambda 関数群が連携します。
-
-```
-LINEユーザー
-  ↓（テキスト / 画像 / スタンプ）
-LINE Messaging API
-  ↓（Webhook POST）
-Amazon API Gateway（+ WAF）
-  ↓
-Lambda: webhook_handler
-  ├─ LINE署名検証（X-Line-Signature）
-  ├─ Message Router
-  │     ├─ text  → intent_classifier
-  │     │           ├─ EXPENSE    → expense_extractor  → DynamoDB
-  │     │           ├─ REWARD     → reward_proposal    → DynamoDB
-  │     │           ├─ TEMPTATION → temptation_engine  → LIFF
-  │     │           ├─ GREET/CHAT → character_reply
-  │     │           └─ ONBOARDING → onboarding_flow    → DynamoDB
-  │     └─ image → receipt_analyzer → DynamoDB
-  ├─ Purchase Intent Check（活性レコメンド時）
-  │     ├─ DECLINE       → カート取消＋通知
-  │     ├─ AMBIGUOUS_BUY → 確認メッセージ
-  │     └─ EXPLICIT_PURCHASE → 安全チェック → 購入実行
-  └─ LINE Reply API で応答
-
-日次バッチ（EventBridge Scheduler）
-  └─ reward_pool_updater → 楽天API → DynamoDB
-
-PWA通知（notification_service）
-  └─ LIFF ダッシュボード内チャット風UI
-
-カート自動化（cart_automation_worker）
-  ├─ Stub モード（デモ用・即時成功）
-  ├─ Nova Act モード（ブラウザ自動操作）
-  └─ Hybrid モード（Nova Act + Stub フォールバック）
-```
-
-### データストア
-
-**DynamoDB シングルテーブルデザイン**
-
-| PK | SK プレフィックス | 用途 |
-|----|-------------------|------|
-| `USER#{lineUserId}` | `PROFILE#` | 収入・固定費・ご褒美枠・口調設定 |
-| `USER#{lineUserId}` | `EXPENSE#{isoTimestamp}` | 支出記録 |
-| `USER#{lineUserId}` | `CHAT#{isoTimestamp}` | 会話ログ |
-| `USER#{lineUserId}` | `PREF_MEMORY#` | 嗜好記憶（好きなカテゴリ・商品傾向） |
-| `USER#{lineUserId}` | `REWARD_POOL#` | ご褒美候補プール |
-| `USER#{lineUserId}` | `REWARD_SUGGESTION#{isoTimestamp}` | ご褒美提案・結果 |
-| `USER#{lineUserId}` | `WISHLIST_SOURCE#{url_hash}` | ほしい物リスト登録元 |
-| `USER#{lineUserId}` | `WISHLIST_ITEM#{item_id}` | ほしい物リストアイテム |
-| `USER#{lineUserId}` | `RECOMMENDATION#{rec_id}` | レコメンド（提案・カート・購入） |
-| `USER#{lineUserId}` | `NOTIFICATION#{notif_id}` | PWA通知レコード |
-| `USER#{lineUserId}` | `CART_AUTOMATION_JOB#{job_id}` | カート自動化ジョブ |
-| `USER#{lineUserId}` | `BROWSER_SESSION#{session_id}` | ブラウザセッション（Nova Act） |
+</td>
+</tr>
+</table>
 
 ---
 
 ## 主要機能
 
-| Unit | 名称 | 役割 | MVP |
-|------|------|------|-----|
-| Unit 0 | **SAM基盤** | SAMプロジェクト・共通Layer・DynamoDBテーブル定義 | ✅ |
-| Unit 1 | **LINE Bot基盤** | Webhook受信・署名検証・Router・Reply | ✅ |
-| Unit 2 | **ふれまーるちゃんキャラクター** | Intent分類・口調生成・感情把握・オンボーディング | ✅ |
-| Unit 3 | **支出記録** | チャット支出抽出・確認フロー・レシート画像解析 | ✅ |
-| Unit 4 | **ご褒美候補プール** | 嗜好記憶・楽天API連携・日次バッチ更新 | ✅ |
-| Unit 5 | **ご褒美提案** | 状態推定・候補マッチング・余裕額チェック | ✅ |
-| Unit 7 | **PWAダッシュボード** | 通知・支出・在庫・寄り道・設定 | ✅ |
+| 機能 | 説明 | 画面 |
+|------|------|------|
+| 💬 AIチャット | テキスト/音声で会話。共感・支出記録・ご褒美提案をすべてチャット内で | Chat |
+| 🎤 リアルタイム音声 | Amazon Nova Sonic によるリアルタイム音声応答（WebSocket + VAD） | Chat |
+| 🛍 商品レコメンド | ストレス検知 → 嗜好×予算×気分で最適な商品をカード表示 | Chat |
+| 📊 ダッシュボード | 今月の余剰金・回復費・気分スコア・連続記録日数 | Dashboard |
+| 📝 ライフログ | 会話するたび感情付きログが蓄積。時系列で1日の流れが見える | Diary |
+| 📔 日記自動生成 | 22時にその日のログからふれまーるちゃんが日記を書いてくれる | Diary |
+| 🧾 レシート解析 | カメラ撮影 → Nova Lite OCR → 品目分割 → 自動記録 | Chat |
+| 🌿 リカバリー提案 | 0円回復（YouTube/散歩）〜小ごほうび（カフェ/スイーツ）を提案 | Recovery |
+| 💰 予算繰越 | 余ったご褒美予算は来月へ。使いすぎてもリセットで再スタート | Dashboard |
+| 🔔 Push通知 | ブラウザ Push でプロアクティブ提案（VAPID） | — |
+| 🎭 デモモード | 12シナリオの自動再生。ハッカソン発表用 | Demo |
 
-### 追加機能（変更依頼書_2）
+---
 
-| 機能 | 説明 |
-|------|------|
-| **ほしい物リスト連携** | Amazon ほしい物リスト URL 登録 → 商品同期 → 熟成スコアリング |
-| **レコメンドエンジン** | 熟成度 + 価格適合度 + 疲労ブーストでご褒美候補を選定 |
-| **購入意図分類** | ユーザー発話を DECLINE / AMBIGUOUS_BUY / EXPLICIT_PURCHASE に分類 |
-| **カート自動化** | Stub / Nova Act / Hybrid の3モード対応。Amazon カート操作を自動化 |
-| **安全チェック** | 購入前に金額上限・数量・サブスク・決済方法変更を多重検証 |
-| **PWA通知** | LINE PUSH 廃止 → PWA 内チャット風通知UIに移行 |
+## アーキテクチャ
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        User (Browser / PWA)                      │
+└────────────────────────────────┬────────────────────────────────┘
+                                 │
+                    ┌────────────┴────────────┐
+                    │       CloudFront        │
+                    │    (React PWA + S3)     │
+                    └────────────┬────────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+   ┌──────────┴─────┐  ┌───────┴────────┐  ┌─────┴──────────┐
+   │  API Gateway   │  │ WebSocket API  │  │   Cognito      │
+   │  (HTTP API)    │  │ (Voice Chat)   │  │  (Auth)        │
+   └──────┬─────────┘  └───────┬────────┘  └────────────────┘
+          │                     │
+   ┌──────┴─────────┐  ┌───────┴────────┐
+   │  API Lambda    │  │ Voice Gateway  │
+   │  (Python)      │  │  Lambda        │
+   └──────┬─────────┘  └───────┬────────┘
+          │                     │
+   ┌──────┴─────────────────────┴────────┐
+   │          Amazon Bedrock              │
+   │   Nova Lite (text) / Nova Sonic (voice) │
+   └──────┬──────────────────────────────┘
+          │
+   ┌──────┴──────────┐     ┌─────────────────┐
+   │   DynamoDB      │     │  External APIs  │
+   │  (Single Table) │     │  楽天/HotPepper │
+   │   ArsTable      │     │  YouTube/Amazon │
+   └─────────────────┘     └─────────────────┘
+```
+
+---
+
+## DynamoDB スキーマ（Single Table Design）
+
+| PK | SK パターン | 用途 |
+|----|------------|------|
+| `USER#{userId}` | `PROFILE` | ユーザープロフィール・予算設定 |
+| `USER#{userId}` | `EXPENSE#{timestamp}` | 支出記録 |
+| `USER#{userId}` | `LIFELOG#{timestamp}` | 感情付きライフログ |
+| `USER#{userId}` | `DIARY#{date}` | 日記（自動生成） |
+| `USER#{userId}` | `CHAT#{timestamp}` | 会話ログ |
+| `USER#{userId}` | `PREF#{category}` | 嗜好メモリ |
+| `USER#{userId}` | `REWARD_POOL#{id}` | ご褒美候補プール |
+| `USER#{userId}` | `PUSH_SUB` | Push通知サブスクリプション |
 
 ---
 
 ## 技術スタック
 
-| レイヤー | 技術 | 備考 |
-|---------|------|------|
-| メッセージングUI | LINE Messaging API（フリープラン） | Reply 中心（Push 廃止済み） |
-| PWA | LIFF + Service Worker | ダッシュボード・通知・ウィッシュリスト管理 |
-| API エントリポイント | Amazon API Gateway | Webhook + LIFF API |
-| バックエンド | AWS Lambda（Python 3.13） | 全関数 Python 統一 |
-| データベース | Amazon DynamoDB | シングルテーブルデザイン |
-| LLM | Amazon Bedrock（Nova Lite） | Intent分類・キャラ応答生成 |
-| 画像解析 | Nova Lite（マルチモーダル） | レシート OCR |
-| 外部API | 楽天ウェブサービスAPI / じゃらん / ホットペッパー | ご褒美候補プール |
-| カート自動化 | Amazon Nova Act（予定） | ブラウザ自動操作でカート管理 |
-| スケジューラ | Amazon EventBridge Scheduler | 日次バッチ |
-| IaC | AWS SAM | template.yaml で全リソース定義 |
-| シークレット管理 | AWS Secrets Manager / SSM | チャネルシークレット・トークン等 |
-| セキュリティ | AWS WAF | API Gateway に適用 |
-| テスト | pytest | ユニットテスト重点 |
+| カテゴリ | 技術 | 選定理由 |
+|---------|------|---------|
+| フロントエンド | React 19 + TypeScript 5.7 + Vite 6 | 高速ビルド・型安全・PWA対応 |
+| ルーティング | react-router-dom v7 | SPA内画面遷移 |
+| バックエンド | Python 3.13 + AWS Lambda | サーバーレス・Bedrock SDK直結 |
+| AI (テキスト) | Amazon Bedrock Nova Lite | 高速・低コスト・日本語対応 |
+| AI (音声) | Amazon Nova Sonic | リアルタイム双方向音声 |
+| データベース | DynamoDB (Single Table) | スケーラブル・サーバーレス |
+| 認証 | Amazon Cognito | マネージド認証・JWT |
+| ホスティング | CloudFront + S3 | グローバルCDN・低レイテンシ |
+| API | API Gateway HTTP API | Lambda統合・CORS対応 |
+| 音声通信 | WebSocket API + Lambda | リアルタイム双方向 |
+| IaC | AWS SAM | Lambda特化・ローカルテスト |
+| Push通知 | Web Push (VAPID) | ブラウザネイティブ・サーバーレス |
+| 外部API | 楽天 / HotPepper / YouTube | 商品検索・店舗検索・無料コンテンツ |
+
+---
+
+## 画面構成
+
+| 画面 | 説明 | パス |
+|------|------|------|
+| チャット | ふれまーるちゃんとの会話。音声/テキスト切替。商品カード表示 | `/` |
+| ダッシュボード | 月間サマリー。余剰金・回復費・気分スコア・支出グループ | `/dashboard` |
+| ダイアリー | ライフログ一覧 + 日記。感情タイムライン | `/diary` |
+| リカバリー | ご褒美提案一覧。0円回復〜小ごほうび。タブ切替 | `/recovery` |
+| 設定 | プロフィール・予算・通知・ログアウト | `/settings` |
+| オンボーディング | 初回設定（名前・予算・好きなもの・日記時刻） | `/onboarding` |
+| デモ | 12シナリオ自動再生。コントロールパネル付き | `/demo` |
 
 ---
 
 ## プロジェクト構成
 
 ```
-auto-reward-service/
-├── src/
-│   └── handlers/              # Lambda関数ハンドラー
-│       ├── webhook_handler.py      # LINE Webhook メインルーター
-│       ├── expense_extractor.py    # 支出抽出エンジン
-│       ├── receipt_processor_handler.py  # レシート画像非同期処理
-│       ├── reward_pool_updater.py  # 日次バッチ候補更新
-│       ├── liff_api.py             # LIFF/PWA API エンドポイント
-│       ├── pwa_temptation.py       # PWA 寄り道API
-│       └── liff/
-│           └── index.html          # PWA フロントエンド
-├── layer/
-│   └── python/
-│       ├── models/
-│       │   └── schemas.py         # DynamoDB スキーマ定義
-│       ├── services/              # 共通サービスモジュール
-│       │   ├── dynamodb_service.py
-│       │   ├── bedrock_service.py
-│       │   ├── line_service.py
-│       │   ├── rakuten_service.py
-│       │   ├── finance_engine.py
-│       │   ├── wishlist_service.py       # ほしい物リスト管理
-│       │   ├── recommendation_engine.py  # レコメンドエンジン
-│       │   ├── notification_service.py   # PWA通知管理
-│       │   ├── cart_automation_worker.py # カート自動化ワーカー
-│       │   ├── cart_job_service.py       # カートジョブ管理
-│       │   └── purchase_intent.py        # 購入意図分類
-│       ├── utils/
-│       │   ├── secrets.py
-│       │   └── logger.py
-│       └── prompts/               # LLMプロンプト
-├── tests/
-│   └── unit/                      # ユニットテスト
-├── template.yaml                  # AWS SAM テンプレート
-├── samconfig.toml
-└── aidlc-docs/                    # AI-DLC プロセスドキュメント
+Auto-Reward-Service/
+├── u8/                              ← メインアプリケーション
+│   ├── frontend/                      React PWA
+│   │   ├── src/
+│   │   │   ├── pages/                画面コンポーネント (7画面)
+│   │   │   │   ├── ChatPage.tsx         チャット
+│   │   │   │   ├── DashboardPage.tsx    ダッシュボード
+│   │   │   │   ├── DiaryPage.tsx        日記
+│   │   │   │   ├── RecoveryPage.tsx     リカバリー
+│   │   │   │   ├── SettingsPage.tsx     設定
+│   │   │   │   └── OnboardingPage.tsx   オンボーディング
+│   │   │   ├── demo/                 デモモード (12シナリオ)
+│   │   │   │   ├── DemoPage.tsx         デモ画面
+│   │   │   │   ├── DemoScreens.tsx      本番同等の再現画面
+│   │   │   │   ├── demoScenarios.ts     シナリオ定義
+│   │   │   │   ├── demoState.tsx        状態管理 + 再生エンジン
+│   │   │   │   ├── demoTypes.ts         型定義
+│   │   │   │   └── demoData.ts          モックデータ
+│   │   │   ├── hooks/                カスタムフック
+│   │   │   │   └── useVoiceChat.ts      WebSocket音声通信
+│   │   │   └── lib/                  共通ライブラリ
+│   │   │       ├── api.ts              バックエンドAPI呼出
+│   │   │       ├── auth.ts             Cognito認証
+│   │   │       └── emotionImages.ts    ふれまーるちゃん表情
+│   │   ├── public/                   静的アセット
+│   │   ├── package.json
+│   │   └── vite.config.ts
+│   ├── backend/                       Python Lambda
+│   │   ├── handlers/
+│   │   │   ├── api_handler.py          REST API エントリポイント
+│   │   │   ├── voice_gateway.py        WebSocket 音声ゲートウェイ
+│   │   │   ├── analysis_handler.py     感情分析
+│   │   │   └── pre_signup_handler.py   Cognito Pre-Signup
+│   │   ├── services/
+│   │   │   ├── chat_service.py         チャットロジック + Bedrock呼出
+│   │   │   ├── dashboard.py            ダッシュボード集計
+│   │   │   ├── diary.py                日記自動生成
+│   │   │   ├── receipt_service.py      レシートOCR
+│   │   │   ├── recovery.py             リカバリー提案
+│   │   │   ├── product_search.py       楽天API商品検索
+│   │   │   ├── hotpepper_service.py    HotPepper店舗検索
+│   │   │   ├── wishlist_service.py     Amazon Wishlist
+│   │   │   ├── proactive_message.py    プロアクティブ提案
+│   │   │   ├── push_service.py         Web Push送信
+│   │   │   ├── sonic_voice_session.py  Nova Sonic管理
+│   │   │   └── transcript.py          音声文字起こし保存
+│   │   └── shared/
+│   │       ├── bedrock_client.py       Bedrock共通クライアント
+│   │       ├── data_access.py          DynamoDB CRUD
+│   │       ├── config.py               設定管理
+│   │       ├── auth.py                 JWT検証
+│   │       └── secrets.py              Secrets Manager
+│   ├── tests/                         テスト
+│   ├── template.yaml                  SAM テンプレート
+│   └── samconfig.toml                 デプロイ設定
+├── docs/                              ドキュメント
+│   ├── コンセプト変更定義書.md
+│   ├── 機能仕様書.md
+│   ├── demo-guide.md
+│   └── API設定ガイド.md
+├── aidlc-docs/                        AI-DLC 成果物
+│   ├── aidlc-state.md                   プロジェクト状態
+│   ├── audit.md                         監査ログ
+│   └── inception/                       設計書一式
+├── archive/                           旧コンセプト（参照用）
+│   └── v1-line-bot/                     LINE Bot版コード一式
+├── .aidlc/                            AI-DLCルール定義
+├── .github/                           GitHub設定
+├── BACKLOG.md                         課題・持ち越し項目
+├── AGENTS.md                          AI Agent設定
+└── README.md
 ```
 
 ---
 
-## セキュリティ設計
+## デプロイ
 
-| 要件 | 対策 |
-|------|------|
-| LINE署名検証 | `X-Line-Signature` をチャネルシークレットで HMAC-SHA256 検証。検証失敗は 403 |
-| シークレット管理 | チャネルシークレット・アクセストークンは Secrets Manager / SSM に格納（平文禁止） |
-| データ暗号化 | DynamoDB 保存データの暗号化（AWS管理キー） |
-| PII保護 | ログに LINE ユーザーID・チャット内容等 PII を出力しない |
-| IAM最小権限 | 各Lambda関数の IAM Role は必要操作のみに限定 |
-| WAF | API Gateway に AWS WAF（AWSManagedRulesCommonRuleSet）を適用 |
-| LIFF検証 | LIFF アクセストークンを LINE Platform API で検証 |
+### 前提条件
+- Node.js 18+
+- Python 3.13
+- AWS CLI v2 + SAM CLI
+- AWS SSO プロファイル `share` 設定済み
 
----
+### フロントエンド
+```bash
+cd u8/frontend
+npm install
+npm run build
+aws s3 sync dist/ s3://ars-u8-frontend-dev-890236016419/ --delete --profile share
+aws cloudfront create-invalidation --distribution-id E1IBFWTO596D98 --paths "/*" --profile share
+```
 
-## MVP スコープ
+### バックエンド
+```bash
+cd u8
+sam build
+sam deploy --profile share
+```
 
-| 区分 | 含める機能 |
-|------|-----------|
-| LINE Bot基盤 | Webhook受信・署名検証・メッセージルーティング・Reply |
-| 初回登録 | 収入・固定費・ご褒美枠をチャットで登録 |
-| キャラクター | ふれまーるちゃん口調生成・感情把握 |
-| 支出記録 | チャット支出入力・レシート画像解析・確認フロー |
-| 候補プール | 嗜好記憶・楽天API連携・日次バッチ更新 |
-| ご褒美提案 | 状態推定・候補マッチング・余裕額チェック |
-| ウィッシュリスト | Amazon ほしい物リスト連携・熟成スコアリング |
-| カート自動化 | Stub モード（デモ）+ Nova Act 拡張可能設計 |
-| 安全チェック | 購入意図分類・多重安全検証 |
-| PWA通知 | チャット風通知UI・LINE PUSH 廃止 |
-| PWAダッシュボード | 通知・支出・在庫・寄り道・設定 |
+### 環境情報
 
-### MVP対象外（将来フェーズ）
-
-- アフィリエイト・収益機能
-- Nova Act 本番モード（実ブラウザ購入実行）
-- ウェアラブルデバイス連携
-
----
-
-## 環境変数
-
-| 変数名 | デフォルト | 説明 |
-|--------|-----------|------|
-| `CART_AUTOMATION_MODE` | `stub` | カート自動化モード: `stub` / `nova_act` / `hybrid` |
-| `ENABLE_REAL_PURCHASE` | `false` | 実購入の有効化フラグ |
-| `NOVA_ACT_DEMO_MODE` | `true` | Nova Act デモモード（実ブラウザ操作をスキップ） |
-| `MAX_PURCHASE_AMOUNT` | `1000` | 1回の自動購入上限金額（円） |
+| リソース | 値 |
+|---------|---|
+| CloudFront | `d39spqovcq7od.cloudfront.net` |
+| S3 バケット | `ars-u8-frontend-dev-890236016419` |
+| CloudFront Distribution ID | `E1IBFWTO596D98` |
+| SAM スタック名 | `ars-u8-pwa` |
+| DynamoDB テーブル | `ArsTable` |
+| リージョン | `ap-northeast-1` |
 
 ---
 
-## ドキュメント
+## デモモード
 
-| ドキュメント | 内容 |
-|-------------|------|
-| [docs/コンセプト変更定義書.md](docs/コンセプト変更定義書.md) | コンセプトピボット（Web App → LINE Bot）の変更定義 |
-| [old/docs/要件定義書.md](old/docs/要件定義書.md) | 旧要件定義書（参照用・old退避済み） |
-| [aidlc-docs/](aidlc-docs/) | AI-DLC プロセス管理ドキュメント（状態・監査・設計・計画） |
-| [aidlc-docs/inception/requirements/requirements.md](aidlc-docs/inception/requirements/requirements.md) | 要件定義書 v2（確定版） |
-| [aidlc-docs/inception/application-design/application-design.md](aidlc-docs/inception/application-design/application-design.md) | 統合アプリケーション設計書 |
+デモモードは **12 シナリオ** を自動再生します。ハッカソン発表・社内プレゼン向けに、バックエンド不要で全機能を体感できます。
+
+### シナリオ一覧
+
+| # | シナリオ | 内容 | 所要時間 |
+|---|---------|------|---------|
+| 1 | オンボーディング | 名前→予算→好きなもの→日記時刻 | ~22秒 |
+| 2 | ボイスチャット | マイクON→文字起こし→AI応答 | ~16秒 |
+| 3 | 会話から支出記録 | 「プリン買った」→記録→ダッシュボード反映 | ~14秒 |
+| 4 | レシートアップロード | 画像→OCR→品目分割→確認→記録 | ~14秒 |
+| 5 | ダッシュボード | 余剰金/回復費/気分のカウントアップ演出 | ~9秒 |
+| 6 | 日記・ライフログ | 朝〜夜のログ蓄積→日記自動生成 | ~14秒 |
+| 7 | リカバリー提案 | ストレス検知→0円回復→候補表示→選択 | ~14秒 |
+| 8 | ごほうび予算繰越 | 余剰→繰越 / 超過→リセット | ~10秒 |
+| 9 | 推薦元の使い分け | 楽天/HotPepper/YouTube/Amazon | ~14秒 |
+| 10 | **ストレス検知→ご褒美提案** | 疲労検知→好み分析→商品カード提案→購入→0円提案 | ~32秒 |
+| 11 | **日記自動生成のしくみ** | 朝〜夜の会話→ライフログ蓄積→22時に日記生成 | ~35秒 |
+| 12 | **ライフログ蓄積** | 7件のログが時系列で追加→感情推移→日記 | ~28秒 |
+| 全 | フルデモ | 1〜12 連続再生 | ~5-7分 |
+
+### デモURL
+
+```
+https://d39spqovcq7od.cloudfront.net/demo?scenario=stress-reco
+https://d39spqovcq7od.cloudfront.net/demo?scenario=diary-generation
+https://d39spqovcq7od.cloudfront.net/demo?scenario=lifelog-accumulation
+https://d39spqovcq7od.cloudfront.net/demo?scenario=full
+```
+
+コントロールパネル非表示: `&hideControls=1`
 
 ---
+
+## データフロー
+
+### 会話 → 支出記録 → ダッシュボード
+
+```
+User: 「プリン買ったよ 320円」
+  │
+  ▼
+[Chat Service] → Bedrock (intent=EXPENSE, item=プリン, amount=320, category=ごほうび費)
+  │
+  ├── DynamoDB: EXPENSE#{timestamp} 保存
+  ├── DynamoDB: LIFELOG#{timestamp} 保存 (emotion: happy)
+  └── Response: 「プリン！それは『ごほうび費』だね。しっかり受け取ってね。」
+```
+
+### ストレス検知 → ご褒美提案
+
+```
+User: 「今日もう限界…」
+  │
+  ▼
+[Chat Service] → Bedrock (emotion: stressed, fatigue: high)
+  │
+  ├── PREF_MEMORY から嗜好取得 (カフェ好き)
+  ├── Dashboard から余剰金取得 (¥6,200)
+  ├── [Product Search] → 楽天API (カフェ × ¥2,500以下)
+  ├── [Recovery] → YouTube (0円回復候補)
+  │
+  └── Response: 商品カード + 0円回復カード + 共感メッセージ
+```
+
+### ライフログ → 日記自動生成
+
+```
+[22:00 EventBridge trigger]
+  │
+  ▼
+[Diary Service]
+  ├── 当日の LIFELOG#{*} を全件取得
+  ├── 感情の推移を分析
+  ├── Bedrock で日記文を生成（ふれまーるちゃん視点）
+  └── DynamoDB: DIARY#{date} 保存
+```
+
+---
+
+## コンセプト変更の経緯
+
+当初は **LINE Bot 中心（v1）** で構築しましたが、以下の制約により **PWA スタンドアロン（v2）** へピボットしました:
+
+| 制約 | 影響 | v2 での解決 |
+|------|------|------------|
+| Push通知 月200通制限 | プロアクティブ提案が打てない | Web Push (VAPID) で無制限 |
+| LIFF WebView制約 | リッチUI不可 | React PWA でフル制御 |
+| Webhook往復 2-4秒 | 会話テンポが悪い | API直接呼出 <1秒 |
+| 音声対応不可 | リアルタイム音声会話ができない | WebSocket + Nova Sonic |
+| Rich Menu固定 | キャラ表情変化不可 | 6表情アバター動的切替 |
+| LINE Console設定 | 開発イテレーション遅い | SAM deploy のみ |
+
+詳細: [docs/コンセプト変更定義書.md](docs/コンセプト変更定義書.md)
+
+旧コンセプトの設計資産・持ち越し課題: [BACKLOG.md](BACKLOG.md)
+
+---
+
+## 開発手法
+
+**AI-DLC** (AI-Driven Development Lifecycle) に基づき、要件定義→設計→実装を AI 協調で推進。
+
+| フェーズ | 成果物 | パス |
+|---------|--------|------|
+| Inception | 要件定義・設計書・Unit分割 | `aidlc-docs/inception/` |
+| Construction | 機能設計・コード生成 | `aidlc-docs/construction/` |
+| 監査ログ | 全意思決定の記録 | `aidlc-docs/audit.md` |
+| 状態管理 | 現在のフェーズ・進捗 | `aidlc-docs/aidlc-state.md` |
+
+---
+
+## ローカル開発
+
+### フロントエンド
+```bash
+cd u8/frontend
+npm install
+npm run dev          # http://localhost:5173
+```
+
+### バックエンド（SAM Local）
+```bash
+cd u8
+sam build
+sam local start-api  # http://localhost:3000
+```
+
+### テスト
+```bash
+cd u8
+pip install -r tests/requirements-test.txt
+pytest tests/
+```
+
+---
+
+## 今後の予定
+
+[BACKLOG.md](BACKLOG.md) に旧コンセプトから持ち越した課題を含め整理しています。主なもの:
+
+- 🔴 嗜好メモリ (PREF_MEMORY) の自動蓄積
+- 🔴 ご褒美候補プールの定期更新
+- 🟡 LLM出力品質テストの整備
+- 🟡 Google Calendar 連携（忙しさ推定）
+- 🟢 構造化ログ + PII除外
+
+---
+
+## ライセンス
+
+MIT

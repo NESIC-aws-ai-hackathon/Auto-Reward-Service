@@ -84,30 +84,9 @@ Unit 8 全体の土台を構築する。認証付きPWAが動作する最小構�
 ### 成果物
 - `u8/frontend/` — React SPA 初期構成（ルーティング + 認証画面）
 - `u8/backend/handlers/api_handler.py` — 骨格（/api/settings のみ）
-- `u8/backend/shared/data_access.py` — DynamoDB CRUD + SK命名規則ヘルパー
+- `u8/backend/shared/data_access.py` — DynamoDB CRUD
 - `u8/backend/shared/auth.py` — JWT検証
 - `u8/template.yaml` — Cognito, Lambda, API Gateway, S3, CloudFront
-
-### DataAccess SK命名規則（U8-Aで固定）
-
-全Unitで使用するSK命名規則をDataAccessヘルパーとしてU8-Aで定義する。
-実データ作成は各Unitで行うが、SKフォーマットはここで確定。
-
-```python
-# SK定数（data_access.py 内で定義）
-SK_PROFILE = "PROFILE#"
-SK_VOICE_SESSION = "VOICE_SESSION#{session_id}"  # U8-Bで作成
-SK_ANALYSIS_JOB = "ANALYSIS_JOB#{job_id}"        # U8-Bで作成
-SK_CONVERSATION_TURN = "CONVERSATION_TURN#{timestamp}"  # U8-B
-SK_LIFE_LOG = "LIFE_LOG#{date}#{seq}"            # U8-C
-SK_DAILY_FUREMARU_SUMMARY = "DAILY_FUREMARU_SUMMARY#{date}"  # U8-C
-SK_STRESS_SUMMARY = "STRESS_SUMMARY#{date}"      # U8-D
-SK_EXPENSE = "EXPENSE#{timestamp}"               # U8-C / U8-D
-SK_REWARD_PERMIT = "REWARD_PERMIT#{timestamp}"   # U8-D
-SK_REWARD_SKIP = "REWARD_SKIP#{timestamp}"       # U8-D
-SK_MONTHLY_SUMMARY = "MONTHLY_SUMMARY#{yyyy_mm}" # U8-C
-SK_PUSH_SUBSCRIPTION = "PUSH_SUBSCRIPTION#"      # U8-C
-```
 
 ### デプロイ確認
 - `sam deploy` 成功
@@ -154,14 +133,6 @@ SK_PUSH_SUBSCRIPTION = "PUSH_SUBSCRIPTION#"      # U8-C
 | C11 PushService | Web Push サブスクリプション + 通知送信 |
 | C15 BedrockClient | Claude Sonnet 呼び出し基盤 |
 
-### Push範囲（U8-Cで実装）
-- Push購読登録（`/api/push/subscribe`）
-- Push購読解除（`/api/push/unsubscribe`）
-- テスト通知送信
-- 日記サマリ完成通知
-
-> **注**: ストレス高・ご褒美提案タイミング通知はU8-Dで実装する。
-
 ### 成果物
 - `u8/backend/handlers/analysis_handler.py` — 非同期Lambda
 - `u8/backend/services/analysis.py` — extract_life_log(), generate_diary_summary()
@@ -180,7 +151,7 @@ SK_PUSH_SUBSCRIPTION = "PUSH_SUBSCRIPTION#"      # U8-C
 ## U8-D: ストレス判定 + 回復提案
 
 ### 目的
-ストレス判定ロジックと段階的回復提案を実装する。0円回復案を優先する。
+ストレス判定ロジックと段階的回復提案を実装する。
 
 ### スコープ
 | コンポーネント | 内容 |
@@ -188,17 +159,6 @@ SK_PUSH_SUBSCRIPTION = "PUSH_SUBSCRIPTION#"      # U8-C
 | C10 AnalysisWorker（Stress） | ストレス判定（Claude Sonnet）|
 | C12 RecoveryProvider | 0円/有料回復案生成 + ふれまーるちゃん口調変換 |
 | C05 RecoveryView | 回復案カードUI、段階的誘導 |
-| C11 PushService（拡張） | ストレス高・ご褒美提案タイミング通知 |
-
-### 実装優先度
-
-1. **ストレス判定** — `assess_stress()` 実装、STRESS_SUMMARY# 作成
-2. **0円回復案** — 休息・散歩・深呼吸・入浴・動画・記事等のルールベース生成
-3. **ふれまーるちゃん口調の提案文** — BedrockClientで変換
-4. **permit / skip 記録** — REWARD_PERMIT# / REWARD_SKIP# 作成
-5. **有料回復案** — 既存Provider chain（楽天・ホットペッパー）
-
-> **方針**: 広告アプリ化を避ける。商品提案は「今日の回復案」「甘やかし枠の使い道」として扱う。
 
 ### 成果物
 - `u8/backend/services/analysis.py` に `assess_stress()` 追加
@@ -236,19 +196,3 @@ SK_PUSH_SUBSCRIPTION = "PUSH_SUBSCRIPTION#"      # U8-C
 - ダッシュボード: 余剰金・支出推移表示
 - 日記: 過去日記一覧 + 読み上げ演出
 - E2E: 音声会話 → ライフログ → ストレス判定 → 回復提案 → 日記生成
-
-### E2Eデモシナリオ（完了条件）
-
-U8-E完了時に以下が一連のデモとして確認できること：
-
-1. デモログイン
-2. 音声会話（ふれまーるちゃんと会話）
-3. Transcript保存（CONVERSATION_TURN# 確認）
-4. AnalysisJob作成（ANALYSIS_JOB# queued → completed）
-5. LifeLog生成（LIFE_LOG# 確認）
-6. Expense生成（会話内で支出言及時、EXPENSE# 確認）
-7. StressSummary生成（STRESS_SUMMARY# 確認）
-8. Recovery提案表示（回復案カードが表示される）
-9. Diary表示（DAILY_FUREMARU_SUMMARY# が日記画面に表示）
-10. Dashboard反映（余剰金・支出・ストレスが更新）
-11. PWA Push通知（日記完成通知が届く）
